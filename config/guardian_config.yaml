@@ -1,0 +1,55 @@
+# Guardian One — System Configuration
+# ====================================
+# Owner: Jeremy Paulo Salvino Tabernero
+# Last updated: 2026-02-19
+
+owner: "Jeremy Paulo Salvino Tabernero"
+timezone: "America/Chicago"
+daily_summary_hour: 7   # 7 AM local time
+data_dir: "data"
+log_dir: "logs"
+
+security:
+  encryption_enabled: true
+  require_2fa: true
+  session_timeout_minutes: 30
+  max_failed_auth_attempts: 5
+  audit_all_actions: true
+
+agents:
+  chronos:
+    enabled: true
+    schedule_interval_minutes: 15
+    allowed_resources:
+      - calendar
+      - sleep_data
+      - routines
+      - workflows
+    custom:
+      wake_alert_minutes_before: 30
+      prechart_reminder: true
+
+  archivist:
+    enabled: true
+    schedule_interval_minutes: 60
+    allowed_resources:
+      - file_index
+      - data_sources
+      - privacy_tools
+      - master_profile
+    custom:
+      auto_encrypt_sensitive: true
+      retention_check_daily: true
+
+  cfo:
+    enabled: true
+    schedule_interval_minutes: 60
+    allowed_resources:
+      - accounts
+      - transactions
+      - bills
+      - scenarios
+    custom:
+      rocket_money_sync: true
+      bill_alert_days_before: 3
+      encrypt_financial_records: true
