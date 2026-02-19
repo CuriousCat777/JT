@@ -23,7 +23,7 @@ env/
 *.swo
 
 # Logs
-logs/*.log
+logs/*
 !logs/.gitkeep
 
 # Encrypted data stores
