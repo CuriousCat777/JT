@@ -19,6 +19,7 @@ from guardian_one.core.guardian import GuardianOne
 from guardian_one.agents.chronos import Chronos
 from guardian_one.agents.archivist import Archivist
 from guardian_one.agents.cfo import CFO
+from guardian_one.agents.doordash import DoorDashAgent
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -33,6 +34,9 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     cfo_cfg = config.agents.get("cfo", AgentConfig(name="cfo"))
     guardian.register_agent(CFO(config=cfo_cfg, audit=guardian.audit))
+
+    doordash_cfg = config.agents.get("doordash", AgentConfig(name="doordash"))
+    guardian.register_agent(DoorDashAgent(config=doordash_cfg, audit=guardian.audit))
 
 
 def main() -> None:

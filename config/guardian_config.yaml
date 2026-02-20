@@ -53,3 +53,17 @@ agents:
       rocket_money_sync: true
       bill_alert_days_before: 3
       encrypt_financial_records: true
+
+  doordash:
+    enabled: true
+    schedule_interval_minutes: 10
+    allowed_resources:
+      - orders
+      - restaurants
+      - meal_schedule
+      - delivery_status
+    custom:
+      monthly_budget: 300
+      default_tip_pct: 0.20
+      coordinate_with_chronos: true
+      coordinate_with_cfo: true
