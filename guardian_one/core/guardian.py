@@ -9,6 +9,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,10 @@ from guardian_one.core.security import (
     AccessPolicy,
     SecretStore,
 )
+from guardian_one.homelink.gateway import Gateway, ServiceConfig, RateLimitConfig
+from guardian_one.homelink.vault import Vault
+from guardian_one.homelink.registry import IntegrationRegistry
+from guardian_one.homelink.monitor import Monitor
 
 
 class GuardianOne:
@@ -32,21 +37,43 @@ class GuardianOne:
     and produces consolidated reports.
     """
 
-    def __init__(self, config: GuardianConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: GuardianConfig | None = None,
+        vault_passphrase: str | None = None,
+    ) -> None:
         self.config = config or load_config()
         self.audit = AuditLog(log_dir=Path(self.config.log_dir))
         self.mediator = Mediator(audit=self.audit)
         self.access = AccessController()
         self._agents: dict[str, BaseAgent] = {}
 
+        # H.O.M.E. L.I.N.K. subsystems
+        self.gateway = Gateway(audit=self.audit)
+        passphrase = vault_passphrase or os.environ.get(
+            "GUARDIAN_MASTER_PASSPHRASE", "guardian-one-default-dev-passphrase"
+        )
+        vault_path = Path(self.config.data_dir) / "vault.enc"
+        self.vault = Vault(vault_path, passphrase=passphrase)
+        self.registry = IntegrationRegistry()
+        self.registry.load_defaults()
+        self.monitor = Monitor(
+            gateway=self.gateway,
+            vault=self.vault,
+            registry=self.registry,
+        )
+
         # Register default access policies
         self._setup_access_policies()
+
+        # Register gateway services for known integrations
+        self._setup_gateway_services()
 
         self.audit.record(
             agent="guardian_one",
             action="system_boot",
             severity=Severity.INFO,
-            details={"owner": self.config.owner},
+            details={"owner": self.config.owner, "homelink": "active"},
         )
 
     # ------------------------------------------------------------------
@@ -67,6 +94,17 @@ class GuardianOne:
             level=AccessLevel.MENTOR,
             allowed_resources=["audit_log", "reports", "config_readonly"],
         ))
+
+    def _setup_gateway_services(self) -> None:
+        """Register external services in the gateway from the integration registry."""
+        for record in self.registry.active():
+            if record.base_url and record.base_url != "local_cli":
+                self.gateway.register_service(ServiceConfig(
+                    name=record.name,
+                    base_url=record.base_url,
+                    rate_limit=RateLimitConfig(max_requests=60, window_seconds=60),
+                    allowed_agents=[record.owner_agent] if record.owner_agent else [],
+                ))
 
     # ------------------------------------------------------------------
     # Agent lifecycle
@@ -186,6 +224,26 @@ class GuardianOne:
                 lines.append(f"--- {name} ---")
                 lines.append(f"  Error generating report: {exc}")
                 lines.append("")
+
+        # H.O.M.E. L.I.N.K. status
+        lines.append("--- H.O.M.E. L.I.N.K. ---")
+        services = self.gateway.list_services()
+        if services:
+            for svc in services:
+                status = self.gateway.service_status(svc)
+                health = self.monitor.assess_service(svc)
+                lines.append(
+                    f"  {svc}: circuit={status['circuit_state']} "
+                    f"risk={health.risk_score}/5"
+                )
+        else:
+            lines.append("  No external services registered.")
+        vault_health = self.vault.health_report()
+        lines.append(f"  Vault: {vault_health['total_credentials']} credentials")
+        rotation_due = vault_health["due_for_rotation"]
+        if rotation_due:
+            lines.append(f"  ** {rotation_due} credentials due for rotation **")
+        lines.append("")
 
         # Pending reviews
         pending = self.audit.pending_reviews()

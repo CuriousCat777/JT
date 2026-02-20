@@ -5,13 +5,14 @@ Usage:
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --agent NAME # Run a single agent
+    python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
+    python main.py --homelink   # H.O.M.E. L.I.N.K. service status
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from guardian_one.core.config import AgentConfig, load_config
@@ -44,6 +45,8 @@ def main() -> None:
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Print CFO dashboard")
     parser.add_argument("--agent", type=str, help="Run a single agent by name")
+    parser.add_argument("--brief", action="store_true", help="H.O.M.E. L.I.N.K. weekly security brief")
+    parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -52,7 +55,13 @@ def main() -> None:
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
 
-    if args.agent:
+    if args.brief:
+        print(guardian.monitor.weekly_brief_text())
+    elif args.homelink:
+        print(json.dumps(guardian.gateway.all_services_status(), indent=2))
+        print(f"\nVault: {json.dumps(guardian.vault.health_report(), indent=2)}")
+        print(f"\nRegistry: {guardian.registry.list_all()}")
+    elif args.agent:
         report = guardian.run_agent(args.agent)
         print(json.dumps(report.__dict__, indent=2, default=str))
     elif args.dashboard:
@@ -64,7 +73,6 @@ def main() -> None:
     elif args.summary:
         print(guardian.daily_summary())
     else:
-        # Default: run all agents and print summary
         reports = guardian.run_all()
         for report in reports:
             print(f"\n--- {report.agent_name} ---")
