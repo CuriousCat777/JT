@@ -309,3 +309,41 @@ def test_report():
     report = agent.report()
     assert "3 restaurants" in report.summary
     assert report.data["restaurants"] == ["Pho Saigon", "Chipotle", "Sweetgreen"]
+    assert report.data["api_connected"] is False
+
+
+# ---- API connection ----
+
+def test_api_not_connected_without_credentials():
+    agent = _make_agent()
+    assert agent.api_connected is False
+
+
+def test_live_delivery_returns_none_without_api():
+    agent = _make_agent()
+    result = agent.create_live_delivery(
+        pickup_address="123 Main St",
+        pickup_business_name="Test Restaurant",
+        pickup_phone="+15551234567",
+        dropoff_address="456 Oak Ave",
+        dropoff_phone="+15559876543",
+        order_value_cents=1500,
+    )
+    assert result is None
+
+
+def test_poll_live_delivery_returns_none_without_api():
+    agent = _make_agent()
+    assert agent.poll_live_delivery("DD-000001") is None
+
+
+def test_cancel_live_delivery_returns_false_without_api():
+    agent = _make_agent()
+    assert agent.cancel_live_delivery("DD-000001") is False
+
+
+def test_run_shows_api_offline():
+    agent = _make_agent()
+    report = agent.run()
+    assert "API offline" in report.summary
+    assert any("Drive API not connected" in r for r in report.recommendations)
