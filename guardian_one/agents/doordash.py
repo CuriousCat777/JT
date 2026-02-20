@@ -19,6 +19,11 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.doordash_sync import (
+    DoorDashDriveProvider,
+    DeliveryRequest,
+    DeliveryResponse,
+)
 
 
 class OrderStatus(Enum):
@@ -94,14 +99,41 @@ class DoorDashAgent(BaseAgent):
         self._monthly_budget: float = 0.0
         self._dietary_preferences: list[str] = []
         self._order_counter: int = 0
+        self._provider: DoorDashDriveProvider | None = None
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._setup_default_meal_windows()
+        self._connect_provider()
         self.log("initialized", details={
             "restaurants": len(self._restaurants),
             "meal_schedules": len(self._meal_schedules),
+            "api_connected": self.api_connected,
         })
+
+    def _connect_provider(self) -> None:
+        """Attempt to connect to the DoorDash Drive API using env vars."""
+        provider = DoorDashDriveProvider()
+        if provider.has_credentials:
+            if provider.authenticate():
+                self._provider = provider
+                self.log("api_connected", details={"provider": "DoorDash Drive API"})
+            else:
+                self.log(
+                    "api_auth_failed",
+                    severity=Severity.WARNING,
+                    details={"provider": "DoorDash Drive API"},
+                )
+        else:
+            self.log(
+                "api_no_credentials",
+                severity=Severity.INFO,
+                details={"hint": "Set DOORDASH_DEVELOPER_ID, DOORDASH_KEY_ID, DOORDASH_SIGNING_SECRET in .env"},
+            )
+
+    @property
+    def api_connected(self) -> bool:
+        return self._provider is not None and self._provider.is_authenticated
 
     def _setup_default_meal_windows(self) -> None:
         """Set up standard meal windows for Chronos coordination."""
@@ -378,6 +410,85 @@ class DoorDashAgent(BaseAgent):
         return [{"item": k, "times_ordered": v} for k, v in sorted_items[:limit]]
 
     # ------------------------------------------------------------------
+    # Live API operations (requires DoorDash Drive credentials)
+    # ------------------------------------------------------------------
+
+    def create_live_delivery(
+        self,
+        pickup_address: str,
+        pickup_business_name: str,
+        pickup_phone: str,
+        dropoff_address: str,
+        dropoff_phone: str,
+        order_value_cents: int,
+        tip_cents: int = 0,
+        pickup_instructions: str = "",
+        dropoff_instructions: str = "",
+    ) -> DeliveryResponse | None:
+        """Create a real delivery via the DoorDash Drive API.
+
+        Returns a DeliveryResponse with tracking URL and status,
+        or None if the API is not connected or the request fails.
+        """
+        if not self.api_connected or self._provider is None:
+            self.log(
+                "live_delivery_skipped",
+                severity=Severity.WARNING,
+                details={"reason": "API not connected"},
+            )
+            return None
+
+        delivery_id = self._next_order_id()
+        request = DeliveryRequest(
+            external_delivery_id=delivery_id,
+            pickup_address=pickup_address,
+            pickup_business_name=pickup_business_name,
+            pickup_phone_number=pickup_phone,
+            pickup_instructions=pickup_instructions,
+            dropoff_address=dropoff_address,
+            dropoff_phone_number=dropoff_phone,
+            dropoff_instructions=dropoff_instructions,
+            order_value=order_value_cents,
+            tip=tip_cents,
+        )
+
+        response = self._provider.create_delivery(request)
+        if response:
+            self.log("live_delivery_created", details={
+                "delivery_id": delivery_id,
+                "status": response.delivery_status,
+                "tracking_url": response.tracking_url,
+            })
+        else:
+            self.log("live_delivery_failed", severity=Severity.ERROR, details={
+                "delivery_id": delivery_id,
+            })
+        return response
+
+    def poll_live_delivery(self, delivery_id: str) -> DeliveryResponse | None:
+        """Check status of a live delivery via the Drive API."""
+        if not self.api_connected or self._provider is None:
+            return None
+        response = self._provider.get_delivery_status(delivery_id)
+        if response:
+            self.log("live_delivery_polled", details={
+                "delivery_id": delivery_id,
+                "status": response.delivery_status,
+            })
+        return response
+
+    def cancel_live_delivery(self, delivery_id: str) -> bool:
+        """Cancel a live delivery via the Drive API."""
+        if not self.api_connected or self._provider is None:
+            return False
+        success = self._provider.cancel_delivery(delivery_id)
+        self.log("live_delivery_cancelled", details={
+            "delivery_id": delivery_id,
+            "success": success,
+        })
+        return success
+
+    # ------------------------------------------------------------------
     # BaseAgent interface
     # ------------------------------------------------------------------
 
@@ -417,16 +528,25 @@ class DoorDashAgent(BaseAgent):
                     f"({suggestion['cuisine']}, ~{suggestion['est_delivery']})"
                 )
 
+        # API connection status
+        if not self.api_connected:
+            recommendations.append(
+                "DoorDash Drive API not connected. Set DOORDASH_DEVELOPER_ID, "
+                "DOORDASH_KEY_ID, DOORDASH_SIGNING_SECRET in .env to enable live deliveries."
+            )
+
         actions.append("Checked active orders, budget, and meal schedule.")
         self._set_status(AgentStatus.IDLE)
 
+        api_label = "API connected" if self.api_connected else "API offline"
         return AgentReport(
             agent_name=self.name,
             status=AgentStatus.IDLE.value,
             summary=(
                 f"{len(active)} active orders | "
                 f"Month spend: ${budget['spent']:.2f} | "
-                f"{len(self._restaurants)} saved restaurants"
+                f"{len(self._restaurants)} saved restaurants | "
+                f"{api_label}"
             ),
             actions_taken=actions,
             recommendations=recommendations,
@@ -436,18 +556,21 @@ class DoorDashAgent(BaseAgent):
                 "total_orders": len(self._orders),
                 "restaurants": len(self._restaurants),
                 "budget": budget,
+                "api_connected": self.api_connected,
             },
         )
 
     def report(self) -> AgentReport:
         budget = self.budget_status()
+        api_label = "API connected" if self.api_connected else "API offline"
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
             summary=(
                 f"Managing {len(self._restaurants)} restaurants, "
                 f"{len(self._orders)} orders, "
-                f"${budget['spent']:.2f} spent this month."
+                f"${budget['spent']:.2f} spent this month. "
+                f"({api_label})"
             ),
             data={
                 "restaurants": list(self._restaurants.keys()),
@@ -455,5 +578,6 @@ class DoorDashAgent(BaseAgent):
                 "order_history_count": len(self._orders),
                 "budget": budget,
                 "dietary_preferences": self._dietary_preferences,
+                "api_connected": self.api_connected,
             },
         )
