@@ -31,6 +31,12 @@ logs/*
 *.key
 data/secure/
 
+# Sensitive financial data (Rocket Money exports)
+data/rocket_money_transactions.csv
+
+# OAuth tokens (sensitive)
+config/gmail_token.json
+
 # OS
 .DS_Store
 Thumbs.db

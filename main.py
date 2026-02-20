@@ -7,6 +7,8 @@ Usage:
     python main.py --agent NAME # Run a single agent
     python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
     python main.py --homelink   # H.O.M.E. L.I.N.K. service status
+    python main.py --gmail      # Gmail inbox status + Rocket Money CSV check
+    python main.py --csv PATH   # Parse a local Rocket Money CSV and summarize
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from guardian_one.agents.chronos import Chronos
 from guardian_one.agents.archivist import Archivist
 from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
+from guardian_one.agents.gmail_agent import GmailAgent
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -39,6 +42,13 @@ def _build_agents(guardian: GuardianOne) -> None:
     doordash_cfg = config.agents.get("doordash", AgentConfig(name="doordash"))
     guardian.register_agent(DoorDashAgent(config=doordash_cfg, audit=guardian.audit))
 
+    gmail_cfg = config.agents.get("gmail", AgentConfig(name="gmail"))
+    guardian.register_agent(GmailAgent(
+        config=gmail_cfg,
+        audit=guardian.audit,
+        data_dir=config.data_dir,
+    ))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
@@ -47,6 +57,8 @@ def main() -> None:
     parser.add_argument("--agent", type=str, help="Run a single agent by name")
     parser.add_argument("--brief", action="store_true", help="H.O.M.E. L.I.N.K. weekly security brief")
     parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
+    parser.add_argument("--gmail", action="store_true", help="Gmail inbox + Rocket Money CSV check")
+    parser.add_argument("--csv", type=str, help="Parse a local Rocket Money CSV file")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -61,6 +73,23 @@ def main() -> None:
         print(json.dumps(guardian.gateway.all_services_status(), indent=2))
         print(f"\nVault: {json.dumps(guardian.vault.health_report(), indent=2)}")
         print(f"\nRegistry: {guardian.registry.list_all()}")
+    elif args.gmail:
+        gmail = guardian.get_agent("gmail")
+        if gmail and isinstance(gmail, GmailAgent):
+            report = guardian.run_agent("gmail")
+            print(json.dumps(report.__dict__, indent=2, default=str))
+        else:
+            print("Gmail agent not available.")
+    elif args.csv:
+        gmail = guardian.get_agent("gmail")
+        if gmail and isinstance(gmail, GmailAgent):
+            transactions = gmail.parse_rocket_money_csv(args.csv)
+            summary = gmail.summarize_csv_transactions(transactions)
+            print(f"\nRocket Money CSV: {args.csv}")
+            print(f"Transactions: {summary['total_transactions']}")
+            print(json.dumps(summary, indent=2, default=str))
+        else:
+            print("Gmail agent not available.")
     elif args.agent:
         report = guardian.run_agent(args.agent)
         print(json.dumps(report.__dict__, indent=2, default=str))

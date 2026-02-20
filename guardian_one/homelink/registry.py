@@ -133,6 +133,34 @@ GOOGLE_CALENDAR_INTEGRATION = IntegrationRecord(
     owner_agent="chronos",
 )
 
+GMAIL_INTEGRATION = IntegrationRecord(
+    name="gmail_api",
+    description="Gmail API — inbox monitoring, email search, attachment download",
+    base_url="https://gmail.googleapis.com/gmail/v1",
+    auth_method="oauth2",
+    data_flow="Agent reads inbox metadata and searches for specific emails (Rocket Money CSVs, "
+              "financial alerts). Read-only scope — no sending or deleting.",
+    vault_keys=["GMAIL_OAUTH_TOKEN"],
+    threat_model=[
+        ThreatEntry("OAuth token theft grants inbox read access", "critical",
+                    "Refresh tokens in vault; access tokens expire in 1h; scope limited to readonly."),
+        ThreatEntry("Sensitive email content exposed in logs", "high",
+                    "Only metadata (subject, sender, date) logged; body content never persisted in audit."),
+        ThreatEntry("Phishing email processed as legitimate", "medium",
+                    "Sender domain validation on financial emails; known-sender allowlist."),
+        ThreatEntry("Google API quota exhaustion", "low",
+                    "Rate limiter at 50 req/min; caching of recent results."),
+        ThreatEntry("Account takeover via compromised OAuth credentials", "critical",
+                    "OAuth scope restricted to gmail.readonly; 2FA enforced on Google account."),
+    ],
+    failure_impact="Gmail monitoring disabled; no inbox alerts. "
+                   "Jeremy checks email manually via Gmail app.",
+    rollback_procedure="1. Revoke OAuth token at myaccount.google.com/permissions. "
+                       "2. Delete token from vault and config/gmail_token.json. "
+                       "3. Re-authorize with restricted readonly scope.",
+    owner_agent="gmail",
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -200,6 +228,7 @@ class IntegrationRegistry:
             DOORDASH_INTEGRATION,
             ROCKET_MONEY_INTEGRATION,
             GOOGLE_CALENDAR_INTEGRATION,
+            GMAIL_INTEGRATION,
             NORDVPN_INTEGRATION,
         ]:
             self.register(record)
