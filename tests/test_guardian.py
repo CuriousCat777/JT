@@ -16,6 +16,7 @@ from guardian_one.agents.cfo import CFO
 def _make_config() -> GuardianConfig:
     return GuardianConfig(
         log_dir=tempfile.mkdtemp(),
+        data_dir=tempfile.mkdtemp(),
         agents={
             "chronos": AgentConfig(name="chronos", allowed_resources=["calendar"]),
             "archivist": AgentConfig(name="archivist", allowed_resources=["files"]),
@@ -36,7 +37,7 @@ def test_register_and_run_agents():
 
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
     guardian.register_agent(Archivist(config.agents["archivist"], guardian.audit))
-    guardian.register_agent(CFO(config.agents["cfo"], guardian.audit))
+    guardian.register_agent(CFO(config.agents["cfo"], guardian.audit, data_dir=config.data_dir))
 
     assert set(guardian.list_agents()) == {"chronos", "archivist", "cfo"}
 

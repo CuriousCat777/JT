@@ -1,0 +1,299 @@
+{
+  "saved_at": "2026-02-20T00:00:00+00:00",
+  "_comment": "CFO Ledger — Replace placeholder values with your real data. All amounts in USD.",
+
+  "accounts": [
+    {
+      "name": "Primary Checking",
+      "account_type": "checking",
+      "balance": 4500.00,
+      "institution": "Chase",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "High-Yield Savings",
+      "account_type": "savings",
+      "balance": 18000.00,
+      "institution": "Marcus by Goldman Sachs",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "Emergency Fund",
+      "account_type": "savings",
+      "balance": 12000.00,
+      "institution": "Ally Bank",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "Credit Card",
+      "account_type": "credit_card",
+      "balance": -1200.00,
+      "institution": "Chase Sapphire",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "Student Loans",
+      "account_type": "loan",
+      "balance": -145000.00,
+      "institution": "Federal Student Aid",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "401(k)",
+      "account_type": "retirement",
+      "balance": 22000.00,
+      "institution": "Fidelity",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    },
+    {
+      "name": "Roth IRA",
+      "account_type": "retirement",
+      "balance": 8500.00,
+      "institution": "Vanguard",
+      "last_synced": "2026-02-20T00:00:00+00:00"
+    }
+  ],
+
+  "transactions": [
+    {
+      "date": "2026-02-01",
+      "description": "Hospital Salary — Bi-weekly",
+      "amount": 4200.00,
+      "category": "income",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-15",
+      "description": "Hospital Salary — Bi-weekly",
+      "amount": 4200.00,
+      "category": "income",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-01",
+      "description": "Rent",
+      "amount": -1800.00,
+      "category": "housing",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-01",
+      "description": "Renters Insurance",
+      "amount": -35.00,
+      "category": "insurance",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-03",
+      "description": "Electric Bill",
+      "amount": -95.00,
+      "category": "utilities",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-03",
+      "description": "Internet (AT&T / Fiber)",
+      "amount": -65.00,
+      "category": "utilities",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-05",
+      "description": "Groceries — H-E-B",
+      "amount": -120.00,
+      "category": "food",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-07",
+      "description": "Gas Station",
+      "amount": -55.00,
+      "category": "transport",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-08",
+      "description": "DoorDash — Dinner",
+      "amount": -32.00,
+      "category": "food",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-10",
+      "description": "Student Loan Payment",
+      "amount": -800.00,
+      "category": "loan_payment",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-10",
+      "description": "401(k) Contribution",
+      "amount": -750.00,
+      "category": "savings",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-12",
+      "description": "Groceries — H-E-B",
+      "amount": -98.00,
+      "category": "food",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-13",
+      "description": "NordVPN Subscription",
+      "amount": -12.99,
+      "category": "utilities",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-14",
+      "description": "Skincare Products — CeraVe",
+      "amount": -45.00,
+      "category": "other",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-15",
+      "description": "Car Insurance",
+      "amount": -160.00,
+      "category": "insurance",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-16",
+      "description": "Gym Membership",
+      "amount": -50.00,
+      "category": "entertainment",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-17",
+      "description": "DoorDash — Lunch",
+      "amount": -22.00,
+      "category": "food",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-18",
+      "description": "Phone Bill (T-Mobile)",
+      "amount": -85.00,
+      "category": "utilities",
+      "account": "Primary Checking"
+    },
+    {
+      "date": "2026-02-19",
+      "description": "DeleteMe Subscription",
+      "amount": -10.75,
+      "category": "utilities",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-19",
+      "description": "Groceries — H-E-B",
+      "amount": -110.00,
+      "category": "food",
+      "account": "Credit Card"
+    },
+    {
+      "date": "2026-02-20",
+      "description": "Charitable Donation — Local Shelter",
+      "amount": -100.00,
+      "category": "charitable",
+      "account": "Primary Checking"
+    }
+  ],
+
+  "bills": [
+    {
+      "name": "Rent",
+      "amount": 1800.00,
+      "due_date": "2026-03-01",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "Student Loan Payment",
+      "amount": 800.00,
+      "due_date": "2026-03-10",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "Credit Card (Chase Sapphire)",
+      "amount": 1200.00,
+      "due_date": "2026-02-25",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": false,
+      "paid": false
+    },
+    {
+      "name": "Electric Bill",
+      "amount": 95.00,
+      "due_date": "2026-03-03",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": false,
+      "paid": false
+    },
+    {
+      "name": "Internet (AT&T)",
+      "amount": 65.00,
+      "due_date": "2026-03-03",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "Phone Bill (T-Mobile)",
+      "amount": 85.00,
+      "due_date": "2026-03-18",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "Car Insurance",
+      "amount": 160.00,
+      "due_date": "2026-03-15",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": false,
+      "paid": false
+    },
+    {
+      "name": "Renters Insurance",
+      "amount": 35.00,
+      "due_date": "2026-03-01",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "Gym Membership",
+      "amount": 50.00,
+      "due_date": "2026-03-16",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    },
+    {
+      "name": "NordVPN",
+      "amount": 12.99,
+      "due_date": "2026-03-13",
+      "recurring": true,
+      "frequency": "monthly",
+      "auto_pay": true,
+      "paid": false
+    }
+  ]
+}

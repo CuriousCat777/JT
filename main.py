@@ -34,7 +34,7 @@ def _build_agents(guardian: GuardianOne) -> None:
     guardian.register_agent(Archivist(config=archivist_cfg, audit=guardian.audit))
 
     cfo_cfg = config.agents.get("cfo", AgentConfig(name="cfo"))
-    guardian.register_agent(CFO(config=cfo_cfg, audit=guardian.audit))
+    guardian.register_agent(CFO(config=cfo_cfg, audit=guardian.audit, data_dir=config.data_dir))
 
     doordash_cfg = config.agents.get("doordash", AgentConfig(name="doordash"))
     guardian.register_agent(DoorDashAgent(config=doordash_cfg, audit=guardian.audit))

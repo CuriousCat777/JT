@@ -11,9 +11,11 @@ Responsibilities:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+import json
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from guardian_one.core.audit import AuditLog, Severity
@@ -90,24 +92,154 @@ class Scenario:
 class CFO(BaseAgent):
     """Financial management agent for Jeremy."""
 
-    def __init__(self, config: AgentConfig, audit: AuditLog) -> None:
+    def __init__(
+        self,
+        config: AgentConfig,
+        audit: AuditLog,
+        data_dir: Path | str = "data",
+    ) -> None:
         super().__init__(config, audit)
         self._accounts: dict[str, Account] = {}
         self._transactions: list[Transaction] = []
         self._bills: list[Bill] = []
         self._scenarios: dict[str, Scenario] = {}
+        self._data_dir = Path(data_dir)
+        self._ledger_path = self._data_dir / "cfo_ledger.json"
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
-        self.log("initialized")
+        loaded = self._load_ledger()
+        self.log("initialized", details={
+            "accounts": len(self._accounts),
+            "transactions": len(self._transactions),
+            "bills": len(self._bills),
+            "loaded_from_disk": loaded,
+        })
+
+    # ------------------------------------------------------------------
+    # Persistence — save & load financial state
+    # ------------------------------------------------------------------
+
+    def _load_ledger(self) -> bool:
+        """Load financial data from the ledger file on disk.
+
+        Returns True if data was loaded, False otherwise.
+        The ledger file is a JSON file stored in the data directory.
+        """
+        if not self._ledger_path.exists():
+            return False
+        try:
+            raw = json.loads(self._ledger_path.read_text())
+            self._load_accounts(raw.get("accounts", []))
+            self._load_transactions(raw.get("transactions", []))
+            self._load_bills(raw.get("bills", []))
+            self.log("ledger_loaded", details={
+                "path": str(self._ledger_path),
+                "accounts": len(self._accounts),
+                "transactions": len(self._transactions),
+                "bills": len(self._bills),
+            })
+            return True
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            self.log(
+                "ledger_load_error",
+                severity=Severity.ERROR,
+                details={"error": str(exc)},
+            )
+            return False
+
+    def _load_accounts(self, entries: list[dict[str, Any]]) -> None:
+        for entry in entries:
+            acct = Account(
+                name=entry["name"],
+                account_type=AccountType(entry["account_type"]),
+                balance=entry["balance"],
+                institution=entry.get("institution", ""),
+                last_synced=entry.get("last_synced", datetime.now(timezone.utc).isoformat()),
+            )
+            self._accounts[acct.name] = acct
+
+    def _load_transactions(self, entries: list[dict[str, Any]]) -> None:
+        for entry in entries:
+            tx = Transaction(
+                date=entry["date"],
+                description=entry["description"],
+                amount=entry["amount"],
+                category=TransactionCategory(entry.get("category", "other")),
+                account=entry.get("account", ""),
+                metadata=entry.get("metadata", {}),
+            )
+            self._transactions.append(tx)
+
+    def _load_bills(self, entries: list[dict[str, Any]]) -> None:
+        for entry in entries:
+            bill = Bill(
+                name=entry["name"],
+                amount=entry["amount"],
+                due_date=entry["due_date"],
+                recurring=entry.get("recurring", True),
+                frequency=entry.get("frequency", "monthly"),
+                auto_pay=entry.get("auto_pay", False),
+                paid=entry.get("paid", False),
+            )
+            self._bills.append(bill)
+
+    def save_ledger(self) -> None:
+        """Persist current financial state to disk."""
+        data = {
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "accounts": [
+                {
+                    "name": a.name,
+                    "account_type": a.account_type.value,
+                    "balance": a.balance,
+                    "institution": a.institution,
+                    "last_synced": a.last_synced,
+                }
+                for a in self._accounts.values()
+            ],
+            "transactions": [
+                {
+                    "date": tx.date,
+                    "description": tx.description,
+                    "amount": tx.amount,
+                    "category": tx.category.value,
+                    "account": tx.account,
+                    "metadata": tx.metadata,
+                }
+                for tx in self._transactions
+            ],
+            "bills": [
+                {
+                    "name": b.name,
+                    "amount": b.amount,
+                    "due_date": b.due_date,
+                    "recurring": b.recurring,
+                    "frequency": b.frequency,
+                    "auto_pay": b.auto_pay,
+                    "paid": b.paid,
+                }
+                for b in self._bills
+            ],
+        }
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._ledger_path.write_text(json.dumps(data, indent=2))
+        self.log("ledger_saved", details={
+            "path": str(self._ledger_path),
+            "accounts": len(self._accounts),
+            "transactions": len(self._transactions),
+            "bills": len(self._bills),
+        })
+
+    def add_account(self, account: Account, persist: bool = True) -> None:
+        self._accounts[account.name] = account
+        self.log("account_added", details={"name": account.name, "type": account.account_type.value})
+        if persist:
+            self.save_ledger()
 
     # ------------------------------------------------------------------
     # Account management
     # ------------------------------------------------------------------
-
-    def add_account(self, account: Account) -> None:
-        self._accounts[account.name] = account
-        self.log("account_added", details={"name": account.name, "type": account.account_type.value})
 
     def get_account(self, name: str) -> Account | None:
         return self._accounts.get(name)
@@ -126,8 +258,10 @@ class CFO(BaseAgent):
     # Transaction tracking
     # ------------------------------------------------------------------
 
-    def record_transaction(self, tx: Transaction) -> None:
+    def record_transaction(self, tx: Transaction, persist: bool = True) -> None:
         self._transactions.append(tx)
+        if persist:
+            self.save_ledger()
 
     def spending_summary(self, month: str | None = None) -> dict[str, float]:
         """Summarise spending by category.  month format: 'YYYY-MM'."""
@@ -150,14 +284,15 @@ class CFO(BaseAgent):
     # Bill management
     # ------------------------------------------------------------------
 
-    def add_bill(self, bill: Bill) -> None:
+    def add_bill(self, bill: Bill, persist: bool = True) -> None:
         self._bills.append(bill)
         self.log("bill_added", details={"name": bill.name, "due": bill.due_date})
+        if persist:
+            self.save_ledger()
 
     def upcoming_bills(self, days: int = 7) -> list[Bill]:
         now = datetime.now(timezone.utc)
         cutoff = now.isoformat()[:10]
-        from datetime import timedelta
         end = (now + timedelta(days=days)).isoformat()[:10]
         return [
             b for b in self._bills

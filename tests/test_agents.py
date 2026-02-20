@@ -149,14 +149,18 @@ def test_archivist_run():
 
 # ---- CFO ----
 
+def _make_cfo() -> CFO:
+    return CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=tempfile.mkdtemp())
+
+
 def test_cfo_initialize():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
     assert agent.status == AgentStatus.IDLE
 
 
 def test_cfo_accounts_and_net_worth():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
 
     agent.add_account(Account(name="Checking", account_type=AccountType.CHECKING, balance=5000))
@@ -170,7 +174,7 @@ def test_cfo_accounts_and_net_worth():
 
 
 def test_cfo_spending_summary():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
 
     agent.record_transaction(Transaction(date="2026-02-01", description="Rent", amount=-1500, category=TransactionCategory.HOUSING))
@@ -184,7 +188,7 @@ def test_cfo_spending_summary():
 
 
 def test_cfo_bill_management():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
 
     agent.add_bill(Bill(name="Electric", amount=120, due_date="2020-01-01"))  # Past due
@@ -196,7 +200,7 @@ def test_cfo_bill_management():
 
 
 def test_cfo_home_purchase_scenario():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
     agent.add_account(Account(name="Savings", account_type=AccountType.SAVINGS, balance=50000))
 
@@ -207,7 +211,7 @@ def test_cfo_home_purchase_scenario():
 
 
 def test_cfo_tax_recommendations():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
 
     recs = agent.tax_recommendations()
@@ -216,8 +220,53 @@ def test_cfo_tax_recommendations():
 
 
 def test_cfo_run():
-    agent = CFO(AgentConfig(name="cfo"), _make_audit())
+    agent = _make_cfo()
     agent.initialize()
     report = agent.run()
     assert report.agent_name == "cfo"
     assert report.status == AgentStatus.IDLE.value
+
+
+def test_cfo_persistence_roundtrip():
+    """Data saved by CFO can be reloaded by a new instance."""
+    data_dir = tempfile.mkdtemp()
+    agent1 = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
+    agent1.initialize()
+
+    agent1.add_account(Account(name="Checking", account_type=AccountType.CHECKING, balance=5000))
+    agent1.record_transaction(Transaction(date="2026-02-01", description="Salary", amount=8000, category=TransactionCategory.INCOME))
+    agent1.add_bill(Bill(name="Rent", amount=1800, due_date="2026-03-01"))
+
+    # New instance loads from same directory
+    agent2 = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
+    agent2.initialize()
+
+    assert agent2.net_worth() == 5000
+    assert agent2.income_summary("2026-02") == 8000
+    assert len(agent2._bills) == 1
+    assert agent2._bills[0].name == "Rent"
+
+
+def test_cfo_loads_seed_data():
+    """CFO auto-loads the seed ledger file if present."""
+    import json
+    data_dir = tempfile.mkdtemp()
+    ledger = {
+        "accounts": [
+            {"name": "Savings", "account_type": "savings", "balance": 10000, "institution": "Bank"}
+        ],
+        "transactions": [
+            {"date": "2026-02-01", "description": "Pay", "amount": 5000, "category": "income"}
+        ],
+        "bills": [
+            {"name": "Electric", "amount": 100, "due_date": "2026-03-01"}
+        ],
+    }
+    Path(data_dir, "cfo_ledger.json").write_text(json.dumps(ledger))
+
+    agent = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
+    agent.initialize()
+
+    assert agent.net_worth() == 10000
+    assert len(agent._transactions) == 1
+    assert len(agent._bills) == 1
