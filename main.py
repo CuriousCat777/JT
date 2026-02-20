@@ -2,6 +2,7 @@
 
 Usage:
     python main.py              # Run all agents once and print daily summary
+    python main.py --schedule   # Start interactive scheduler (agents run on intervals)
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --agent NAME # Run a single agent
@@ -52,6 +53,7 @@ def _build_agents(guardian: GuardianOne) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
+    parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Print CFO dashboard")
     parser.add_argument("--agent", type=str, help="Run a single agent by name")
@@ -66,6 +68,13 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    if args.schedule:
+        from guardian_one.core.scheduler import Scheduler
+        sched = Scheduler(guardian)
+        sched.start()
+        guardian.shutdown()
+        return
 
     if args.brief:
         print(guardian.monitor.weekly_brief_text())
