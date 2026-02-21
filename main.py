@@ -6,7 +6,8 @@ Usage:
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --validate   # CFO validation report (detailed, for review)
-    python main.py --sync       # Continuous sync loop (Empower + Rocket Money)
+    python main.py --sync       # Continuous sync loop (Plaid + Empower + Rocket Money)
+    python main.py --connect    # Connect bank accounts via Plaid (read-only)
     python main.py --agent NAME # Run a single agent
     python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
     python main.py --homelink   # H.O.M.E. L.I.N.K. service status
@@ -126,6 +127,8 @@ def _print_validation_report(cfo: CFO) -> None:
     emp = report["empower"]
     print("  SYNC STATUS")
     print("  " + "-" * 40)
+    plaid = report.get("plaid", {})
+    print(f"  Plaid:        {'connected' if plaid.get('connected') else 'offline'} ({plaid.get('connected_institutions', 0)} bank(s))")
     print(f"  Rocket Money: {'connected' if rm.get('connected') else 'offline'} (mode: {rm.get('sync_mode', 'n/a')})")
     print(f"  Empower:      {'connected' if emp.get('connected') else 'offline'}")
     print()
@@ -149,6 +152,20 @@ def _run_sync_loop(cfo: CFO, interval: int = 300, once: bool = False) -> None:
             print(f"{'=' * 60}")
 
             results = cfo.sync_all()
+
+            # Plaid results (direct bank connections)
+            plaid = results.get("plaid", {})
+            if plaid.get("connected"):
+                print(f"  Plaid:        +{plaid.get('accounts_added', 0)} new, "
+                      f"{plaid.get('accounts_updated', 0)} updated, "
+                      f"+{plaid.get('transactions_added', 0)} txns "
+                      f"from {plaid.get('institutions', 0)} bank(s)")
+            else:
+                inst_count = plaid.get("institutions", 0)
+                if inst_count == 0 and not cfo.plaid.has_credentials:
+                    print(f"  Plaid:        not configured (run --connect to link banks)")
+                else:
+                    print(f"  Plaid:        offline ({plaid.get('error', 'no credentials')})")
 
             # Empower results
             emp = results["empower"]
@@ -200,9 +217,11 @@ def main() -> None:
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Print CFO dashboard")
     parser.add_argument("--validate", action="store_true", help="CFO validation report for review")
-    parser.add_argument("--sync", action="store_true", help="Continuous Empower + Rocket Money sync loop")
+    parser.add_argument("--sync", action="store_true", help="Continuous Plaid + Empower + Rocket Money sync loop")
     parser.add_argument("--sync-interval", type=int, default=300, help="Sync interval in seconds (default: 300 = 5min)")
     parser.add_argument("--sync-once", action="store_true", help="Run a single sync cycle then exit")
+    parser.add_argument("--connect", action="store_true", help="Connect bank accounts via Plaid (read-only)")
+    parser.add_argument("--connect-port", type=int, default=8234, help="Port for Plaid Link server (default: 8234)")
     parser.add_argument("--agent", type=str, help="Run a single agent by name")
     parser.add_argument("--brief", action="store_true", help="H.O.M.E. L.I.N.K. weekly security brief")
     parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
@@ -271,6 +290,15 @@ def main() -> None:
             guardian.shutdown()
             return
         _run_sync_loop(cfo, interval=args.sync_interval, once=args.sync_once)
+    elif args.connect:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            from guardian_one.integrations.plaid_connect import run_plaid_link_server
+            result = run_plaid_link_server(cfo.plaid, port=args.connect_port)
+            if not result.get("success"):
+                print(f"\n  {result.get('error', 'Connection failed')}")
+        else:
+            print("CFO agent not available.")
     elif args.validate:
         cfo = guardian.get_agent("cfo")
         if cfo and isinstance(cfo, CFO):

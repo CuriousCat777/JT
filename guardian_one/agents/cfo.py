@@ -23,6 +23,7 @@ from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
 from guardian_one.integrations.financial_sync import (
     EmpowerProvider,
+    PlaidProvider,
     RocketMoneyProvider,
     SyncedAccount,
     SyncedTransaction,
@@ -104,6 +105,7 @@ class CFO(BaseAgent):
         audit: AuditLog,
         data_dir: Path | str = "data",
         rocket_money: RocketMoneyProvider | None = None,
+        plaid: PlaidProvider | None = None,
     ) -> None:
         super().__init__(config, audit)
         self._accounts: dict[str, Account] = {}
@@ -116,6 +118,10 @@ class CFO(BaseAgent):
         self._rm_connected = False
         self._empower = EmpowerProvider()
         self._empower_connected = False
+        self._plaid = plaid or PlaidProvider(
+            token_store_path=self._data_dir / "plaid_tokens.json",
+        )
+        self._plaid_connected = False
         self._last_sync: str = ""
 
     def initialize(self) -> None:
@@ -134,6 +140,12 @@ class CFO(BaseAgent):
         else:
             self._empower_connected = False
 
+        # Attempt Plaid connection
+        if self._plaid.has_credentials:
+            self._plaid_connected = self._plaid.authenticate()
+        else:
+            self._plaid_connected = False
+
         self.log("initialized", details={
             "accounts": len(self._accounts),
             "transactions": len(self._transactions),
@@ -143,6 +155,8 @@ class CFO(BaseAgent):
             "rocket_money_has_key": self._rocket_money.has_credentials,
             "empower_connected": self._empower_connected,
             "empower_has_key": self._empower.has_credentials,
+            "plaid_connected": self._plaid_connected,
+            "plaid_institutions": len(self._plaid.connected_institutions),
         })
 
     # ------------------------------------------------------------------
@@ -636,6 +650,103 @@ class CFO(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Plaid sync (direct bank connections — READ-ONLY)
+    # ------------------------------------------------------------------
+
+    @property
+    def plaid(self) -> PlaidProvider:
+        return self._plaid
+
+    def sync_plaid(self) -> dict[str, Any]:
+        """Pull accounts and transactions from Plaid-connected banks.
+
+        Plaid provides direct, read-only access to bank accounts
+        (BofA, Wells Fargo, Capital One, etc.).  Merges into the
+        local ledger without duplicating existing data.
+        """
+        if not self._plaid_connected or not self._plaid.connected_institutions:
+            return {
+                "source": "plaid",
+                "connected": self._plaid_connected,
+                "institutions": len(self._plaid.connected_institutions),
+                "error": self._plaid.last_error if not self._plaid_connected else "No institutions linked",
+            }
+
+        synced_accounts = self._plaid.fetch_accounts()
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=90)).isoformat()[:10]
+        end = now.isoformat()[:10]
+        synced_transactions = self._plaid.fetch_transactions(start, end)
+
+        # Merge accounts
+        accounts_added = 0
+        accounts_updated = 0
+        for sa in synced_accounts:
+            existing = self._accounts.get(sa.name)
+            if existing:
+                existing.balance = sa.balance
+                existing.last_synced = sa.last_updated
+                accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(sa.account_type)
+                except ValueError:
+                    acct_type = AccountType.CHECKING
+                self._accounts[sa.name] = Account(
+                    name=sa.name,
+                    account_type=acct_type,
+                    balance=sa.balance,
+                    institution=sa.institution,
+                    last_synced=sa.last_updated,
+                )
+                accounts_added += 1
+
+        # Merge transactions (deduplicate)
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+        tx_added = 0
+        for st in synced_transactions:
+            key = (st.date, st.description, st.amount)
+            if key not in existing_keys:
+                try:
+                    cat = TransactionCategory(st.category)
+                except ValueError:
+                    cat = TransactionCategory.OTHER
+                self._transactions.append(Transaction(
+                    date=st.date,
+                    description=st.description,
+                    amount=st.amount,
+                    category=cat,
+                    account=st.account,
+                    metadata={"source": "plaid"},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        if accounts_added or accounts_updated or tx_added:
+            self.save_ledger()
+
+        result = {
+            "source": "plaid",
+            "connected": True,
+            "institutions": len(self._plaid.connected_institutions),
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "transactions_added": tx_added,
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.log("plaid_sync", details=result)
+        return result
+
+    def plaid_status(self) -> dict[str, Any]:
+        """Current Plaid connection status."""
+        return {
+            **self._plaid.status(),
+            "connected": self._plaid_connected,
+        }
+
+    # ------------------------------------------------------------------
     # Dashboard
     # ------------------------------------------------------------------
 
@@ -660,6 +771,7 @@ class CFO(BaseAgent):
                 datetime.now(timezone.utc).isoformat()[:7]
             ),
             "rocket_money": self.rocket_money_status(),
+            "plaid": self.plaid_status(),
         }
 
     def validation_report(self) -> dict[str, Any]:
@@ -708,19 +820,23 @@ class CFO(BaseAgent):
             "tax_recommendations": self.tax_recommendations(),
             "rocket_money": self.rocket_money_status(),
             "empower": self.empower_status(),
+            "plaid": self.plaid_status(),
             "ledger_path": str(self._ledger_path),
         }
 
     def sync_all(self) -> dict[str, Any]:
-        """Run a full sync cycle — Empower + Rocket Money — and return results."""
+        """Run a full sync cycle — Plaid + Empower + Rocket Money — and return results."""
         results: dict[str, Any] = {
             "synced_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        # Empower
+        # Plaid (direct bank connections — primary source)
+        results["plaid"] = self.sync_plaid()
+
+        # Empower (retirement accounts)
         results["empower"] = self.sync_empower()
 
-        # Rocket Money
+        # Rocket Money (aggregator fallback)
         results["rocket_money"] = self.sync_rocket_money()
 
         # Updated totals
@@ -780,6 +896,20 @@ class CFO(BaseAgent):
         else:
             recommendations.append(
                 "Set EMPOWER_API_KEY in .env to sync retirement accounts from Empower."
+            )
+
+        # Plaid sync (direct bank connections)
+        if self._plaid_connected and self._plaid.connected_institutions:
+            plaid_sync = self.sync_plaid()
+            actions.append(
+                f"Plaid sync: {plaid_sync.get('accounts_added', 0)} new accounts, "
+                f"{plaid_sync.get('transactions_added', 0)} new transactions "
+                f"from {plaid_sync.get('institutions', 0)} bank(s)."
+            )
+        elif not self._plaid.has_credentials:
+            recommendations.append(
+                "Set PLAID_CLIENT_ID and PLAID_SECRET in .env, then run "
+                "'python main.py --connect' to link bank accounts (read-only)."
             )
 
         # Bill checks

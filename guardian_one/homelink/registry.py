@@ -221,6 +221,36 @@ EMPOWER_INTEGRATION = IntegrationRecord(
     owner_agent="cfo",
 )
 
+PLAID_INTEGRATION = IntegrationRecord(
+    name="plaid",
+    description="Plaid — Direct read-only bank connections (BofA, Wells Fargo, Capital One, etc.)",
+    base_url="https://production.plaid.com",
+    auth_method="api_key",
+    data_flow="CFO reads account balances and transaction history via Plaid Link. "
+              "Strictly read-only — no transfers, payments, or account modifications.",
+    vault_keys=["PLAID_CLIENT_ID", "PLAID_SECRET"],
+    threat_model=[
+        ThreatEntry("Plaid credentials compromise exposes all linked bank data", "critical",
+                    "Credentials in encrypted vault; 90-day rotation; read-only products only."),
+        ThreatEntry("Access token theft grants bank account read access", "critical",
+                    "Tokens stored encrypted; each institution has a separate token; revocable via /item/remove."),
+        ThreatEntry("Man-in-the-middle interception of bank data", "high",
+                    "TLS 1.3 enforced; Plaid handles bank-to-Plaid encryption; _request() validates endpoints."),
+        ThreatEntry("Unauthorized write operations via compromised agent", "high",
+                    "PlaidProvider._READ_ONLY_ENDPOINTS whitelist blocks all non-read endpoints; "
+                    "ALLOWED_PRODUCTS never includes transfer or payment_initiation."),
+        ThreatEntry("Stale data from failed bank sync", "medium",
+                    "Sync timestamps tracked per institution; alerts if data is >24h stale."),
+    ],
+    failure_impact="Bank account data unavailable; CFO uses last cached balances from ledger. "
+                   "No financial actions are blocked.",
+    rollback_procedure="1. Run 'python main.py --connect' and disconnect individual banks. "
+                       "2. Delete data/plaid_tokens.json. "
+                       "3. Revoke access at dashboard.plaid.com. "
+                       "4. Rotate credentials in vault.",
+    owner_agent="cfo",
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -288,6 +318,7 @@ class IntegrationRegistry:
             DOORDASH_INTEGRATION,
             ROCKET_MONEY_INTEGRATION,
             EMPOWER_INTEGRATION,
+            PLAID_INTEGRATION,
             GOOGLE_CALENDAR_INTEGRATION,
             GMAIL_INTEGRATION,
             NORDVPN_INTEGRATION,
