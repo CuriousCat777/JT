@@ -43,18 +43,40 @@ class SecretStore:
 
     Uses Fernet symmetric encryption derived from a master passphrase.
     The encryption key never touches disk in plaintext.
+
+    On first creation a random 16-byte salt is generated and stored as a
+    prefix on the encrypted file.  Existing files that used the legacy
+    static salt are detected and loaded transparently.
+
+    File format (v2):
+        GUARDIAN_SALT_V2 (16 bytes marker) || salt (16 bytes) || ciphertext
+    Legacy format:
+        raw Fernet ciphertext (no marker)
     """
+
+    _SALT_MARKER = b"GUARDIAN_SALT_V2"  # exactly 16 bytes
+    _SALT_LENGTH = 16
+    _LEGACY_SALT = b"guardian-one-static-salt-v1"
 
     def __init__(self, store_path: Path, passphrase: str) -> None:
         self._store_path = store_path
-        self._fernet = self._derive_key(passphrase)
         self._data: dict[str, str] = {}
+
         if self._store_path.exists():
+            raw = self._store_path.read_bytes()
+            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                offset = len(self._SALT_MARKER)
+                self._salt = raw[offset:offset + self._SALT_LENGTH]
+            else:
+                self._salt = self._LEGACY_SALT
+            self._fernet = self._derive_key(passphrase, self._salt)
             self._load()
+        else:
+            self._salt = os.urandom(self._SALT_LENGTH)
+            self._fernet = self._derive_key(passphrase, self._salt)
 
     @staticmethod
-    def _derive_key(passphrase: str) -> Fernet:
-        salt = b"guardian-one-static-salt-v1"  # In production, use per-store random salt
+    def _derive_key(passphrase: str, salt: bytes) -> Fernet:
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -65,15 +87,19 @@ class SecretStore:
         return Fernet(key)
 
     def _load(self) -> None:
-        encrypted = self._store_path.read_bytes()
-        plaintext = self._fernet.decrypt(encrypted)
+        raw = self._store_path.read_bytes()
+        if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+            ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
+        else:
+            ciphertext = raw
+        plaintext = self._fernet.decrypt(ciphertext)
         self._data = json.loads(plaintext)
 
     def _save(self) -> None:
         plaintext = json.dumps(self._data).encode()
         encrypted = self._fernet.encrypt(plaintext)
         self._store_path.parent.mkdir(parents=True, exist_ok=True)
-        self._store_path.write_bytes(encrypted)
+        self._store_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
 
     def get(self, key: str) -> str | None:
         return self._data.get(key)
