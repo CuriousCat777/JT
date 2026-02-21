@@ -170,7 +170,15 @@ class Archivist(BaseAgent):
             max_days = retention_days.get(record.retention)
             if max_days is None:
                 continue
-            created_dt = datetime.fromisoformat(record.created)
+            try:
+                created_dt = datetime.fromisoformat(record.created)
+            except (ValueError, TypeError):
+                self.log(
+                    "invalid_file_timestamp",
+                    severity=Severity.WARNING,
+                    details={"path": record.path, "timestamp": record.created},
+                )
+                continue
             if created_dt.tzinfo is None:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
             age = (now - created_dt).days

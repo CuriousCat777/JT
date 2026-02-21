@@ -109,14 +109,13 @@ class Chronos(BaseAgent):
         )
 
     def check_conflicts(self) -> list[tuple[CalendarEvent, CalendarEvent]]:
-        """Detect overlapping events."""
+        """Detect all overlapping event pairs (not just adjacent)."""
         conflicts = []
-        sorted_events = sorted(self._events, key=lambda e: e.start)
-        for i in range(len(sorted_events) - 1):
-            a = sorted_events[i]
-            b = sorted_events[i + 1]
-            if a.end > b.start:
-                conflicts.append((a, b))
+        events = list(self._events)
+        for i, a in enumerate(events):
+            for b in events[i + 1:]:
+                if a.start < b.end and b.start < a.end:
+                    conflicts.append((a, b))
         return conflicts
 
     # ------------------------------------------------------------------

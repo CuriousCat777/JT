@@ -270,9 +270,14 @@ class DoorDashAgent(BaseAgent):
         if status == OrderStatus.DELIVERED:
             order.delivered_at = datetime.now(timezone.utc).isoformat()
             del self._active_orders[order_id]
+            self.log("order_delivered", details={
+                "order_id": order_id,
+                "delivered_at": order.delivered_at,
+            })
 
         if status == OrderStatus.CANCELLED:
             del self._active_orders[order_id]
+            self.log("order_cancelled", details={"order_id": order_id})
 
         return order
 
@@ -316,10 +321,16 @@ class DoorDashAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     def set_meal_schedule(self, schedule: MealSchedule) -> None:
+        old = next((s for s in self._meal_schedules if s.meal == schedule.meal), None)
         self._meal_schedules = [
             s for s in self._meal_schedules if s.meal != schedule.meal
         ]
         self._meal_schedules.append(schedule)
+        self.log("meal_schedule_updated", details={
+            "meal": schedule.meal,
+            "old_window": f"{old.window_start}-{old.window_end}" if old else "none",
+            "new_window": f"{schedule.window_start}-{schedule.window_end}",
+        })
 
     def suggest_meal(self, meal: str) -> dict[str, Any]:
         """Suggest a restaurant and items for a given meal window."""
@@ -363,11 +374,14 @@ class DoorDashAgent(BaseAgent):
     def current_meal_window(self) -> MealSchedule | None:
         """Determine which meal window we're currently in (local approx)."""
         now_hour = datetime.now(timezone.utc).hour  # Approximate; config tz-aware in production
-        for schedule in self._meal_schedules:
-            start_h = int(schedule.window_start.split(":")[0])
-            end_h = int(schedule.window_end.split(":")[0])
+        for sched in self._meal_schedules:
+            try:
+                start_h = int(sched.window_start.split(":")[0])
+                end_h = int(sched.window_end.split(":")[0])
+            except (ValueError, IndexError):
+                continue
             if start_h <= now_hour < end_h:
-                return schedule
+                return sched
         return None
 
     # ------------------------------------------------------------------

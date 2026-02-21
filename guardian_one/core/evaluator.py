@@ -148,13 +148,16 @@ def _evaluate_agent(
     metrics.append(MetricScore("Availability", avail_pct, score_to_rating(avail_pct), avail_detail))
 
     # 2. Task Completion — did the run cycle complete with a valid report?
-    if report.status in (AgentStatus.IDLE.value, "idle", "running"):
+    if report.status == AgentStatus.IDLE.value:
         completion_pct = 100.0
         completion_detail = "Run cycle completed successfully"
-    elif report.status in (AgentStatus.ERROR.value, "error"):
+    elif report.status == AgentStatus.RUNNING.value:
+        completion_pct = 60.0
+        completion_detail = "Agent still running after cycle — may not have completed cleanly"
+    elif report.status == AgentStatus.ERROR.value:
         completion_pct = 20.0
         completion_detail = f"Run cycle failed: {report.summary}"
-    elif report.status in (AgentStatus.DISABLED.value, "disabled"):
+    elif report.status == AgentStatus.DISABLED.value:
         completion_pct = 0.0
         completion_detail = "Agent disabled — no task completion"
     else:
