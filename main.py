@@ -215,7 +215,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
     parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
-    parser.add_argument("--dashboard", action="store_true", help="Print CFO dashboard")
+    parser.add_argument("--dashboard", action="store_true", help="Generate CFO Excel dashboard")
+    parser.add_argument("--dashboard-password", type=str, default=None, help="Password-protect the Excel dashboard")
     parser.add_argument("--validate", action="store_true", help="CFO validation report for review")
     parser.add_argument("--sync", action="store_true", help="Continuous Plaid + Empower + Rocket Money sync loop")
     parser.add_argument("--sync-interval", type=int, default=300, help="Sync interval in seconds (default: 300 = 5min)")
@@ -311,17 +312,51 @@ def main() -> None:
     elif args.dashboard:
         cfo = guardian.get_agent("cfo")
         if cfo and isinstance(cfo, CFO):
-            from guardian_one.agents.cfo_dashboard import generate_dashboard
-            path = generate_dashboard(cfo, Path(config.data_dir) / "dashboard.xlsx")
+            # Try to get Gmail financial data for the daily check
+            gmail_data = None
+            gmail = guardian.get_agent("gmail")
+            if gmail:
+                try:
+                    from guardian_one.agents.gmail_agent import GmailAgent
+                    if isinstance(gmail, GmailAgent):
+                        inbox = gmail.check_inbox()
+                        fin_emails = gmail.search_financial_emails(days_back=7)
+                        gmail_data = {
+                            "inbox": inbox,
+                            "financial_emails": fin_emails,
+                        }
+                except Exception:
+                    pass  # Gmail not configured — skip
+
+            password = args.dashboard_password
+            path = cfo.generate_excel(
+                output_path=Path(config.data_dir) / "dashboard.xlsx",
+                password=password,
+                gmail_data=gmail_data,
+            )
             print(f"\n  Dashboard saved to: {path}")
+            if password:
+                print(f"  Protected with password (sheets locked, structure locked).")
             print(f"  Open it in Excel, Google Sheets, or LibreOffice.")
             print()
-            # Also print a quick text summary
+
+            # Print the daily review summary
+            review = cfo.daily_review(gmail_data)
+            status_icon = {"all_clear": "[OK]", "review": "[!!]", "needs_attention": "[!!]"}.get(
+                review["overall_status"], "[??]")
+            print(f"  {status_icon} {review['overall_message']}")
+            print()
+
+            # Quick text summary
             d = cfo.dashboard()
             print(f"  Net Worth:     ${d['net_worth']:>12,.2f}")
             for atype, bal in d.get("balances_by_type", {}).items():
                 label = atype.replace("_", " ").title()
                 print(f"  {label + ':':15s} ${bal:>12,.2f}")
+
+            # Budget alerts
+            for alert in d.get("budget_alerts", []):
+                print(f"  [BUDGET] {alert}")
         else:
             print("CFO agent not available.")
     elif args.summary:
