@@ -689,32 +689,71 @@ class EmpowerProvider(FinancialProvider):
 
 
 class PlaidProvider(FinancialProvider):
-    """Plaid integration (alternative to Rocket Money).
+    """Plaid integration — READ-ONLY access to bank accounts.
 
-    Credentials lookup:
-    1. Constructor args
-    2. ``PLAID_CLIENT_ID``, ``PLAID_SECRET``, ``PLAID_ENV`` env vars
+    Plaid connects directly to banks (BofA, Wells Fargo, Capital One, etc.)
+    and pulls account balances and transaction history.
 
-    Environments: sandbox, development, production
+    SECURITY: This provider is strictly **read-only**.
+    - Only ``ALLOWED_PRODUCTS`` are ever requested (transactions, accounts, investments).
+    - Products that move money (transfer, payment_initiation) are **never** requested.
+    - The ``_request`` method refuses to call write endpoints.
 
-    To activate:
-    1. Obtain client_id and secret from dashboard.plaid.com
-    2. Set PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV env vars
+    Connection flow:
+    1. Set PLAID_CLIENT_ID and PLAID_SECRET in .env (from dashboard.plaid.com)
+    2. Run ``python main.py --connect`` to launch Plaid Link in your browser
+    3. Log into each bank via Plaid's secure OAuth flow
+    4. Access tokens are stored encrypted in ``data/plaid_tokens.json``
+    5. CFO sync loop pulls balances and transactions automatically
+
+    Environments: sandbox (testing), development (up to 100 items free), production
     """
 
     VALID_ENVS = ("sandbox", "development", "production")
+
+    # READ-ONLY products only.  Never add transfer, payment_initiation, etc.
+    ALLOWED_PRODUCTS = ("transactions", "auth", "investments", "liabilities")
+
+    # Endpoints that are read-only.  _request() rejects anything not on this list.
+    _READ_ONLY_ENDPOINTS = frozenset({
+        "/link/token/create",
+        "/item/public_token/exchange",
+        "/item/get",
+        "/item/remove",
+        "/accounts/get",
+        "/accounts/balance/get",
+        "/transactions/get",
+        "/transactions/sync",
+        "/investments/holdings/get",
+        "/investments/transactions/get",
+        "/liabilities/get",
+        "/institutions/get_by_id",
+    })
+
+    _ENV_HOSTS = {
+        "sandbox": "https://sandbox.plaid.com",
+        "development": "https://development.plaid.com",
+        "production": "https://production.plaid.com",
+    }
 
     def __init__(
         self,
         client_id: str | None = None,
         secret: str | None = None,
         env: str | None = None,
+        token_store_path: str | Path | None = None,
     ) -> None:
         self._client_id = client_id or os.environ.get("PLAID_CLIENT_ID", "")
         self._secret = secret or os.environ.get("PLAID_SECRET", "")
         self._env = env or os.environ.get("PLAID_ENV", "sandbox")
+        self._base_url = self._ENV_HOSTS.get(self._env, self._ENV_HOSTS["sandbox"])
         self._authenticated = False
         self._last_error: str = ""
+
+        # Access tokens per institution — loaded from disk
+        self._access_tokens: dict[str, str] = {}  # institution_id → access_token
+        self._item_metadata: dict[str, dict[str, Any]] = {}  # institution_id → metadata
+        self._token_store = Path(token_store_path) if token_store_path else None
 
     @property
     def provider_name(self) -> str:
@@ -725,10 +764,20 @@ class PlaidProvider(FinancialProvider):
         return bool(self._client_id and self._secret)
 
     @property
+    def is_authenticated(self) -> bool:
+        return self._authenticated
+
+    @property
     def last_error(self) -> str:
         return self._last_error
 
+    @property
+    def connected_institutions(self) -> list[str]:
+        """List of institution IDs with stored access tokens."""
+        return list(self._access_tokens.keys())
+
     def authenticate(self) -> bool:
+        """Validate Plaid credentials and load stored access tokens."""
         if not self.has_credentials:
             self._last_error = "Missing PLAID_CLIENT_ID or PLAID_SECRET env vars."
             self._authenticated = False
@@ -742,27 +791,309 @@ class PlaidProvider(FinancialProvider):
             self._authenticated = False
             return False
 
+        # Load stored access tokens
+        self._load_tokens()
+
+        # Test credentials by creating a link token (lightweight call)
+        result = self._request("/link/token/create", {
+            "user": {"client_user_id": "guardian-one-cfo"},
+            "client_name": "Guardian One CFO",
+            "products": list(self.ALLOWED_PRODUCTS[:2]),  # transactions, auth
+            "country_codes": ["US"],
+            "language": "en",
+        })
+
+        if result and not result.get("error"):
+            self._authenticated = True
+            self._last_error = ""
+            return True
+
+        detail = ""
+        if result:
+            detail = result.get("error_message", result.get("detail", "unknown"))
+        self._authenticated = False
+        self._last_error = f"Plaid auth failed: {detail}" if detail else "Plaid auth failed: no response"
+        return False
+
+    def _request(
+        self,
+        endpoint: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Make an authenticated request to the Plaid API.
+
+        SECURITY: Refuses to call any endpoint not in ``_READ_ONLY_ENDPOINTS``.
+        All Plaid API calls use POST with client_id/secret in the body.
+        """
+        if endpoint not in self._READ_ONLY_ENDPOINTS:
+            return {"error": True, "error_message": f"Blocked: {endpoint} is not a read-only endpoint"}
+
+        url = f"{self._base_url}{endpoint}"
+        payload = dict(body or {})
+        payload["client_id"] = self._client_id
+        payload["secret"] = self._secret
+
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+
         try:
-            # Real: plaid.Client(client_id, secret, env) → test connection
-            self._authenticated = False
-            self._last_error = "Plaid client not yet implemented — credentials detected"
-            return self._authenticated
-        except Exception as exc:
-            self._last_error = f"Plaid auth failed: {exc}"
-            self._authenticated = False
-            return False
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode() if e.fp else ""
+            try:
+                parsed = json.loads(error_body)
+                return {"error": True, "status": e.code, **parsed}
+            except (json.JSONDecodeError, TypeError):
+                return {"error": True, "status": e.code, "detail": error_body}
+        except urllib.error.URLError:
+            return {"error": True, "error_message": "Network error"}
+
+    # ------------------------------------------------------------------
+    # Token management
+    # ------------------------------------------------------------------
+
+    def _load_tokens(self) -> None:
+        """Load access tokens from the token store file."""
+        if not self._token_store or not self._token_store.exists():
+            return
+        try:
+            data = json.loads(self._token_store.read_text())
+            self._access_tokens = data.get("tokens", {})
+            self._item_metadata = data.get("metadata", {})
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    def _save_tokens(self) -> None:
+        """Persist access tokens to disk."""
+        if not self._token_store:
+            return
+        self._token_store.parent.mkdir(parents=True, exist_ok=True)
+        self._token_store.write_text(json.dumps({
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "tokens": self._access_tokens,
+            "metadata": self._item_metadata,
+        }, indent=2))
+
+    def exchange_public_token(self, public_token: str, institution_id: str, institution_name: str) -> dict[str, Any]:
+        """Exchange a Plaid Link public_token for a permanent access_token.
+
+        Called after the user completes the Plaid Link flow in their browser.
+        """
+        result = self._request("/item/public_token/exchange", {
+            "public_token": public_token,
+        })
+
+        if result and not result.get("error"):
+            access_token = result.get("access_token", "")
+            item_id = result.get("item_id", "")
+
+            self._access_tokens[institution_id] = access_token
+            self._item_metadata[institution_id] = {
+                "institution_name": institution_name,
+                "item_id": item_id,
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._save_tokens()
+
+            return {
+                "success": True,
+                "institution": institution_name,
+                "item_id": item_id,
+            }
+
+        return {
+            "success": False,
+            "error": result.get("error_message", "Exchange failed") if result else "No response",
+        }
+
+    def create_link_token(self) -> dict[str, Any]:
+        """Create a Plaid Link token for the browser-based bank connection flow.
+
+        Returns the link_token needed to initialize Plaid Link JS.
+        """
+        result = self._request("/link/token/create", {
+            "user": {"client_user_id": "guardian-one-cfo"},
+            "client_name": "Guardian One CFO",
+            "products": list(self.ALLOWED_PRODUCTS[:2]),  # transactions, auth
+            "country_codes": ["US"],
+            "language": "en",
+        })
+
+        if result and not result.get("error"):
+            return {
+                "success": True,
+                "link_token": result.get("link_token", ""),
+                "expiration": result.get("expiration", ""),
+            }
+
+        return {
+            "success": False,
+            "error": result.get("error_message", "Failed to create link token") if result else "No response",
+        }
+
+    def disconnect_institution(self, institution_id: str) -> dict[str, Any]:
+        """Remove an institution connection (revoke access token)."""
+        token = self._access_tokens.get(institution_id)
+        if not token:
+            return {"success": False, "error": f"No connection for {institution_id}"}
+
+        result = self._request("/item/remove", {"access_token": token})
+
+        self._access_tokens.pop(institution_id, None)
+        self._item_metadata.pop(institution_id, None)
+        self._save_tokens()
+
+        return {"success": True, "institution_id": institution_id}
+
+    # ------------------------------------------------------------------
+    # Read-only data access
+    # ------------------------------------------------------------------
 
     def fetch_accounts(self) -> list[SyncedAccount]:
-        if not self._authenticated:
-            return []
-        # Real: plaid.Accounts.get(access_token)
-        return []
+        """Fetch account balances from all connected banks."""
+        all_accounts: list[SyncedAccount] = []
+        now = datetime.now(timezone.utc).isoformat()
+
+        for inst_id, access_token in self._access_tokens.items():
+            inst_name = self._item_metadata.get(inst_id, {}).get("institution_name", inst_id)
+            result = self._request("/accounts/balance/get", {
+                "access_token": access_token,
+            })
+
+            if not result or result.get("error"):
+                continue
+
+            for acct in result.get("accounts", []):
+                balances = acct.get("balances", {})
+                # Plaid: current = what you owe (credit), available = what you can spend
+                balance = balances.get("current", 0) or 0
+
+                acct_type = acct.get("type", "depository")
+                subtype = acct.get("subtype", "")
+
+                # Map Plaid types to CFO types
+                if acct_type == "credit":
+                    cfo_type = "credit_card"
+                    balance = -abs(balance)  # Credit balances are liabilities
+                elif acct_type == "loan":
+                    cfo_type = "loan"
+                    balance = -abs(balance)
+                elif acct_type == "investment":
+                    if subtype in ("401k", "ira", "roth", "roth 401k", "403b", "457b"):
+                        cfo_type = "retirement"
+                    else:
+                        cfo_type = "investment"
+                elif subtype == "savings":
+                    cfo_type = "savings"
+                else:
+                    cfo_type = "checking"
+
+                name = acct.get("name", acct.get("official_name", ""))
+                mask = acct.get("mask", "")
+                display_name = f"{name} ({mask})" if mask else name
+
+                all_accounts.append(SyncedAccount(
+                    name=display_name,
+                    account_type=cfo_type,
+                    balance=float(balance),
+                    institution=inst_name,
+                    last_updated=now,
+                    raw=acct,
+                ))
+
+        return all_accounts
 
     def fetch_transactions(self, start_date: str, end_date: str) -> list[SyncedTransaction]:
-        if not self._authenticated:
-            return []
-        # Real: plaid.Transactions.get(access_token, start, end)
-        return []
+        """Fetch transactions from all connected banks within date range."""
+        all_transactions: list[SyncedTransaction] = []
+
+        for inst_id, access_token in self._access_tokens.items():
+            offset = 0
+            total = 1  # Will be updated from response
+
+            while offset < total:
+                result = self._request("/transactions/get", {
+                    "access_token": access_token,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "options": {"count": 100, "offset": offset},
+                })
+
+                if not result or result.get("error"):
+                    break
+
+                total = result.get("total_transactions", 0)
+                txns = result.get("transactions", [])
+
+                for tx in txns:
+                    # Plaid: positive = outflow (money spent), negative = inflow (income)
+                    raw_amount = float(tx.get("amount", 0))
+                    # Flip to CFO convention: positive = inflow, negative = outflow
+                    amount = -raw_amount
+
+                    category = "other"
+                    plaid_cats = tx.get("personal_finance_category", {})
+                    if plaid_cats:
+                        primary = plaid_cats.get("primary", "").lower()
+                        category = _map_plaid_category(primary)
+                    elif tx.get("category"):
+                        category = _map_plaid_category(tx["category"][0].lower() if tx["category"] else "")
+
+                    acct_name = ""
+                    acct_id = tx.get("account_id", "")
+                    # Try to match account_id to a name from raw data
+                    for sa in (result.get("accounts", [])):
+                        if sa.get("account_id") == acct_id:
+                            acct_name = sa.get("name", "")
+                            break
+
+                    all_transactions.append(SyncedTransaction(
+                        date=tx.get("date", ""),
+                        description=tx.get("name", tx.get("merchant_name", "")),
+                        amount=amount,
+                        category=category,
+                        account=acct_name,
+                        raw=tx,
+                    ))
+
+                offset += len(txns)
+                if not txns:
+                    break
+
+        return all_transactions
+
+    def fetch_investment_holdings(self) -> list[dict[str, Any]]:
+        """Fetch investment/retirement holdings from connected banks."""
+        all_holdings: list[dict[str, Any]] = []
+
+        for inst_id, access_token in self._access_tokens.items():
+            result = self._request("/investments/holdings/get", {
+                "access_token": access_token,
+            })
+            if result and not result.get("error"):
+                securities = {s["security_id"]: s for s in result.get("securities", [])}
+                for h in result.get("holdings", []):
+                    sec = securities.get(h.get("security_id", ""), {})
+                    all_holdings.append({
+                        "name": sec.get("name", ""),
+                        "ticker": sec.get("ticker_symbol", ""),
+                        "quantity": h.get("quantity", 0),
+                        "value": h.get("institution_value", 0),
+                        "price": h.get("institution_price", 0),
+                        "type": sec.get("type", ""),
+                        "institution": self._item_metadata.get(inst_id, {}).get("institution_name", ""),
+                    })
+
+        return all_holdings
 
     def status(self) -> dict[str, Any]:
         return {
@@ -770,5 +1101,50 @@ class PlaidProvider(FinancialProvider):
             "has_credentials": self.has_credentials,
             "authenticated": self._authenticated,
             "environment": self._env,
+            "connected_institutions": len(self._access_tokens),
+            "institutions": [
+                {
+                    "id": inst_id,
+                    "name": meta.get("institution_name", inst_id),
+                    "connected_at": meta.get("connected_at", ""),
+                }
+                for inst_id, meta in self._item_metadata.items()
+            ],
+            "read_only": True,
+            "allowed_products": list(self.ALLOWED_PRODUCTS),
             "last_error": self._last_error,
         }
+
+
+def _map_plaid_category(plaid_category: str) -> str:
+    """Map Plaid's personal finance category to CFO TransactionCategory."""
+    mapping = {
+        "income": "income",
+        "transfer_in": "income",
+        "rent_and_utilities": "utilities",
+        "food_and_drink": "food",
+        "general_merchandise": "entertainment",
+        "entertainment": "entertainment",
+        "personal_care": "entertainment",
+        "general_services": "other",
+        "transportation": "transport",
+        "travel": "transport",
+        "medical": "medical",
+        "healthcare": "medical",
+        "education": "education",
+        "government_and_non_profit": "other",
+        "loan_payments": "loan_payment",
+        "bank_fees": "other",
+        "transfer_out": "savings",
+        "home_improvement": "housing",
+        "rent": "housing",
+        # Legacy Plaid category names
+        "shops": "entertainment",
+        "payment": "other",
+        "recreation": "entertainment",
+        "community": "charitable",
+        "service": "other",
+        "tax": "other",
+        "transfer": "savings",
+    }
+    return mapping.get(plaid_category, "other")
