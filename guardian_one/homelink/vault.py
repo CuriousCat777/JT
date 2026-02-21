@@ -151,10 +151,12 @@ class Vault:
             return True
 
     def list_keys(self) -> list[str]:
-        return list(self._secrets.keys())
+        with self._lock:
+            return list(self._secrets.keys())
 
     def get_meta(self, key_name: str) -> CredentialMeta | None:
-        return self._meta.get(key_name)
+        with self._lock:
+            return self._meta.get(key_name)
 
     # ------------------------------------------------------------------
     # Health checks
@@ -164,10 +166,15 @@ class Vault:
         """Return credentials past their recommended rotation window."""
         now = datetime.now(timezone.utc)
         due: list[CredentialMeta] = []
-        for meta in self._meta.values():
+        with self._lock:
+            meta_snapshot = list(self._meta.values())
+        for meta in meta_snapshot:
             if not meta.rotated_at:
                 continue
-            rotated = datetime.fromisoformat(meta.rotated_at)
+            try:
+                rotated = datetime.fromisoformat(meta.rotated_at)
+            except (ValueError, TypeError):
+                continue
             if rotated.tzinfo is None:
                 rotated = rotated.replace(tzinfo=timezone.utc)
             age_days = (now - rotated).days
@@ -178,15 +185,20 @@ class Vault:
     def expired_credentials(self) -> list[CredentialMeta]:
         """Return credentials past their expiry date."""
         now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            meta_snapshot = list(self._meta.values())
         return [
-            m for m in self._meta.values()
+            m for m in meta_snapshot
             if m.expires_at and m.expires_at < now
         ]
 
     def health_report(self) -> dict[str, Any]:
+        with self._lock:
+            total = len(self._secrets)
+            services = list({m.service for m in self._meta.values() if m.service})
         return {
-            "total_credentials": len(self._secrets),
+            "total_credentials": total,
             "due_for_rotation": len(self.credentials_due_for_rotation()),
             "expired": len(self.expired_credentials()),
-            "services": list({m.service for m in self._meta.values() if m.service}),
+            "services": services,
         }

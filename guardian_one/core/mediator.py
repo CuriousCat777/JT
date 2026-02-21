@@ -7,6 +7,7 @@ the Mediator arbitrates.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -60,9 +61,11 @@ class Mediator:
         self._audit = audit
         self._history: list[ConflictRecord] = []
         self._pending_proposals: list[Proposal] = []
+        self._lock = threading.Lock()
 
     def submit_proposal(self, proposal: Proposal) -> None:
-        self._pending_proposals.append(proposal)
+        with self._lock:
+            self._pending_proposals.append(proposal)
         self._audit.record(
             agent="mediator",
             action=f"proposal_received:{proposal.agent}:{proposal.action}",
@@ -72,7 +75,8 @@ class Mediator:
     def check_conflicts(self) -> list[ConflictRecord]:
         """Scan pending proposals for conflicts and resolve them."""
         conflicts: list[ConflictRecord] = []
-        proposals = self._pending_proposals
+        with self._lock:
+            proposals = list(self._pending_proposals)
 
         for i in range(len(proposals)):
             for j in range(i + 1, len(proposals)):
@@ -89,7 +93,8 @@ class Mediator:
                     record = self._resolve_resource_conflict(a, b)
                     conflicts.append(record)
 
-        self._history.extend(conflicts)
+        with self._lock:
+            self._history.extend(conflicts)
         return conflicts
 
     def _resolve_time_conflict(self, a: Proposal, b: Proposal) -> ConflictRecord:
@@ -140,7 +145,9 @@ class Mediator:
         return record
 
     def clear_pending(self) -> None:
-        self._pending_proposals.clear()
+        with self._lock:
+            self._pending_proposals.clear()
 
     def conflict_history(self) -> list[ConflictRecord]:
-        return list(self._history)
+        with self._lock:
+            return list(self._history)

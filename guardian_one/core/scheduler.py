@@ -60,9 +60,9 @@ class Scheduler:
 
     def _run_agent_job(self, name: str) -> None:
         """Execute a single agent's run cycle (called by scheduler)."""
-        if name in self._paused:
-            return
         with self._lock:
+            if name in self._paused:
+                return
             try:
                 report = self.guardian.run_agent(name)
                 self._last_run[name] = datetime.now(timezone.utc).isoformat()
@@ -133,7 +133,8 @@ class Scheduler:
         elif cmd == "pause" and len(parts) >= 2:
             target = parts[1].lower()
             if target in self.guardian.list_agents():
-                self._paused.add(target)
+                with self._lock:
+                    self._paused.add(target)
                 self.guardian.audit.record(
                     agent="scheduler",
                     action=f"agent_paused:{target}",
@@ -146,8 +147,11 @@ class Scheduler:
 
         elif cmd == "resume" and len(parts) >= 2:
             target = parts[1].lower()
-            if target in self._paused:
-                self._paused.discard(target)
+            with self._lock:
+                is_paused = target in self._paused
+                if is_paused:
+                    self._paused.discard(target)
+            if is_paused:
                 self.guardian.audit.record(
                     agent="scheduler",
                     action=f"agent_resumed:{target}",

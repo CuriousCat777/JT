@@ -146,6 +146,7 @@ class Gateway:
         self._rate_limiters: dict[str, _RateLimiter] = {}
         self._circuit_breakers: dict[str, _CircuitBreaker] = {}
         self._history: list[RequestRecord] = []
+        self._history_lock = threading.Lock()
         self._ssl_ctx = self._create_ssl_context()
 
     @staticmethod
@@ -250,7 +251,8 @@ class Gateway:
                     status_code=result["status_code"], latency_ms=round(latency, 1),
                     success=result["success"],
                 )
-                self._history.append(record)
+                with self._history_lock:
+                    self._history.append(record)
                 self._audit.record(
                     agent="homelink",
                     action=f"api_call:{service}:{method}:{path}",
@@ -270,12 +272,13 @@ class Gateway:
             except Exception as exc:
                 last_error = str(exc)
                 latency = (time.time() - start) * 1000
-                self._history.append(RequestRecord(
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    service=service, method=method, path=path, agent=agent,
-                    status_code=0, latency_ms=round(latency, 1),
-                    success=False, error=last_error,
-                ))
+                with self._history_lock:
+                    self._history.append(RequestRecord(
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        service=service, method=method, path=path, agent=agent,
+                        status_code=0, latency_ms=round(latency, 1),
+                        success=False, error=last_error,
+                    ))
                 breaker.record_failure()
 
                 if attempt < config.max_retries:
@@ -335,7 +338,8 @@ class Gateway:
 
         breaker = self._circuit_breakers[service]
         limiter = self._rate_limiters[service]
-        recent = [r for r in self._history if r.service == service][-20:]
+        with self._history_lock:
+            recent = [r for r in self._history if r.service == service][-20:]
 
         avg_latency = 0.0
         if recent:
@@ -356,7 +360,8 @@ class Gateway:
         return {name: self.service_status(name) for name in self._services}
 
     def request_history(self, service: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
-        records = self._history
+        with self._history_lock:
+            records = list(self._history)
         if service:
             records = [r for r in records if r.service == service]
         return [
