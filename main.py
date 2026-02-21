@@ -311,7 +311,17 @@ def main() -> None:
     elif args.dashboard:
         cfo = guardian.get_agent("cfo")
         if cfo and isinstance(cfo, CFO):
-            print(json.dumps(cfo.dashboard(), indent=2, default=str))
+            from guardian_one.agents.cfo_dashboard import generate_dashboard
+            path = generate_dashboard(cfo, Path(config.data_dir) / "dashboard.xlsx")
+            print(f"\n  Dashboard saved to: {path}")
+            print(f"  Open it in Excel, Google Sheets, or LibreOffice.")
+            print()
+            # Also print a quick text summary
+            d = cfo.dashboard()
+            print(f"  Net Worth:     ${d['net_worth']:>12,.2f}")
+            for atype, bal in d.get("balances_by_type", {}).items():
+                label = atype.replace("_", " ").title()
+                print(f"  {label + ':':15s} ${bal:>12,.2f}")
         else:
             print("CFO agent not available.")
     elif args.summary:
