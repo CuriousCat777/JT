@@ -40,6 +40,9 @@ data/rocket_money_transactions.csv
 # OAuth tokens (sensitive)
 config/gmail_token.json
 
+# Plaid access tokens (sensitive — bank connection credentials)
+data/plaid_tokens.json
+
 # OS
 .DS_Store
 Thumbs.db
