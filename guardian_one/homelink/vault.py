@@ -54,20 +54,38 @@ class Vault:
         vault.store("DOORDASH_KEY_ID", "abc123", service="doordash")
         key = vault.retrieve("DOORDASH_KEY_ID")
         vault.rotate("DOORDASH_KEY_ID", "new_value")
+
+    Salt handling:
+        On first creation a random 16-byte salt is generated and stored
+        as a file prefix.  Legacy files with the old static salt are
+        detected and loaded transparently.
     """
+
+    _SALT_MARKER = b"VAULT___SALT__V2"  # exactly 16 bytes
+    _SALT_LENGTH = 16
+    _LEGACY_SALT = b"homelink-vault-salt-v1"
 
     def __init__(self, vault_path: Path, passphrase: str) -> None:
         self._path = vault_path
-        self._fernet = self._derive_key(passphrase)
         self._lock = threading.Lock()
-        self._secrets: dict[str, str] = {}        # key_name -> encrypted_value
+        self._secrets: dict[str, str] = {}
         self._meta: dict[str, CredentialMeta] = {}
+
         if self._path.exists():
+            raw = self._path.read_bytes()
+            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                offset = len(self._SALT_MARKER)
+                self._salt = raw[offset:offset + self._SALT_LENGTH]
+            else:
+                self._salt = self._LEGACY_SALT
+            self._fernet = self._derive_key(passphrase, self._salt)
             self._load()
+        else:
+            self._salt = os.urandom(self._SALT_LENGTH)
+            self._fernet = self._derive_key(passphrase, self._salt)
 
     @staticmethod
-    def _derive_key(passphrase: str) -> Fernet:
-        salt = b"homelink-vault-salt-v1"
+    def _derive_key(passphrase: str, salt: bytes) -> Fernet:
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -79,8 +97,12 @@ class Vault:
 
     def _load(self) -> None:
         try:
-            encrypted = self._path.read_bytes()
-            plaintext = self._fernet.decrypt(encrypted)
+            raw = self._path.read_bytes()
+            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
+            else:
+                ciphertext = raw
+            plaintext = self._fernet.decrypt(ciphertext)
             data = json.loads(plaintext)
             self._secrets = data.get("secrets", {})
             for k, v in data.get("meta", {}).items():
@@ -96,7 +118,7 @@ class Vault:
         plaintext = json.dumps(data).encode()
         encrypted = self._fernet.encrypt(plaintext)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_bytes(encrypted)
+        self._path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
 
     # ------------------------------------------------------------------
     # CRUD
