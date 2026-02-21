@@ -31,6 +31,9 @@ logs/*
 *.key
 data/secure/
 
+# Runtime evaluation data
+data/evaluations.jsonl
+
 # Sensitive financial data (Rocket Money exports)
 data/rocket_money_transactions.csv
 
