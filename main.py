@@ -26,6 +26,7 @@ from guardian_one.agents.archivist import Archivist
 from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
+from guardian_one.agents.web_architect import WebArchitect
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -50,6 +51,9 @@ def _build_agents(guardian: GuardianOne) -> None:
         audit=guardian.audit,
         data_dir=config.data_dir,
     ))
+
+    wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
+    guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
 
 def main() -> None:
