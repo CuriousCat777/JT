@@ -558,6 +558,286 @@ class CFO(BaseAgent):
         ]
 
     # ------------------------------------------------------------------
+    # Transaction verification (cross-check bank data)
+    # ------------------------------------------------------------------
+
+    def verify_transactions(self, days: int = 7) -> dict[str, Any]:
+        """Independently verify recent transactions for issues.
+
+        Checks for:
+        - Duplicate charges (same amount + merchant on the same day)
+        - Unusually large transactions (> 3x your average for that category)
+        - Unknown merchants you've never seen before
+        - Round-number charges that could be unauthorized (e.g. $100.00 exactly)
+
+        Returns a plain-English report with flagged items.
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:10]
+        recent = [tx for tx in self._transactions if tx.date >= cutoff]
+
+        if not recent:
+            return {
+                "checked": 0,
+                "issues": [],
+                "summary": "No recent transactions to verify.",
+                "status": "ok",
+            }
+
+        issues: list[dict[str, Any]] = []
+
+        # 1. Duplicate detection (same amount + similar description + same day)
+        by_day: dict[str, list] = {}
+        for tx in recent:
+            key = tx.date
+            by_day.setdefault(key, []).append(tx)
+
+        for day, txns in by_day.items():
+            seen: dict[str, list] = {}
+            for tx in txns:
+                # Group by rounded amount + first word of description
+                sig = f"{abs(tx.amount):.2f}|{tx.description.split()[0].lower() if tx.description else ''}"
+                seen.setdefault(sig, []).append(tx)
+            for sig, group in seen.items():
+                if len(group) > 1:
+                    issues.append({
+                        "type": "duplicate",
+                        "severity": "warning",
+                        "description": (
+                            f"Possible duplicate: {group[0].description} "
+                            f"(${abs(group[0].amount):.2f}) appears {len(group)}x on {day}"
+                        ),
+                        "transactions": [
+                            {"date": t.date, "desc": t.description, "amount": t.amount}
+                            for t in group
+                        ],
+                    })
+
+        # 2. Unusually large transactions
+        # Build category averages from all history
+        cat_amounts: dict[str, list[float]] = {}
+        for tx in self._transactions:
+            if tx.amount < 0:  # Only outflows
+                cat_amounts.setdefault(tx.category.value, []).append(abs(tx.amount))
+
+        for tx in recent:
+            if tx.amount >= 0:
+                continue
+            cat = tx.category.value
+            amounts = cat_amounts.get(cat, [])
+            if len(amounts) >= 5:  # Need enough data
+                avg = sum(amounts) / len(amounts)
+                if abs(tx.amount) > avg * 3 and abs(tx.amount) > 50:
+                    cat_label = self._CATEGORY_FRIENDLY.get(cat, cat)
+                    issues.append({
+                        "type": "unusual_amount",
+                        "severity": "warning",
+                        "description": (
+                            f"Unusually large: {tx.description} — ${abs(tx.amount):,.2f} "
+                            f"(your average {cat_label} is ${avg:,.2f})"
+                        ),
+                        "transaction": {"date": tx.date, "desc": tx.description, "amount": tx.amount},
+                    })
+
+        # 3. Unknown merchants (first-time senders)
+        all_merchants = set()
+        for tx in self._transactions:
+            if tx.date < cutoff and tx.description:
+                all_merchants.add(tx.description.lower().strip())
+
+        for tx in recent:
+            if tx.amount < 0 and tx.description:
+                if tx.description.lower().strip() not in all_merchants and abs(tx.amount) > 20:
+                    issues.append({
+                        "type": "new_merchant",
+                        "severity": "info",
+                        "description": (
+                            f"First time: {tx.description} — ${abs(tx.amount):,.2f} on {tx.date}"
+                        ),
+                        "transaction": {"date": tx.date, "desc": tx.description, "amount": tx.amount},
+                    })
+
+        # 4. Suspiciously round numbers
+        for tx in recent:
+            if tx.amount < 0 and abs(tx.amount) >= 100:
+                if abs(tx.amount) == round(abs(tx.amount)):
+                    # Exact round number
+                    issues.append({
+                        "type": "round_amount",
+                        "severity": "info",
+                        "description": (
+                            f"Round number: {tx.description} — exactly ${abs(tx.amount):,.0f} on {tx.date}"
+                        ),
+                        "transaction": {"date": tx.date, "desc": tx.description, "amount": tx.amount},
+                    })
+
+        warnings = [i for i in issues if i["severity"] == "warning"]
+        infos = [i for i in issues if i["severity"] == "info"]
+
+        if warnings:
+            status = "needs_attention"
+            summary = f"{len(warnings)} issue(s) need your attention, {len(infos)} info item(s)."
+        elif infos:
+            status = "review"
+            summary = f"No issues found. {len(infos)} item(s) for your review."
+        else:
+            status = "ok"
+            summary = f"All {len(recent)} recent transactions look normal."
+
+        return {
+            "checked": len(recent),
+            "days": days,
+            "issues": issues,
+            "warnings": len(warnings),
+            "info_items": len(infos),
+            "summary": summary,
+            "status": status,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def verify_bills_paid(self) -> list[dict[str, Any]]:
+        """Cross-check bills against transactions to confirm payments.
+
+        For each bill, looks for a matching transaction (close amount,
+        around the due date).  Returns status per bill.
+        """
+        results: list[dict[str, Any]] = []
+
+        for bill in self._bills:
+            if bill.paid:
+                results.append({
+                    "bill": bill.name,
+                    "amount": bill.amount,
+                    "due": bill.due_date,
+                    "status": "confirmed_paid",
+                    "message": f"{bill.name} — marked as paid.",
+                })
+                continue
+
+            # Look for a matching transaction near the due date
+            due_dt = bill.due_date
+            found = False
+            for tx in self._transactions:
+                # Match: within 5 days of due date, similar amount (within 10%)
+                if not tx.date:
+                    continue
+                day_diff = abs(
+                    (datetime.fromisoformat(tx.date) - datetime.fromisoformat(due_dt)).days
+                ) if tx.date >= "2000" and due_dt >= "2000" else 999
+
+                if day_diff <= 5 and abs(tx.amount) > 0:
+                    amount_diff = abs(abs(tx.amount) - bill.amount) / bill.amount if bill.amount > 0 else 999
+                    if amount_diff < 0.10:  # Within 10%
+                        found = True
+                        results.append({
+                            "bill": bill.name,
+                            "amount": bill.amount,
+                            "due": bill.due_date,
+                            "status": "likely_paid",
+                            "matched_transaction": {
+                                "date": tx.date,
+                                "description": tx.description,
+                                "amount": tx.amount,
+                            },
+                            "message": (
+                                f"{bill.name} — likely paid via "
+                                f"{tx.description} (${abs(tx.amount):,.2f} on {tx.date})"
+                            ),
+                        })
+                        break
+
+            if not found:
+                today = datetime.now(timezone.utc).isoformat()[:10]
+                if bill.due_date < today:
+                    status = "overdue_unverified"
+                    msg = f"{bill.name} — OVERDUE (${bill.amount:,.2f} due {bill.due_date}), no matching payment found!"
+                else:
+                    status = "pending"
+                    msg = f"{bill.name} — due {bill.due_date} (${bill.amount:,.2f}), not yet paid."
+
+                results.append({
+                    "bill": bill.name,
+                    "amount": bill.amount,
+                    "due": bill.due_date,
+                    "status": status,
+                    "message": msg,
+                })
+
+        return results
+
+    def daily_review(self, gmail_data: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run the full CFO daily check.
+
+        Combines:
+        1. Transaction verification (cross-check bank data)
+        2. Bill payment verification
+        3. Budget check
+        4. Financial email summary (if gmail_data provided)
+
+        Returns a complete daily review report suitable for
+        the Excel dashboard "Daily Check" sheet.
+        """
+        now = datetime.now(timezone.utc)
+        review: dict[str, Any] = {
+            "date": now.isoformat()[:10],
+            "generated_at": now.isoformat(),
+        }
+
+        # 1. Transaction verification
+        tx_verify = self.verify_transactions(days=7)
+        review["transactions"] = tx_verify
+
+        # 2. Bill payment verification
+        bill_verify = self.verify_bills_paid()
+        review["bills"] = {
+            "results": bill_verify,
+            "paid": len([b for b in bill_verify if b["status"] in ("confirmed_paid", "likely_paid")]),
+            "pending": len([b for b in bill_verify if b["status"] == "pending"]),
+            "overdue": len([b for b in bill_verify if b["status"] == "overdue_unverified"]),
+        }
+
+        # 3. Budget check
+        budget = self.budget_check()
+        budget_over = [b for b in budget if b["status"] == "over"]
+        budget_warn = [b for b in budget if b["status"] == "warning"]
+        review["budget"] = {
+            "results": budget,
+            "over_budget": len(budget_over),
+            "warnings": len(budget_warn),
+            "on_track": len(budget) - len(budget_over) - len(budget_warn),
+        }
+
+        # 4. Financial emails (if Gmail data provided)
+        if gmail_data:
+            review["emails"] = gmail_data
+        else:
+            review["emails"] = {"available": False, "note": "Run --gmail to include email review"}
+
+        # Overall status
+        issues = 0
+        if tx_verify["status"] == "needs_attention":
+            issues += tx_verify["warnings"]
+        issues += review["bills"]["overdue"]
+        issues += len(budget_over)
+
+        if issues > 0:
+            review["overall_status"] = "needs_attention"
+            review["overall_message"] = f"{issues} item(s) need your attention today."
+        elif tx_verify["status"] == "review" or budget_warn:
+            review["overall_status"] = "review"
+            review["overall_message"] = "No urgent issues — a few items to review when you have time."
+        else:
+            review["overall_status"] = "all_clear"
+            review["overall_message"] = "Everything looks good today."
+
+        self.log("daily_review", details={
+            "status": review["overall_status"],
+            "tx_issues": tx_verify.get("warnings", 0),
+            "bill_overdue": review["bills"]["overdue"],
+            "budget_over": len(budget_over),
+        })
+        return review
+
+    # ------------------------------------------------------------------
     # Tax optimisation
     # ------------------------------------------------------------------
 
@@ -988,14 +1268,25 @@ class CFO(BaseAgent):
             "plaid": self.plaid_status(),
         }
 
-    def generate_excel(self, output_path: str | Path | None = None) -> Path:
+    def generate_excel(
+        self,
+        output_path: str | Path | None = None,
+        password: str | None = None,
+        gmail_data: dict[str, Any] | None = None,
+    ) -> Path:
         """Generate the Excel dashboard spreadsheet.
+
+        Args:
+            output_path: Where to save the file (default: data/dashboard.xlsx)
+            password: Password-protect the workbook. When set, all sheets
+                      are locked — visible but not editable without the password.
+            gmail_data: Optional Gmail financial email data for the daily check.
 
         Returns the path to the generated .xlsx file.
         """
         from guardian_one.agents.cfo_dashboard import generate_dashboard
         path = output_path or (self._data_dir / "dashboard.xlsx")
-        return generate_dashboard(self, path)
+        return generate_dashboard(self, path, password=password, gmail_data=gmail_data)
 
     def validation_report(self) -> dict[str, Any]:
         """Produce a detailed validation report for presentation.
