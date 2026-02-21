@@ -43,6 +43,9 @@ config/gmail_token.json
 # Plaid access tokens (sensitive — bank connection credentials)
 data/plaid_tokens.json
 
+# Generated Excel dashboard (contains financial data)
+data/dashboard.xlsx
+
 # OS
 .DS_Store
 Thumbs.db
