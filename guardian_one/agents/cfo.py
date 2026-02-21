@@ -88,6 +88,22 @@ class Bill:
 
 
 @dataclass
+class Budget:
+    """Monthly spending limit for a category."""
+    category: str         # TransactionCategory value
+    limit: float          # Max spend per month
+    label: str = ""       # Friendly name (auto-set if blank)
+
+
+@dataclass
+class NetWorthSnapshot:
+    """Point-in-time net worth record for trend tracking."""
+    date: str             # ISO date
+    net_worth: float
+    by_type: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class Scenario:
     """A financial scenario for planning purposes."""
     name: str
@@ -111,6 +127,8 @@ class CFO(BaseAgent):
         self._accounts: dict[str, Account] = {}
         self._transactions: list[Transaction] = []
         self._bills: list[Bill] = []
+        self._budgets: list[Budget] = []
+        self._net_worth_history: list[NetWorthSnapshot] = []
         self._scenarios: dict[str, Scenario] = {}
         self._data_dir = Path(data_dir)
         self._ledger_path = self._data_dir / "cfo_ledger.json"
@@ -176,11 +194,15 @@ class CFO(BaseAgent):
             self._load_accounts(raw.get("accounts", []))
             self._load_transactions(raw.get("transactions", []))
             self._load_bills(raw.get("bills", []))
+            self._load_budgets(raw.get("budgets", []))
+            self._load_net_worth_history(raw.get("net_worth_history", []))
             self.log("ledger_loaded", details={
                 "path": str(self._ledger_path),
                 "accounts": len(self._accounts),
                 "transactions": len(self._transactions),
                 "bills": len(self._bills),
+                "budgets": len(self._budgets),
+                "net_worth_snapshots": len(self._net_worth_history),
             })
             return True
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -227,6 +249,22 @@ class CFO(BaseAgent):
             )
             self._bills.append(bill)
 
+    def _load_budgets(self, entries: list[dict[str, Any]]) -> None:
+        for entry in entries:
+            self._budgets.append(Budget(
+                category=entry["category"],
+                limit=entry["limit"],
+                label=entry.get("label", ""),
+            ))
+
+    def _load_net_worth_history(self, entries: list[dict[str, Any]]) -> None:
+        for entry in entries:
+            self._net_worth_history.append(NetWorthSnapshot(
+                date=entry["date"],
+                net_worth=entry["net_worth"],
+                by_type=entry.get("by_type", {}),
+            ))
+
     def save_ledger(self) -> None:
         """Persist current financial state to disk."""
         data = {
@@ -263,6 +301,22 @@ class CFO(BaseAgent):
                     "paid": b.paid,
                 }
                 for b in self._bills
+            ],
+            "budgets": [
+                {
+                    "category": b.category,
+                    "limit": b.limit,
+                    "label": b.label,
+                }
+                for b in self._budgets
+            ],
+            "net_worth_history": [
+                {
+                    "date": s.date,
+                    "net_worth": s.net_worth,
+                    "by_type": s.by_type,
+                }
+                for s in self._net_worth_history
             ],
         }
         self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +399,163 @@ class CFO(BaseAgent):
     def overdue_bills(self) -> list[Bill]:
         today = datetime.now(timezone.utc).isoformat()[:10]
         return [b for b in self._bills if not b.paid and b.due_date < today]
+
+    # ------------------------------------------------------------------
+    # Budget tracking
+    # ------------------------------------------------------------------
+
+    _CATEGORY_FRIENDLY = {
+        "income": "Income",
+        "housing": "Housing / Rent",
+        "utilities": "Utilities",
+        "food": "Food & Groceries",
+        "transport": "Transportation",
+        "medical": "Medical / Health",
+        "entertainment": "Shopping & Fun",
+        "education": "Education",
+        "insurance": "Insurance",
+        "loan_payment": "Loan Payments",
+        "savings": "Savings / Transfers",
+        "charitable": "Donations",
+        "other": "Other",
+    }
+
+    def set_budget(self, category: str, limit: float, label: str = "", persist: bool = True) -> Budget:
+        """Set a monthly spending limit for a category.
+
+        If a budget already exists for this category, it gets updated.
+        """
+        if not label:
+            label = self._CATEGORY_FRIENDLY.get(category, category.replace("_", " ").title())
+
+        # Update existing or create new
+        for b in self._budgets:
+            if b.category == category:
+                b.limit = limit
+                b.label = label
+                if persist:
+                    self.save_ledger()
+                self.log("budget_updated", details={"category": category, "limit": limit})
+                return b
+
+        budget = Budget(category=category, limit=limit, label=label)
+        self._budgets.append(budget)
+        if persist:
+            self.save_ledger()
+        self.log("budget_set", details={"category": category, "limit": limit})
+        return budget
+
+    def remove_budget(self, category: str, persist: bool = True) -> bool:
+        """Remove a budget for a category."""
+        before = len(self._budgets)
+        self._budgets = [b for b in self._budgets if b.category != category]
+        if persist and len(self._budgets) != before:
+            self.save_ledger()
+        return len(self._budgets) != before
+
+    def budget_check(self, month: str | None = None) -> list[dict[str, Any]]:
+        """Check spending against budgets for a given month.
+
+        Returns a list of results — one per budget — showing:
+        - category, limit, spent, remaining, over_budget, percent_used
+        Plain language: "You spent $X of your $Y food budget (Z%)"
+        """
+        if month is None:
+            month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+        spending = self.spending_summary(month)
+        results: list[dict[str, Any]] = []
+
+        for b in self._budgets:
+            spent = spending.get(b.category, 0)
+            remaining = b.limit - spent
+            pct = (spent / b.limit * 100) if b.limit > 0 else 0
+
+            if spent > b.limit:
+                status = "over"
+            elif pct >= 80:
+                status = "warning"
+            else:
+                status = "ok"
+
+            results.append({
+                "category": b.category,
+                "label": b.label or self._CATEGORY_FRIENDLY.get(b.category, b.category),
+                "limit": b.limit,
+                "spent": round(spent, 2),
+                "remaining": round(remaining, 2),
+                "percent_used": round(pct, 1),
+                "over_budget": spent > b.limit,
+                "status": status,
+            })
+
+        return sorted(results, key=lambda r: -r["percent_used"])
+
+    def budget_alerts(self, month: str | None = None) -> list[str]:
+        """Get plain-English budget alerts for any over/near-limit categories."""
+        alerts: list[str] = []
+        for r in self.budget_check(month):
+            label = r["label"]
+            if r["status"] == "over":
+                over_by = abs(r["remaining"])
+                alerts.append(
+                    f"OVER BUDGET: {label} — spent ${r['spent']:,.2f} "
+                    f"of ${r['limit']:,.2f} limit (${over_by:,.2f} over)"
+                )
+            elif r["status"] == "warning":
+                alerts.append(
+                    f"Heads up: {label} — ${r['spent']:,.2f} of "
+                    f"${r['limit']:,.2f} ({r['percent_used']:.0f}% used)"
+                )
+        return alerts
+
+    # ------------------------------------------------------------------
+    # Net worth history
+    # ------------------------------------------------------------------
+
+    def record_net_worth(self, persist: bool = True) -> NetWorthSnapshot:
+        """Take a snapshot of current net worth and save it to history.
+
+        Only records one snapshot per day (skips if today already recorded).
+        """
+        today = datetime.now(timezone.utc).isoformat()[:10]
+
+        # Skip if already recorded today
+        for s in self._net_worth_history:
+            if s.date == today:
+                s.net_worth = self.net_worth()
+                s.by_type = self.balances_by_type()
+                if persist:
+                    self.save_ledger()
+                return s
+
+        snapshot = NetWorthSnapshot(
+            date=today,
+            net_worth=self.net_worth(),
+            by_type=self.balances_by_type(),
+        )
+        self._net_worth_history.append(snapshot)
+        if persist:
+            self.save_ledger()
+        self.log("net_worth_recorded", details={
+            "date": today, "net_worth": snapshot.net_worth,
+        })
+        return snapshot
+
+    def net_worth_trend(self, months: int = 12) -> list[dict[str, Any]]:
+        """Get net worth history for the last N months.
+
+        Returns a list of snapshots sorted by date.
+        """
+        if not self._net_worth_history:
+            return []
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=months * 30)).isoformat()[:10]
+        return [
+            {"date": s.date, "net_worth": s.net_worth, "by_type": s.by_type}
+            for s in sorted(self._net_worth_history, key=lambda s: s.date)
+            if s.date >= cutoff
+        ]
 
     # ------------------------------------------------------------------
     # Tax optimisation
@@ -770,9 +981,21 @@ class CFO(BaseAgent):
             "income_this_month": self.income_summary(
                 datetime.now(timezone.utc).isoformat()[:7]
             ),
+            "budget_check": self.budget_check(),
+            "budget_alerts": self.budget_alerts(),
+            "net_worth_trend": self.net_worth_trend(months=6),
             "rocket_money": self.rocket_money_status(),
             "plaid": self.plaid_status(),
         }
+
+    def generate_excel(self, output_path: str | Path | None = None) -> Path:
+        """Generate the Excel dashboard spreadsheet.
+
+        Returns the path to the generated .xlsx file.
+        """
+        from guardian_one.agents.cfo_dashboard import generate_dashboard
+        path = output_path or (self._data_dir / "dashboard.xlsx")
+        return generate_dashboard(self, path)
 
     def validation_report(self) -> dict[str, Any]:
         """Produce a detailed validation report for presentation.
@@ -843,6 +1066,12 @@ class CFO(BaseAgent):
         results["net_worth"] = self.net_worth()
         results["account_count"] = len(self._accounts)
         results["transaction_count"] = len(self._transactions)
+
+        # Record net worth snapshot for trend tracking
+        self.record_net_worth()
+
+        # Check budgets
+        results["budget_alerts"] = self.budget_alerts()
 
         self.log("sync_all_complete", details=results)
         return results
@@ -923,6 +1152,13 @@ class CFO(BaseAgent):
             for b in upcoming:
                 if not b.auto_pay:
                     alerts.append(f"Bill due soon: {b.name} — ${b.amount:.2f} on {b.due_date}")
+
+        # Budget alerts
+        budget_warnings = self.budget_alerts()
+        alerts.extend(budget_warnings)
+
+        # Record net worth for trend tracking
+        self.record_net_worth()
 
         # Tax recs
         tax_recs = self.tax_recommendations()
