@@ -161,6 +161,37 @@ GMAIL_INTEGRATION = IntegrationRecord(
     owner_agent="gmail",
 )
 
+N8N_INTEGRATION = IntegrationRecord(
+    name="n8n_workflows",
+    description="n8n Workflow Automation — website build, deploy, security scan, uptime monitoring",
+    base_url="http://localhost:5678",
+    auth_method="api_key",
+    data_flow="WebArchitect creates and executes workflows → n8n runs automations "
+              "(page generation, security header injection, SSL checks, uptime pings). "
+              "No sensitive personal data transmitted; domain names and page content only.",
+    vault_keys=["N8N_API_KEY"],
+    threat_model=[
+        ThreatEntry("API key compromise grants full workflow access", "critical",
+                    "Key stored in encrypted vault; 90-day rotation enforced; scoped to workflow CRUD."),
+        ThreatEntry("Malicious workflow injection via API", "high",
+                    "All workflow creation audited; only WebArchitect agent has n8n access via RBAC."),
+        ThreatEntry("n8n instance exposed to public internet", "high",
+                    "Gateway enforces TLS; n8n should be bound to localhost or VPN only."),
+        ThreatEntry("Workflow execution runs arbitrary code", "medium",
+                    "Code nodes sandboxed; no filesystem or network access beyond configured integrations."),
+        ThreatEntry("Denial of service via excessive workflow executions", "medium",
+                    "Rate limiter at 30 req/min; circuit breaker at 5 failures."),
+    ],
+    failure_impact="Website workflows unavailable; sites remain deployed with last-known state. "
+                   "Uptime monitoring paused until n8n reconnects.",
+    rollback_procedure="1. Disable web_architect agent in config YAML. "
+                       "2. Deactivate all workflows in n8n UI. "
+                       "3. Revoke API key in n8n settings. "
+                       "4. Rotate key in vault. "
+                       "5. Review audit log for unauthorized workflow executions.",
+    owner_agent="web_architect",
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -230,5 +261,6 @@ class IntegrationRegistry:
             GOOGLE_CALENDAR_INTEGRATION,
             GMAIL_INTEGRATION,
             NORDVPN_INTEGRATION,
+            N8N_INTEGRATION,
         ]:
             self.register(record)

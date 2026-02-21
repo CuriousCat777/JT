@@ -67,3 +67,19 @@ agents:
       default_tip_pct: 0.20
       coordinate_with_chronos: true
       coordinate_with_cfo: true
+
+  web_architect:
+    enabled: true
+    schedule_interval_minutes: 30
+    allowed_resources:
+      - n8n_workflows
+      - deployments
+      - security_scans
+      - uptime_records
+    custom:
+      domains: []
+      enforce_security_headers: true
+      ssl_required: true
+      uptime_check_interval_minutes: 5
+      coordinate_with_archivist: true
+      coordinate_with_cfo: true
