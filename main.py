@@ -5,6 +5,8 @@ Usage:
     python main.py --schedule   # Start interactive scheduler (agents run on intervals)
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
+    python main.py --validate   # CFO validation report (detailed, for review)
+    python main.py --sync       # Continuous sync loop (Empower + Rocket Money)
     python main.py --agent NAME # Run a single agent
     python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
     python main.py --homelink   # H.O.M.E. L.I.N.K. service status
@@ -17,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from guardian_one.core.config import AgentConfig, load_config
@@ -56,11 +60,149 @@ def _build_agents(guardian: GuardianOne) -> None:
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
 
+def _print_validation_report(cfo: CFO) -> None:
+    """Print a formatted CFO validation report for presentation."""
+    report = cfo.validation_report()
+
+    print("=" * 70)
+    print("  CFO VALIDATION REPORT — Guardian One Financial Intelligence")
+    print("=" * 70)
+    print(f"  Generated: {report['report_generated']}")
+    print(f"  Ledger:    {report['ledger_path']}")
+    print()
+
+    # Net worth breakdown
+    print("  NET WORTH SUMMARY")
+    print("  " + "-" * 40)
+    print(f"  Total Assets:      ${report['total_assets']:>12,.2f}")
+    print(f"  Total Liabilities: ${report['total_liabilities']:>12,.2f}")
+    print(f"  Net Worth:         ${report['net_worth']:>12,.2f}")
+    print()
+
+    # Balances by type
+    print("  BALANCES BY TYPE")
+    print("  " + "-" * 40)
+    for acct_type, total in sorted(report["balances_by_type"].items()):
+        print(f"  {acct_type:<20} ${total:>12,.2f}")
+    print()
+
+    # Account detail
+    print("  ACCOUNT DETAIL")
+    print("  " + "-" * 66)
+    print(f"  {'Account':<40} {'Type':<12} {'Balance':>12}")
+    print("  " + "-" * 66)
+    for acct in report["accounts"]:
+        print(f"  {acct['name']:<40} {acct['type']:<12} ${acct['balance']:>11,.2f}")
+    print("  " + "-" * 66)
+    print(f"  {'TOTAL':<40} {'':<12} ${report['net_worth']:>11,.2f}")
+    print()
+
+    # Bills
+    bills = report["bills"]
+    if bills["overdue"]:
+        print("  OVERDUE BILLS")
+        print("  " + "-" * 40)
+        for b in bills["overdue"]:
+            print(f"  [!] {b['name']}: ${b['amount']:.2f} — due {b['due']}")
+        print()
+
+    if bills["upcoming_30d"]:
+        print("  UPCOMING BILLS (next 30 days)")
+        print("  " + "-" * 40)
+        for b in bills["upcoming_30d"]:
+            auto = " (auto-pay)" if b["auto_pay"] else ""
+            print(f"  {b['name']}: ${b['amount']:.2f} — due {b['due']}{auto}")
+        print()
+
+    # Tax recommendations
+    print("  TAX RECOMMENDATIONS")
+    print("  " + "-" * 40)
+    for i, rec in enumerate(report["tax_recommendations"], 1):
+        print(f"  {i}. {rec}")
+    print()
+
+    # Sync status
+    rm = report["rocket_money"]
+    emp = report["empower"]
+    print("  SYNC STATUS")
+    print("  " + "-" * 40)
+    print(f"  Rocket Money: {'connected' if rm.get('connected') else 'offline'} (mode: {rm.get('sync_mode', 'n/a')})")
+    print(f"  Empower:      {'connected' if emp.get('connected') else 'offline'}")
+    print()
+    print(f"  Accounts: {report['account_count']} | Transactions: {report['transaction_count']}")
+    print("=" * 70)
+
+
+def _run_sync_loop(cfo: CFO, interval: int = 300, once: bool = False) -> None:
+    """Continuously sync Empower + Rocket Money accounts.
+
+    Runs a sync cycle, prints updated balances, then sleeps for *interval*
+    seconds before repeating.  Use --sync-once to run a single cycle.
+    """
+    cycle = 0
+    try:
+        while True:
+            cycle += 1
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            print(f"\n{'=' * 60}")
+            print(f"  SYNC CYCLE #{cycle} — {ts}")
+            print(f"{'=' * 60}")
+
+            results = cfo.sync_all()
+
+            # Empower results
+            emp = results["empower"]
+            if emp.get("connected"):
+                print(f"  Empower:      +{emp['accounts_added']} new, "
+                      f"{emp['accounts_updated']} updated, "
+                      f"+{emp['transactions_added']} txns")
+            else:
+                print(f"  Empower:      offline ({emp.get('error', 'no credentials')})")
+
+            # Rocket Money results
+            rm = results["rocket_money"]
+            print(f"  Rocket Money: {rm['source']} — "
+                  f"+{rm['accounts_added']} new, "
+                  f"{rm['accounts_updated']} updated, "
+                  f"+{rm['transactions_added']} txns")
+
+            # Updated balances
+            print(f"\n  NET WORTH: ${results['net_worth']:,.2f}")
+            print(f"  Accounts:  {results['account_count']}")
+            print(f"  Transactions: {results['transaction_count']}")
+
+            # Per-type breakdown
+            by_type = cfo.balances_by_type()
+            print()
+            for acct_type, total in sorted(by_type.items()):
+                print(f"    {acct_type:<15} ${total:>12,.2f}")
+
+            # Quick account list
+            print(f"\n  {'Account':<40} {'Balance':>12}")
+            print("  " + "-" * 54)
+            for acct in cfo._accounts.values():
+                print(f"  {acct.name:<40} ${acct.balance:>11,.2f}")
+
+            if once:
+                print(f"\n  Single sync complete.")
+                break
+
+            print(f"\n  Next sync in {interval}s (Ctrl+C to stop)...")
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        print(f"\n  Sync loop stopped after {cycle} cycle(s).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
     parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Print CFO dashboard")
+    parser.add_argument("--validate", action="store_true", help="CFO validation report for review")
+    parser.add_argument("--sync", action="store_true", help="Continuous Empower + Rocket Money sync loop")
+    parser.add_argument("--sync-interval", type=int, default=300, help="Sync interval in seconds (default: 300 = 5min)")
+    parser.add_argument("--sync-once", action="store_true", help="Run a single sync cycle then exit")
     parser.add_argument("--agent", type=str, help="Run a single agent by name")
     parser.add_argument("--brief", action="store_true", help="H.O.M.E. L.I.N.K. weekly security brief")
     parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
@@ -122,6 +264,19 @@ def main() -> None:
             print(json.dumps(summary, indent=2, default=str))
         else:
             print("Gmail agent not available.")
+    elif args.sync or args.sync_once:
+        cfo = guardian.get_agent("cfo")
+        if not (cfo and isinstance(cfo, CFO)):
+            print("CFO agent not available.")
+            guardian.shutdown()
+            return
+        _run_sync_loop(cfo, interval=args.sync_interval, once=args.sync_once)
+    elif args.validate:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            _print_validation_report(cfo)
+        else:
+            print("CFO agent not available.")
     elif args.agent:
         report = guardian.run_agent(args.agent)
         print(json.dumps(report.__dict__, indent=2, default=str))
