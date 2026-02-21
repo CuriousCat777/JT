@@ -8,6 +8,7 @@ Usage:
     python main.py --agent NAME # Run a single agent
     python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
     python main.py --homelink   # H.O.M.E. L.I.N.K. service status
+    python main.py --sandbox    # Deploy Chronos+Archivist in sandbox, start daily eval
     python main.py --gmail      # Gmail inbox status + Rocket Money CSV check
     python main.py --csv PATH   # Parse a local Rocket Money CSV and summarize
 """
@@ -61,6 +62,8 @@ def main() -> None:
     parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
     parser.add_argument("--gmail", action="store_true", help="Gmail inbox + Rocket Money CSV check")
     parser.add_argument("--csv", type=str, help="Parse a local Rocket Money CSV file")
+    parser.add_argument("--sandbox", action="store_true", help="Deploy first 2 agents in sandbox + start eval loop")
+    parser.add_argument("--eval-interval", type=int, default=86400, help="Evaluation cycle interval in seconds (default: 86400 = 24h)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -68,6 +71,22 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    if args.sandbox:
+        from guardian_one.core.sandbox import SandboxDeployer
+        from guardian_one.core.evaluator import PerformanceEvaluator
+        deployer = SandboxDeployer(guardian)
+        if deployer.deploy():
+            evaluator = PerformanceEvaluator(
+                guardian,
+                data_dir=config.data_dir,
+                cycle_seconds=args.eval_interval,
+            )
+            evaluator.start()
+        else:
+            print("  Sandbox deployment failed. Fix issues above before retrying.")
+        guardian.shutdown()
+        return
 
     if args.schedule:
         from guardian_one.core.scheduler import Scheduler
