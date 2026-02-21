@@ -662,6 +662,75 @@ class CFO(BaseAgent):
             "rocket_money": self.rocket_money_status(),
         }
 
+    def validation_report(self) -> dict[str, Any]:
+        """Produce a detailed validation report for presentation.
+
+        Shows every account with balance, categorised totals, net worth
+        breakdown, bill status, and sync timestamps — suitable for
+        review against the live Empower / Rocket Money dashboards.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Account detail list
+        account_details = []
+        for a in self._accounts.values():
+            account_details.append({
+                "name": a.name,
+                "type": a.account_type.value,
+                "balance": a.balance,
+                "institution": a.institution,
+                "last_synced": a.last_synced,
+            })
+
+        # Totals by category
+        type_totals = self.balances_by_type()
+        assets = sum(v for k, v in type_totals.items() if k not in ("credit_card", "loan"))
+        liabilities = sum(v for k, v in type_totals.items() if k in ("credit_card", "loan"))
+
+        # Bills summary
+        overdue = self.overdue_bills()
+        upcoming = self.upcoming_bills(days=30)
+
+        return {
+            "report_generated": now,
+            "net_worth": self.net_worth(),
+            "total_assets": round(assets, 2),
+            "total_liabilities": round(liabilities, 2),
+            "balances_by_type": type_totals,
+            "accounts": account_details,
+            "account_count": len(self._accounts),
+            "transaction_count": len(self._transactions),
+            "bills": {
+                "total": len(self._bills),
+                "overdue": [{"name": b.name, "amount": b.amount, "due": b.due_date} for b in overdue],
+                "upcoming_30d": [{"name": b.name, "amount": b.amount, "due": b.due_date, "auto_pay": b.auto_pay} for b in upcoming],
+            },
+            "tax_recommendations": self.tax_recommendations(),
+            "rocket_money": self.rocket_money_status(),
+            "empower": self.empower_status(),
+            "ledger_path": str(self._ledger_path),
+        }
+
+    def sync_all(self) -> dict[str, Any]:
+        """Run a full sync cycle — Empower + Rocket Money — and return results."""
+        results: dict[str, Any] = {
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Empower
+        results["empower"] = self.sync_empower()
+
+        # Rocket Money
+        results["rocket_money"] = self.sync_rocket_money()
+
+        # Updated totals
+        results["net_worth"] = self.net_worth()
+        results["account_count"] = len(self._accounts)
+        results["transaction_count"] = len(self._transactions)
+
+        self.log("sync_all_complete", details=results)
+        return results
+
     # ------------------------------------------------------------------
     # BaseAgent interface
     # ------------------------------------------------------------------
