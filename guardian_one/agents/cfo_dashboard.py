@@ -97,8 +97,21 @@ _CATEGORY_LABELS = {
 }
 
 
-def generate_dashboard(cfo: "CFO", output_path: str | Path = "data/dashboard.xlsx") -> Path:
+def generate_dashboard(
+    cfo: "CFO",
+    output_path: str | Path = "data/dashboard.xlsx",
+    password: str | None = None,
+    gmail_data: dict[str, Any] | None = None,
+) -> Path:
     """Generate the full Excel dashboard from current CFO data.
+
+    Args:
+        cfo: The CFO agent instance
+        output_path: Where to save the .xlsx file
+        password: Optional password to protect the workbook.
+                  When set, every sheet is locked — data is visible
+                  but cells cannot be edited without the password.
+        gmail_data: Optional Gmail financial email data for the daily check sheet.
 
     Returns the path to the generated file.
     """
@@ -110,6 +123,7 @@ def generate_dashboard(cfo: "CFO", output_path: str | Path = "data/dashboard.xls
     # Remove default sheet
     wb.remove(wb.active)
 
+    _build_daily_check_sheet(wb, cfo, gmail_data)
     _build_my_money_sheet(wb, cfo)
     _build_accounts_sheet(wb, cfo)
     _build_spending_sheet(wb, cfo)
@@ -117,6 +131,16 @@ def generate_dashboard(cfo: "CFO", output_path: str | Path = "data/dashboard.xls
     _build_transactions_sheet(wb, cfo)
     _build_bills_sheet(wb, cfo)
     _build_trends_sheet(wb, cfo)
+
+    # Password-protect every sheet (read-only unless you know the password)
+    if password:
+        for ws in wb.worksheets:
+            ws.protection.sheet = True
+            ws.protection.password = password
+            ws.protection.enable()
+        # Also protect the workbook structure (can't add/delete/rename sheets)
+        wb.security.workbookPassword = password
+        wb.security.lockStructure = True
 
     wb.save(str(output_path))
     return output_path
@@ -169,6 +193,196 @@ def _write_big_stat(ws: Any, row: int, col: int, label: str, value: float, fmt: 
     else:
         val_cell.font = _BIG_NUMBER
     val_cell.alignment = Alignment(horizontal="center")
+
+
+# -----------------------------------------------------------------------
+# Sheet 0: Daily Check (first sheet you see when you open the file)
+# -----------------------------------------------------------------------
+
+def _build_daily_check_sheet(wb: Workbook, cfo: "CFO", gmail_data: dict[str, Any] | None = None) -> None:
+    ws = wb.create_sheet("Daily Check")
+    ws.sheet_properties.tabColor = "F97316"  # Orange — attention
+
+    _set_col_widths(ws, {"A": 4, "B": 45, "C": 18, "D": 22, "E": 4})
+
+    # Run the daily review
+    review = cfo.daily_review(gmail_data)
+
+    # Title with status color
+    ws.merge_cells("B2:D2")
+    ws.cell(row=2, column=2, value="Daily Financial Check").font = _TITLE_FONT
+
+    now_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    ws.cell(row=3, column=2, value=now_str).font = _SUBTITLE_FONT
+
+    # Overall status banner
+    status = review["overall_status"]
+    status_labels = {
+        "all_clear": "ALL CLEAR — Everything looks good",
+        "review": "A FEW THINGS TO LOOK AT",
+        "needs_attention": "NEEDS YOUR ATTENTION",
+    }
+    status_fills = {
+        "all_clear": _GREEN,
+        "review": _YELLOW,
+        "needs_attention": _RED,
+    }
+
+    ws.merge_cells("B5:D5")
+    status_cell = ws.cell(row=5, column=2, value=status_labels.get(status, status))
+    status_cell.font = Font(name="Calibri", size=16, bold=True, color="FFFFFF")
+    status_cell.fill = status_fills.get(status, _YELLOW)
+    status_cell.alignment = Alignment(horizontal="center", vertical="center")
+    for col in [3, 4]:
+        ws.cell(row=5, column=col).fill = status_fills.get(status, _YELLOW)
+    ws.row_dimensions[5].height = 40
+
+    ws.merge_cells("B6:D6")
+    ws.cell(row=6, column=2, value=review["overall_message"]).font = Font(
+        name="Calibri", size=12, color="475569")
+    ws.cell(row=6, column=2).alignment = Alignment(horizontal="center")
+
+    row = 8
+
+    # --- Section 1: Transaction Verification ---
+    ws.merge_cells(f"B{row}:D{row}")
+    ws.cell(row=row, column=2, value="Transaction Check").font = _SECTION_FONT
+    row += 1
+
+    tx = review["transactions"]
+    ws.cell(row=row, column=2, value=f"Checked {tx['checked']} transactions from the last {tx.get('days', 7)} days").font = _BODY_FONT
+    ws.cell(row=row, column=3, value=tx["summary"]).font = _BODY_BOLD
+    row += 1
+
+    if tx["issues"]:
+        _write_header_row(ws, row, ["Issue", "Severity", "Details"], start_col=2)
+        row += 1
+        for issue in tx["issues"]:
+            sev = issue["severity"].upper()
+            _write_data_row(ws, row, [issue["description"], sev, ""], start_col=2,
+                            stripe=(row % 2 == 0))
+            if issue["severity"] == "warning":
+                for c in range(2, 5):
+                    ws.cell(row=row, column=c).fill = _LIGHT_RED
+            else:
+                for c in range(2, 5):
+                    ws.cell(row=row, column=c).fill = _LIGHT_YELLOW
+            row += 1
+    else:
+        ws.cell(row=row, column=2, value="No issues found.").font = _BODY_FONT
+        ws.cell(row=row, column=2).fill = _LIGHT_GREEN
+        ws.cell(row=row, column=3).fill = _LIGHT_GREEN
+        ws.cell(row=row, column=4).fill = _LIGHT_GREEN
+        row += 1
+
+    row += 1
+
+    # --- Section 2: Bill Verification ---
+    ws.merge_cells(f"B{row}:D{row}")
+    ws.cell(row=row, column=2, value="Bill Payment Verification").font = _SECTION_FONT
+    row += 1
+
+    bills = review["bills"]
+    if bills["results"]:
+        _write_header_row(ws, row, ["Bill", "Status", "Details"], start_col=2)
+        row += 1
+        for b in bills["results"]:
+            status_display = {
+                "confirmed_paid": "Paid",
+                "likely_paid": "Likely Paid",
+                "pending": "Not Yet Due",
+                "overdue_unverified": "OVERDUE!",
+            }.get(b["status"], b["status"])
+
+            _write_data_row(ws, row, [b["bill"], status_display, b["message"]], start_col=2,
+                            stripe=(row % 2 == 0))
+
+            if b["status"] == "overdue_unverified":
+                for c in range(2, 5):
+                    ws.cell(row=row, column=c).fill = _LIGHT_RED
+                ws.cell(row=row, column=3).font = Font(name="Calibri", size=11, bold=True, color="DC2626")
+            elif b["status"] in ("confirmed_paid", "likely_paid"):
+                ws.cell(row=row, column=3).font = Font(name="Calibri", size=11, color="16A34A")
+                ws.cell(row=row, column=3).fill = _LIGHT_GREEN
+            elif b["status"] == "pending":
+                ws.cell(row=row, column=3).fill = _LIGHT_YELLOW
+            row += 1
+    else:
+        ws.cell(row=row, column=2, value="No bills tracked.").font = _BODY_FONT
+        row += 1
+
+    row += 1
+
+    # --- Section 3: Budget Status ---
+    ws.merge_cells(f"B{row}:D{row}")
+    ws.cell(row=row, column=2, value="Budget Status").font = _SECTION_FONT
+    row += 1
+
+    budget = review["budget"]
+    if budget["results"]:
+        over = budget["over_budget"]
+        warn = budget["warnings"]
+        ok = budget["on_track"]
+
+        msg_parts = []
+        if ok:
+            msg_parts.append(f"{ok} on track")
+        if warn:
+            msg_parts.append(f"{warn} getting close")
+        if over:
+            msg_parts.append(f"{over} OVER budget")
+        ws.cell(row=row, column=2, value=" | ".join(msg_parts)).font = _BODY_FONT
+        row += 1
+
+        for b in budget["results"]:
+            label = f"{b['label']}: ${b['spent']:,.0f} of ${b['limit']:,.0f} ({b['percent_used']:.0f}%)"
+            ws.cell(row=row, column=2, value=label).font = _BODY_FONT
+
+            if b["status"] == "over":
+                ws.cell(row=row, column=2).fill = _LIGHT_RED
+                ws.cell(row=row, column=3, value="OVER").font = Font(
+                    name="Calibri", size=11, bold=True, color="DC2626")
+                ws.cell(row=row, column=3).fill = _LIGHT_RED
+            elif b["status"] == "warning":
+                ws.cell(row=row, column=2).fill = _LIGHT_YELLOW
+                ws.cell(row=row, column=3, value="Close").font = Font(
+                    name="Calibri", size=11, bold=True, color="92400E")
+                ws.cell(row=row, column=3).fill = _LIGHT_YELLOW
+            else:
+                ws.cell(row=row, column=3, value="OK").font = Font(
+                    name="Calibri", size=11, bold=True, color="16A34A")
+                ws.cell(row=row, column=3).fill = _LIGHT_GREEN
+            row += 1
+    else:
+        ws.cell(row=row, column=2, value="No budgets set. Use cfo.set_budget('food', 500) to start.").font = _BODY_FONT
+        row += 1
+
+    row += 1
+
+    # --- Section 4: Financial Email Summary ---
+    ws.merge_cells(f"B{row}:D{row}")
+    ws.cell(row=row, column=2, value="Financial Emails").font = _SECTION_FONT
+    row += 1
+
+    emails = review.get("emails", {})
+    if emails.get("available") is False:
+        ws.cell(row=row, column=2, value="Run 'python main.py --gmail' to include email review.").font = _SUBTITLE_FONT
+    elif emails.get("financial_emails"):
+        for email in emails["financial_emails"][:10]:
+            subj = email.get("subject", "")
+            sender = email.get("sender", "")
+            date = email.get("date", "")
+            ws.cell(row=row, column=2, value=subj).font = _BODY_FONT
+            ws.cell(row=row, column=3, value=sender).font = Font(name="Calibri", size=10, color="64748B")
+            ws.cell(row=row, column=4, value=date).font = Font(name="Calibri", size=10, color="64748B")
+            row += 1
+    elif emails.get("inbox"):
+        inbox = emails["inbox"]
+        ws.cell(row=row, column=2,
+                value=f"Inbox: {inbox.get('unread_count', 0)} unread emails").font = _BODY_FONT
+        row += 1
+    else:
+        ws.cell(row=row, column=2, value="No financial emails to report.").font = _BODY_FONT
 
 
 # -----------------------------------------------------------------------
