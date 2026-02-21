@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Payment — Amidala{% endblock %}
+{% block content %}
+<h1>Payment</h1>
+{% if stripe_configured %}
+<p>Stripe is configured. Payment integration is ready.</p>
+{% else %}
+<p>Payment processing is not yet configured. Please contact us directly.</p>
+{% endif %}
+{% endblock %}

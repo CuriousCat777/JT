@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Book a Consultation — Amidala{% endblock %}
+{% block content %}
+<h1>Book a Consultation</h1>
+<form method="post" action="/booking">
+    <label>Name <input type="text" name="name" required></label>
+    <label>Email <input type="email" name="email" required></label>
+    <label>Preferred Date/Time <input type="datetime-local" name="requested_datetime" required></label>
+    <label>Topic <input type="text" name="topic"></label>
+    <label>Notes <textarea name="notes" rows="4"></textarea></label>
+    <button type="submit">Request Booking</button>
+</form>
+{% endblock %}

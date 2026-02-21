@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — Amidala{% endblock %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+<p><a href="/admin/logout">Logout</a></p>
+
+<h2>Recent Leads ({{ leads|length }})</h2>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Email</th><th>Organization</th><th>CV?</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+    {% for lead in leads %}
+        <tr>
+            <td>{{ lead.name }}</td>
+            <td>{{ lead.email }}</td>
+            <td>{{ lead.organization or "—" }}</td>
+            <td>{{ lead.cv_requested }}</td>
+            <td>{{ lead.created_at }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Recent Booking Requests ({{ bookings|length }})</h2>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Email</th><th>When</th><th>Topic</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+    {% for b in bookings %}
+        <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.email }}</td>
+            <td>{{ b.requested_datetime }}</td>
+            <td>{{ b.topic or "—" }}</td>
+            <td>{{ b.created_at }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
