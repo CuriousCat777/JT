@@ -192,6 +192,35 @@ N8N_INTEGRATION = IntegrationRecord(
     owner_agent="web_architect",
 )
 
+EMPOWER_INTEGRATION = IntegrationRecord(
+    name="empower",
+    description="Empower (Personal Capital) — retirement account management and investment tracking",
+    base_url="https://api.empower.com",
+    auth_method="api_key",
+    data_flow="CFO reads retirement account balances, holdings, and transaction history. "
+              "Read-only — no trading or fund transfer capability.",
+    vault_keys=["EMPOWER_API_KEY"],
+    threat_model=[
+        ThreatEntry("API key compromise exposes retirement account data", "critical",
+                    "Key stored in encrypted vault; 90-day rotation enforced; read-only scope."),
+        ThreatEntry("Session hijacking via stolen token", "high",
+                    "Session tokens short-lived; re-auth required after timeout."),
+        ThreatEntry("Investment data exfiltration via compromised agent", "critical",
+                    "CFO agent has read-only access; no trade execution or transfer capability."),
+        ThreatEntry("Stale portfolio data leading to incorrect planning", "medium",
+                    "Sync timestamps tracked; alerts if data is >24h stale."),
+        ThreatEntry("Man-in-the-middle interception of financial data", "high",
+                    "TLS 1.3 enforced; all financial data encrypted at rest in vault."),
+    ],
+    failure_impact="Retirement account data unavailable; CFO uses last cached balances. "
+                   "No investment actions are blocked.",
+    rollback_procedure="1. Revoke API key at empower.com account settings. "
+                       "2. Delete credentials from vault. "
+                       "3. Rotate key in vault. "
+                       "4. Review audit log for unauthorized data access.",
+    owner_agent="cfo",
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -258,6 +287,7 @@ class IntegrationRegistry:
         for record in [
             DOORDASH_INTEGRATION,
             ROCKET_MONEY_INTEGRATION,
+            EMPOWER_INTEGRATION,
             GOOGLE_CALENDAR_INTEGRATION,
             GMAIL_INTEGRATION,
             NORDVPN_INTEGRATION,

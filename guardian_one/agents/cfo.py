@@ -1,7 +1,7 @@
 """CFO — Financial Management Agent.
 
 Responsibilities:
-- Sync with Rocket Money (account unification)
+- Sync with Rocket Money (account unification via API or CSV)
 - Dashboard: income, expenses, loans, savings
 - Bill alerts and payment confirmations
 - Tax optimisation (retirement, charitable giving)
@@ -21,6 +21,12 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.financial_sync import (
+    EmpowerProvider,
+    RocketMoneyProvider,
+    SyncedAccount,
+    SyncedTransaction,
+)
 
 
 class AccountType(Enum):
@@ -97,6 +103,7 @@ class CFO(BaseAgent):
         config: AgentConfig,
         audit: AuditLog,
         data_dir: Path | str = "data",
+        rocket_money: RocketMoneyProvider | None = None,
     ) -> None:
         super().__init__(config, audit)
         self._accounts: dict[str, Account] = {}
@@ -105,15 +112,37 @@ class CFO(BaseAgent):
         self._scenarios: dict[str, Scenario] = {}
         self._data_dir = Path(data_dir)
         self._ledger_path = self._data_dir / "cfo_ledger.json"
+        self._rocket_money = rocket_money or RocketMoneyProvider()
+        self._rm_connected = False
+        self._empower = EmpowerProvider()
+        self._empower_connected = False
+        self._last_sync: str = ""
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         loaded = self._load_ledger()
+
+        # Attempt Rocket Money connection
+        if self._rocket_money.has_credentials:
+            self._rm_connected = self._rocket_money.authenticate()
+        else:
+            self._rm_connected = False
+
+        # Attempt Empower connection
+        if self._empower.has_credentials:
+            self._empower_connected = self._empower.authenticate()
+        else:
+            self._empower_connected = False
+
         self.log("initialized", details={
             "accounts": len(self._accounts),
             "transactions": len(self._transactions),
             "bills": len(self._bills),
             "loaded_from_disk": loaded,
+            "rocket_money_connected": self._rm_connected,
+            "rocket_money_has_key": self._rocket_money.has_credentials,
+            "empower_connected": self._empower_connected,
+            "empower_has_key": self._empower.has_credentials,
         })
 
     # ------------------------------------------------------------------
@@ -391,6 +420,222 @@ class CFO(BaseAgent):
         return result
 
     # ------------------------------------------------------------------
+    # Rocket Money sync
+    # ------------------------------------------------------------------
+
+    @property
+    def rocket_money(self) -> RocketMoneyProvider:
+        return self._rocket_money
+
+    def sync_rocket_money(self) -> dict[str, Any]:
+        """Pull accounts and transactions from Rocket Money (API or CSV).
+
+        Merges synced data into the local ledger without duplicating
+        transactions that already exist (matched by date + description + amount).
+        """
+        synced_accounts: list[SyncedAccount] = []
+        synced_transactions: list[SyncedTransaction] = []
+
+        if self._rm_connected:
+            # API sync
+            synced_accounts = self._rocket_money.fetch_accounts()
+            now = datetime.now(timezone.utc)
+            start = (now - timedelta(days=90)).isoformat()[:10]
+            end = now.isoformat()[:10]
+            synced_transactions = self._rocket_money.fetch_transactions(start, end)
+        else:
+            # CSV fallback: check data dir for Rocket Money CSVs
+            csv_files = sorted(self._data_dir.glob("rocket_money*.csv"), reverse=True)
+            if csv_files:
+                result = self._rocket_money.sync_from_csv(csv_files[0])
+                synced_accounts = self._rocket_money.fetch_accounts()
+                now = datetime.now(timezone.utc)
+                start = (now - timedelta(days=90)).isoformat()[:10]
+                end = now.isoformat()[:10]
+                synced_transactions = self._rocket_money.fetch_transactions(start, end)
+                self.log("rocket_money_csv_sync", details=result)
+
+        # Merge accounts (update balance if account exists, create if new)
+        accounts_added = 0
+        accounts_updated = 0
+        for sa in synced_accounts:
+            existing = self._accounts.get(sa.name)
+            if existing:
+                if sa.balance != 0.0:  # CSV doesn't have balances, skip zero
+                    existing.balance = sa.balance
+                    existing.last_synced = sa.last_updated
+                    accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(sa.account_type)
+                except ValueError:
+                    acct_type = AccountType.CHECKING
+                self._accounts[sa.name] = Account(
+                    name=sa.name,
+                    account_type=acct_type,
+                    balance=sa.balance,
+                    institution=sa.institution,
+                    last_synced=sa.last_updated,
+                )
+                accounts_added += 1
+
+        # Merge transactions (deduplicate by date + description + amount)
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+        tx_added = 0
+        for st in synced_transactions:
+            key = (st.date, st.description, st.amount)
+            if key not in existing_keys:
+                try:
+                    cat = TransactionCategory(st.category)
+                except ValueError:
+                    cat = TransactionCategory.OTHER
+                self._transactions.append(Transaction(
+                    date=st.date,
+                    description=st.description,
+                    amount=st.amount,
+                    category=cat,
+                    account=st.account,
+                    metadata={"source": "rocket_money"},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        self._last_sync = datetime.now(timezone.utc).isoformat()
+
+        # Persist if anything changed
+        if accounts_added or accounts_updated or tx_added:
+            self.save_ledger()
+
+        result = {
+            "source": "api" if self._rm_connected else "csv",
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "transactions_added": tx_added,
+            "total_accounts": len(self._accounts),
+            "total_transactions": len(self._transactions),
+            "synced_at": self._last_sync,
+        }
+
+        self.log("rocket_money_sync", details=result)
+        return result
+
+    def sync_from_csv(self, csv_path: str | Path) -> dict[str, Any]:
+        """Directly import a Rocket Money CSV into the ledger.
+
+        Use this when you have a CSV file (downloaded manually or via Gmail).
+        """
+        csv_result = self._rocket_money.sync_from_csv(csv_path)
+        self.log("rocket_money_csv_loaded", details=csv_result)
+        return self.sync_rocket_money()
+
+    # ------------------------------------------------------------------
+    # Empower sync
+    # ------------------------------------------------------------------
+
+    @property
+    def empower(self) -> EmpowerProvider:
+        return self._empower
+
+    def sync_empower(self) -> dict[str, Any]:
+        """Pull retirement/investment accounts and transactions from Empower.
+
+        Merges into the local ledger without duplicating existing data.
+        """
+        if not self._empower_connected:
+            return {
+                "source": "empower",
+                "connected": False,
+                "error": self._empower.last_error,
+            }
+
+        synced_accounts = self._empower.fetch_accounts()
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=90)).isoformat()[:10]
+        end = now.isoformat()[:10]
+        synced_transactions = self._empower.fetch_transactions(start, end)
+
+        # Merge accounts
+        accounts_added = 0
+        accounts_updated = 0
+        for sa in synced_accounts:
+            existing = self._accounts.get(sa.name)
+            if existing:
+                existing.balance = sa.balance
+                existing.last_synced = sa.last_updated
+                accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(sa.account_type)
+                except ValueError:
+                    acct_type = AccountType.INVESTMENT
+                self._accounts[sa.name] = Account(
+                    name=sa.name,
+                    account_type=acct_type,
+                    balance=sa.balance,
+                    institution=sa.institution or "Empower",
+                    last_synced=sa.last_updated,
+                )
+                accounts_added += 1
+
+        # Merge transactions (deduplicate)
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+        tx_added = 0
+        for st in synced_transactions:
+            key = (st.date, st.description, st.amount)
+            if key not in existing_keys:
+                try:
+                    cat = TransactionCategory(st.category)
+                except ValueError:
+                    cat = TransactionCategory.SAVINGS
+                self._transactions.append(Transaction(
+                    date=st.date,
+                    description=st.description,
+                    amount=st.amount,
+                    category=cat,
+                    account=st.account,
+                    metadata={"source": "empower"},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        if accounts_added or accounts_updated or tx_added:
+            self.save_ledger()
+
+        result = {
+            "source": "empower",
+            "connected": True,
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "transactions_added": tx_added,
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.log("empower_sync", details=result)
+        return result
+
+    def empower_status(self) -> dict[str, Any]:
+        """Current Empower connection status."""
+        return {
+            **self._empower.status(),
+            "connected": self._empower_connected,
+        }
+
+    def rocket_money_status(self) -> dict[str, Any]:
+        """Current Rocket Money connection and sync status."""
+        rm_status = self._rocket_money.status()
+        return {
+            **rm_status,
+            "connected": self._rm_connected,
+            "last_ledger_sync": self._last_sync,
+            "sync_mode": "api" if self._rm_connected else (
+                "csv" if rm_status["csv_transactions"] > 0 else "offline"
+            ),
+        }
+
+    # ------------------------------------------------------------------
     # Dashboard
     # ------------------------------------------------------------------
 
@@ -414,6 +659,7 @@ class CFO(BaseAgent):
             "income_this_month": self.income_summary(
                 datetime.now(timezone.utc).isoformat()[:7]
             ),
+            "rocket_money": self.rocket_money_status(),
         }
 
     # ------------------------------------------------------------------
@@ -425,6 +671,47 @@ class CFO(BaseAgent):
         alerts: list[str] = []
         recommendations: list[str] = []
         actions: list[str] = []
+
+        # Rocket Money sync
+        rm_status = self.rocket_money_status()
+        if self._rm_connected:
+            sync = self.sync_rocket_money()
+            actions.append(
+                f"Rocket Money API sync: {sync['accounts_added']} new accounts, "
+                f"{sync['transactions_added']} new transactions."
+            )
+        elif rm_status["csv_transactions"] > 0 or list(self._data_dir.glob("rocket_money*.csv")):
+            sync = self.sync_rocket_money()
+            actions.append(
+                f"Rocket Money CSV sync: {sync['accounts_added']} new accounts, "
+                f"{sync['transactions_added']} new transactions."
+            )
+        else:
+            if not self._rocket_money.has_credentials:
+                recommendations.append(
+                    "Set ROCKET_MONEY_API_KEY in .env for live account sync, "
+                    "or export a CSV from Rocket Money and run: python main.py --csv path/to/export.csv"
+                )
+            else:
+                alerts.append(
+                    f"Rocket Money API connection failed: {rm_status['last_error']}"
+                )
+
+        # Empower sync
+        if self._empower_connected:
+            emp_sync = self.sync_empower()
+            actions.append(
+                f"Empower sync: {emp_sync['accounts_added']} new accounts, "
+                f"{emp_sync['transactions_added']} new transactions."
+            )
+        elif self._empower.has_credentials:
+            alerts.append(
+                f"Empower connection failed: {self._empower.last_error}"
+            )
+        else:
+            recommendations.append(
+                "Set EMPOWER_API_KEY in .env to sync retirement accounts from Empower."
+            )
 
         # Bill checks
         overdue = self.overdue_bills()
