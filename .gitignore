@@ -1,0 +1,25 @@
+# ----- Biohazard bin: things that should NEVER leave this room -----
+
+# Transient data (observation room — temporary by design)
+data/transient/
+
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit these)
+.env
+*.key
+*.pem
