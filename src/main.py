@@ -14,6 +14,7 @@ Program flow (exactly as you described it):
 Usage:
   python -m src.main "John Smith"
   python -m src.main --demo              (uses sample data, no internet needed)
+  python -m src.main --dedup "John Smith" (consolidate duplicate entries)
 """
 
 import sys
@@ -26,6 +27,7 @@ from src.storage import (
     save_to_transient,
     clear_transient,
     save_to_records,
+    deduplicate_record,
 )
 
 
@@ -83,8 +85,10 @@ def run(target_name, demo=False):
     # ── STEP 5: Store relevant results (Admit to Records) ──────
     if admitted:
         print(f"\n[5/6] Saving {len(admitted)} results to permanent record...")
-        record_path = save_to_records(target_name, admitted)
+        record_path, new_count, skipped = save_to_records(target_name, admitted)
         print(f"      Record saved: {record_path}")
+        if skipped:
+            print(f"      Dedup: {new_count} new, {skipped} duplicate(s) skipped.")
     else:
         print(f"\n[5/6] No results met the relevance threshold. Nothing to save.")
 
@@ -101,10 +105,36 @@ def run(target_name, demo=False):
     print("=" * 60)
 
 
+def run_dedup(target_name):
+    """
+    Consolidate a target's record — merge duplicate entries.
+    Like chart reconciliation: two charts for the same patient
+    become one clean record.
+    """
+    print("=" * 60)
+    print(f"  GUARDIAN — Chart Reconciliation")
+    print(f"  Target: {target_name}")
+    print("=" * 60)
+
+    result = deduplicate_record(target_name)
+
+    if result is None:
+        print(f"\n  No record found for '{target_name}'.")
+        return
+
+    unique, dupes = result
+    print(f"\n  Consolidated record:")
+    print(f"    Unique results kept: {unique}")
+    print(f"    Duplicates removed:  {dupes}")
+    print(f"\n  Record is clean.")
+    print("=" * 60)
+
+
 def main():
     """Entry point — get target name from args or prompt."""
     demo = "--demo" in sys.argv
-    args = [a for a in sys.argv[1:] if a != "--demo"]
+    dedup = "--dedup" in sys.argv
+    args = [a for a in sys.argv[1:] if a not in ("--demo", "--dedup")]
 
     if args:
         target_name = " ".join(args)
@@ -119,7 +149,10 @@ def main():
         print("Error: No name provided.")
         sys.exit(1)
 
-    run(target_name, demo=demo)
+    if dedup:
+        run_dedup(target_name)
+    else:
+        run(target_name, demo=demo)
 
 
 if __name__ == "__main__":

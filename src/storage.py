@@ -89,8 +89,11 @@ def save_to_records(name, evaluated_results):
     This is APPEND-ONLY: if a record already exists for this person,
     new results are added alongside the old ones. Nothing is overwritten.
 
-    Think of it like adding a new note to a patient's chart —
-    you never erase previous notes.
+    Smart dedup at ingest: results whose URLs already exist in prior
+    entries are filtered out — unless the new version is richer
+    (has page_content where old didn't, or a higher score).
+
+    Returns (filepath, new_count, skipped_count).
     """
     ensure_dirs()
     safe_name = name.lower().replace(" ", "_")
@@ -102,19 +105,43 @@ def save_to_records(name, evaluated_results):
         with open(filepath, "r") as f:
             existing = json.load(f)
 
-    # Create the new entry
-    new_entry = {
-        "added_at": datetime.now(timezone.utc).isoformat(),
-        "result_count": len(evaluated_results),
-        "results": evaluated_results,
-    }
+    # Build a lookup of best existing result per URL
+    existing_by_url = {}
+    for entry in existing.get("entries", []):
+        for result in entry.get("results", []):
+            url = result.get("url", "")
+            if url in existing_by_url:
+                existing_by_url[url] = _pick_best(existing_by_url[url], result)
+            else:
+                existing_by_url[url] = result
 
-    existing["entries"].append(new_entry)
+    # Filter: only keep results that are new or better than what we have
+    new_results = []
+    skipped = 0
+    for result in evaluated_results:
+        url = result.get("url", "")
+        if url in existing_by_url:
+            best = _pick_best(existing_by_url[url], result)
+            if best is result:
+                # New version is better — include it
+                new_results.append(result)
+            else:
+                skipped += 1
+        else:
+            new_results.append(result)
 
-    with open(filepath, "w") as f:
-        json.dump(existing, f, indent=2)
+    if new_results:
+        new_entry = {
+            "added_at": datetime.now(timezone.utc).isoformat(),
+            "result_count": len(new_results),
+            "results": new_results,
+        }
+        existing["entries"].append(new_entry)
 
-    return filepath
+        with open(filepath, "w") as f:
+            json.dump(existing, f, indent=2)
+
+    return filepath, len(new_results), skipped
 
 
 def load_record(name):
@@ -127,3 +154,102 @@ def load_record(name):
 
     with open(filepath, "r") as f:
         return json.load(f)
+
+
+# ─── DEDUP (Chart Reconciliation) ────────────────────────────────────
+
+def _pick_best(existing, candidate):
+    """
+    Given two results for the same URL, pick the richer one.
+
+    Priority:
+      1. Has page_content beats doesn't
+      2. Higher relevance_score wins
+      3. More recent retrieved_at wins
+    """
+    ex_has_content = bool(existing.get("page_content"))
+    ca_has_content = bool(candidate.get("page_content"))
+
+    if ca_has_content and not ex_has_content:
+        return candidate
+    if ex_has_content and not ca_has_content:
+        return existing
+
+    ex_score = existing.get("relevance_score", 0)
+    ca_score = candidate.get("relevance_score", 0)
+    if ca_score > ex_score:
+        return candidate
+    if ex_score > ca_score:
+        return existing
+
+    # Tie-break: most recent
+    if candidate.get("retrieved_at", "") > existing.get("retrieved_at", ""):
+        return candidate
+    return existing
+
+
+def deduplicate_record(name):
+    """
+    Consolidate a patient's chart — merge all entries, keep the best
+    version of each result (by URL), write back as a single entry.
+
+    Like chart reconciliation: two charts for the same patient get
+    merged into one clean record. No data is lost — the richest
+    version of every finding is kept.
+
+    Returns (unique_count, duplicate_count) or None if no record exists.
+    """
+    record = load_record(name)
+    if not record or not record.get("entries"):
+        return None
+
+    # Collect all results across all entries, grouped by URL
+    best_by_url = {}
+    total_results = 0
+
+    for entry in record["entries"]:
+        for result in entry.get("results", []):
+            total_results += 1
+            url = result.get("url", "")
+            if url in best_by_url:
+                best_by_url[url] = _pick_best(best_by_url[url], result)
+            else:
+                best_by_url[url] = result
+
+    unique_results = list(best_by_url.values())
+    unique_results.sort(
+        key=lambda r: r.get("relevance_score", 0), reverse=True
+    )
+
+    duplicate_count = total_results - len(unique_results)
+
+    # Write back as a single consolidated entry
+    ensure_dirs()
+    safe_name = name.lower().replace(" ", "_")
+    filepath = os.path.join(RECORDS_DIR, f"{safe_name}_record.json")
+
+    consolidated = {
+        "target": record["target"],
+        "entries": [
+            {
+                "added_at": datetime.now(timezone.utc).isoformat(),
+                "consolidated_from": len(record["entries"]),
+                "result_count": len(unique_results),
+                "results": unique_results,
+            }
+        ],
+    }
+
+    with open(filepath, "w") as f:
+        json.dump(consolidated, f, indent=2)
+
+    return len(unique_results), duplicate_count
+
+
+def _get_existing_urls(record):
+    """Collect all URLs already in a record's entries."""
+    urls = set()
+    for entry in record.get("entries", []):
+        for result in entry.get("results", []):
+            urls.add(result.get("url", ""))
+    return urls
