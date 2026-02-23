@@ -42,6 +42,52 @@
           "disposition": "admitted"
         }
       ]
+    },
+    {
+      "added_at": "2026-02-23T13:52:39.891645+00:00",
+      "result_count": 4,
+      "results": [
+        {
+          "title": "John Smith - Senior Software Engineer | LinkedIn",
+          "url": "https://linkedin.com/in/john-smith-engineer",
+          "snippet": "John Smith is a Senior Software Engineer at Google with 12 years of experience in distributed systems and cloud infrastructure. Based in Austin, TX. Previously at Amazon and Microsoft.",
+          "page_content": "John Smith Senior Software Engineer at Google Austin, Texas Experience: Google \u2014 Senior Software Engineer (2019\u2013Present) Building distributed systems for cloud infrastructure. Led the migration of three core services to Kubernetes, reducing latency by 40%. Amazon \u2014 Software Development Engineer II (2015\u20132019) Worked on AWS Lambda's cold start optimization team. Microsoft \u2014 Software Engineer (2012\u20132015) Contributed to Azure DevOps CI/CD pipeline tooling. Education: University of Texas at Austin \u2014 MS Computer Science (2012). Skills: Go, Python, Kubernetes, Terraform, gRPC, distributed systems.",
+          "source_query": "John Smith",
+          "retrieved_at": "2026-02-22T12:00:00+00:00",
+          "relevance_score": 100,
+          "disposition": "admitted"
+        },
+        {
+          "title": "John Smith (@jsmith_dev) on GitHub",
+          "url": "https://github.com/jsmith-dev",
+          "snippet": "John Smith has 47 repositories on GitHub. Contributions to kubernetes, tensorflow, and several open-source CLI tools. Active contributor since 2018.",
+          "page_content": "John Smith jsmith-dev 47 repositories 312 followers Austin, TX Pinned Repositories: kube-health-checker \u2014 A lightweight CLI tool for monitoring Kubernetes cluster health. Go. 234 stars. tf-data-pipeline \u2014 TensorFlow data pipeline utilities for large datasets. Python. 89 stars. dotfiles \u2014 Personal development environment configuration. 12 stars. Contribution activity: 1,247 contributions in the last year.",
+          "source_query": "\"John Smith\" linkedin OR github",
+          "retrieved_at": "2026-02-22T12:00:00+00:00",
+          "relevance_score": 100,
+          "disposition": "admitted"
+        },
+        {
+          "title": "John Smith - Published Research Papers",
+          "url": "https://scholar.google.com/citations?user=johnsmith",
+          "snippet": "John Smith, PhD. Research interests: machine learning, NLP, information retrieval. 23 publications, 1,200 citations. Affiliated with University of Texas at Austin.",
+          "page_content": "John Smith Citations: 1,200 h-index: 14 University of Texas at Austin Research Interests: machine learning, natural language processing, information retrieval. Publications: 'Efficient Attention Mechanisms for Long Documents' \u2014 EMNLP 2024 \u2014 87 citations. 'Scaling Retrieval-Augmented Generation' \u2014 NeurIPS 2023 \u2014 142 citations. 'Low-Rank Adaptation for Domain-Specific NLP' \u2014 ACL 2023 \u2014 203 citations. Co-authors: Sarah Chen, Michael Park, Lisa Wong.",
+          "source_query": "\"John Smith\" profile",
+          "retrieved_at": "2026-02-22T12:00:00+00:00",
+          "relevance_score": 100,
+          "disposition": "admitted"
+        },
+        {
+          "title": "Building Resilient Systems - A Talk by John Smith at GopherCon",
+          "url": "https://medium.com/@jsmith/building-resilient-systems",
+          "snippet": "In this talk, John Smith walks through the architecture behind Google's internal load balancing system and shares lessons learned from running services at massive scale.",
+          "page_content": "Building Resilient Systems by John Smith Published in Better Programming. At GopherCon 2025, I shared how our team at Google rebuilt the internal load balancer to handle 10x traffic spikes without manual intervention. Key takeaways: Circuit breakers should be adaptive, not static. Retry budgets prevent cascading failures better than exponential backoff alone. Health checks need to test actual functionality, not just connectivity. The full slide deck is available on my GitHub.",
+          "source_query": "John Smith",
+          "retrieved_at": "2026-02-22T12:00:00+00:00",
+          "relevance_score": 100,
+          "disposition": "admitted"
+        }
+      ]
     }
   ]
 }
