@@ -26,6 +26,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne
 from guardian_one.agents.chronos import Chronos
