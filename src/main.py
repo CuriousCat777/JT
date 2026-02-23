@@ -19,6 +19,7 @@ Usage:
 import sys
 
 from src.searcher import search_person
+from src.fetcher import deep_fetch
 from src.sample_data import SAMPLE_RESULTS
 from src.evaluator import evaluate_results
 from src.storage import (
@@ -41,10 +42,10 @@ def run(target_name, demo=False):
 
     # ── STEP 1: Search (Intake) ─────────────────────────────────
     if demo:
-        print(f"\n[1/5] Loading sample data for '{target_name}'...")
+        print(f"\n[1/6] Loading sample data for '{target_name}'...")
         results = SAMPLE_RESULTS
     else:
-        print(f"\n[1/5] Searching the web for '{target_name}'...")
+        print(f"\n[1/6] Searching the web for '{target_name}'...")
         results = search_person(target_name)
     print(f"      Found {len(results)} unique results.")
 
@@ -52,13 +53,21 @@ def run(target_name, demo=False):
         print("\n  No results found. Exiting.")
         return
 
-    # ── STEP 2: Hold in transient (Observation Room) ────────────
-    print(f"\n[2/5] Storing raw results in transient folder...")
+    # ── STEP 2: Deep Fetch (Full Physical Exam) ───────────────
+    if demo:
+        print(f"\n[2/6] Skipping deep fetch (demo mode — samples pre-loaded).")
+    else:
+        print(f"\n[2/6] Deep fetching page content from {len(results)} URLs...")
+        fetched = deep_fetch(results)
+        print(f"      Successfully fetched {fetched}/{len(results)} pages.")
+
+    # ── STEP 3: Hold in transient (Observation Room) ────────────
+    print(f"\n[3/6] Storing results in transient folder...")
     transient_path = save_to_transient(target_name, results)
     print(f"      Saved to: {transient_path}")
 
-    # ── STEP 3: Evaluate (Triage) ──────────────────────────────
-    print(f"\n[3/5] Evaluating relevance of each result...")
+    # ── STEP 4: Evaluate (Triage) ──────────────────────────────
+    print(f"\n[4/6] Evaluating relevance of each result...")
     admitted, discharged = evaluate_results(results, target_name)
     print(f"      Admitted:    {len(admitted)} results (relevant)")
     print(f"      Discharged:  {len(discharged)} results (not relevant)")
@@ -71,16 +80,16 @@ def run(target_name, demo=False):
             print(f"      {i}. [{score}/100] {r['title'][:60]}")
             print(f"         {r['url']}")
 
-    # ── STEP 4: Store relevant results (Admit to Records) ──────
+    # ── STEP 5: Store relevant results (Admit to Records) ──────
     if admitted:
-        print(f"\n[4/5] Saving {len(admitted)} results to permanent record...")
+        print(f"\n[5/6] Saving {len(admitted)} results to permanent record...")
         record_path = save_to_records(target_name, admitted)
         print(f"      Record saved: {record_path}")
     else:
-        print(f"\n[4/5] No results met the relevance threshold. Nothing to save.")
+        print(f"\n[5/6] No results met the relevance threshold. Nothing to save.")
 
-    # ── STEP 5: Clean up transient (Discharge) ─────────────────
-    print(f"\n[5/5] Clearing transient data...")
+    # ── STEP 6: Clean up transient (Discharge) ─────────────────
+    print(f"\n[6/6] Clearing transient data...")
     cleared = clear_transient()
     print(f"      Cleared {cleared} temporary file(s).")
 

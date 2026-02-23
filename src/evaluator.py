@@ -47,6 +47,7 @@ def score_result(result, target_name):
     title = result.get("title", "").lower()
     snippet = result.get("snippet", "").lower()
     url = result.get("url", "").lower()
+    page_content = (result.get("page_content") or "").lower()
     name_lower = target_name.lower()
 
     # --- Name presence (most important signal) ---
@@ -67,6 +68,15 @@ def score_result(result, target_name):
                 score += 8
             if part in snippet:
                 score += 5
+
+    # --- Deep content (from full page fetch) ---
+    if page_content:
+        if name_lower in page_content:
+            score += 15
+        else:
+            for part in name_parts:
+                if len(part) > 2 and part in page_content:
+                    score += 3
 
     # --- Source quality ---
     for domain in PROFILE_DOMAINS:

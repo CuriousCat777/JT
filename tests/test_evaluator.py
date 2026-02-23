@@ -10,6 +10,7 @@ Run with:  python -m pytest tests/
 """
 
 from src.evaluator import score_result, evaluate_results
+from src.fetcher import fetch_page
 
 
 # ── Test: Full name in title should score high ────────────────────
@@ -75,3 +76,44 @@ def test_evaluate_splits_correctly():
     assert len(admitted) == 1, f"Expected 1 admitted, got {len(admitted)}"
     assert len(discharged) == 1, f"Expected 1 discharged, got {len(discharged)}"
     assert admitted[0]["title"].startswith("Jane Doe")
+
+
+# ── Test: Page content boosts score ───────────────────────────
+
+def test_page_content_boosts_score():
+    """
+    The full physical exam (deep fetch) should reveal more about
+    the patient than the initial triage glance (snippet alone).
+    """
+    result_without = {
+        "title": "Some Profile Page",
+        "snippet": "A short bio.",
+        "url": "https://example.com/profile",
+    }
+
+    result_with = {
+        "title": "Some Profile Page",
+        "snippet": "A short bio.",
+        "url": "https://example.com/profile",
+        "page_content": "John Smith is a software engineer at Google "
+                        "with expertise in distributed systems.",
+    }
+
+    score_without = score_result(result_without, "John Smith")
+    score_with = score_result(result_with, "John Smith")
+
+    assert score_with > score_without, (
+        f"Page content should boost score: {score_with} vs {score_without}"
+    )
+
+
+# ── Test: Fetcher handles bad URL gracefully ──────────────────
+
+def test_fetch_page_bad_url_returns_none():
+    """
+    If a page can't be reached, the fetcher should return None
+    instead of crashing — like a patient who doesn't show up
+    for their appointment. Note it, move on.
+    """
+    result = fetch_page("https://this-domain-does-not-exist-12345.fake/page")
+    assert result is None
