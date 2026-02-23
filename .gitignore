@@ -1,0 +1,13 @@
+# Credentials and tokens - NEVER commit these
+token.json
+credentials.json
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
