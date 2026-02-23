@@ -7,6 +7,7 @@ Responsibilities:
 - Pre-charting workflow optimization
 - Personal routine scheduling (skincare, home care)
 - Travel itinerary tracking
+- Bill-to-calendar sync (coordinates with CFO)
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.calendar_sync import (
+    CalendarEntry,
+    CalendarSync,
+    GoogleCalendarProvider,
+)
 
 
 @dataclass
@@ -62,11 +68,33 @@ class Chronos(BaseAgent):
         self._sleep_log: list[SleepRecord] = []
         self._routines: list[Routine] = []
         self._workflow_index: dict[str, list[str]] = {}
+        self._calendar_sync: CalendarSync | None = None
+        self._last_sync: datetime | None = None
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._setup_default_routines()
+        self._init_calendar_sync()
         self.log("initialized", details={"routines": len(self._routines)})
+
+    def _init_calendar_sync(self) -> None:
+        """Try to set up Google Calendar sync (silent if not configured)."""
+        try:
+            self._calendar_sync = CalendarSync()
+            connected = self._calendar_sync.connect()
+            if connected:
+                self.log("calendar_connected", details={"provider": "google_calendar"})
+            else:
+                self.log("calendar_offline", details={
+                    "reason": self._calendar_sync.provider.last_error,
+                })
+        except Exception as exc:
+            self.log("calendar_init_error", details={"error": str(exc)})
+            self._calendar_sync = None
+
+    @property
+    def calendar_sync(self) -> CalendarSync | None:
+        return self._calendar_sync
 
     def _setup_default_routines(self) -> None:
         """Pre-configure Jeremy's known routines."""
@@ -117,6 +145,152 @@ class Chronos(BaseAgent):
                 if a.start < b.end and b.start < a.end:
                     conflicts.append((a, b))
         return conflicts
+
+    # ------------------------------------------------------------------
+    # Google Calendar sync
+    # ------------------------------------------------------------------
+
+    def sync_google_calendar(self, days_ahead: int = 14) -> dict[str, Any]:
+        """Pull events from Google Calendar and merge into internal list.
+
+        Returns a summary dict with counts of what changed.
+        """
+        if not self._calendar_sync or not self._calendar_sync.is_connected:
+            return {
+                "synced": False,
+                "reason": "Google Calendar not connected",
+                "events_pulled": 0,
+                "conflicts": 0,
+            }
+
+        entries = self._calendar_sync.pull_events(days_ahead=days_ahead)
+
+        # Convert CalendarEntry → CalendarEvent and merge (avoid duplicates)
+        existing_titles_times = {
+            (e.title, e.start.isoformat())
+            for e in self._events if e.source == "google"
+        }
+
+        added = 0
+        for entry in entries:
+            key = (entry.title, entry.start.isoformat())
+            if key not in existing_titles_times:
+                self.add_event(CalendarEvent(
+                    title=entry.title,
+                    start=entry.start,
+                    end=entry.end,
+                    location=entry.location,
+                    source="google",
+                    metadata={"event_id": entry.event_id, "calendar_id": entry.calendar_id},
+                ))
+                existing_titles_times.add(key)
+                added += 1
+
+        conflicts = self.check_conflicts()
+        self._last_sync = datetime.now(timezone.utc)
+        self.log("google_calendar_synced", details={
+            "events_pulled": len(entries),
+            "new_added": added,
+            "conflicts": len(conflicts),
+        })
+
+        return {
+            "synced": True,
+            "events_pulled": len(entries),
+            "new_added": added,
+            "total_events": len(self._events),
+            "conflicts": len(conflicts),
+            "conflict_details": [
+                f"'{a.title}' overlaps '{b.title}'"
+                for a, b in conflicts
+            ],
+        }
+
+    def sync_bills_to_calendar(self, bills: list[dict[str, Any]]) -> dict[str, Any]:
+        """Push CFO bill due dates to Google Calendar.
+
+        Args:
+            bills: List of bill dicts from CFO (name, amount, due_date, auto_pay, paid).
+
+        Returns summary of what was synced.
+        """
+        if not self._calendar_sync or not self._calendar_sync.is_connected:
+            return {"synced": 0, "skipped": 0, "error": "Google Calendar not connected"}
+        return self._calendar_sync.sync_bills_to_calendar(bills)
+
+    def today_schedule(self) -> list[dict[str, Any]]:
+        """Get today's schedule from Google Calendar, formatted for display."""
+        if not self._calendar_sync or not self._calendar_sync.is_connected:
+            # Fall back to internal events for today
+            now = datetime.now(timezone.utc)
+            today_events = [
+                e for e in self._events
+                if e.start.date() == now.date()
+            ]
+            return [
+                {
+                    "title": e.title,
+                    "start": e.start.isoformat(),
+                    "end": e.end.isoformat(),
+                    "location": e.location,
+                    "source": e.source,
+                }
+                for e in sorted(today_events, key=lambda x: x.start)
+            ]
+
+        entries = self._calendar_sync.today_schedule()
+        return [
+            {
+                "title": e.title,
+                "start": e.start.isoformat(),
+                "end": e.end.isoformat(),
+                "location": e.location,
+                "source": e.source,
+                "event_id": e.event_id,
+            }
+            for e in entries
+        ]
+
+    def week_schedule(self) -> list[dict[str, Any]]:
+        """Get this week's schedule from Google Calendar."""
+        if not self._calendar_sync or not self._calendar_sync.is_connected:
+            now = datetime.now(timezone.utc)
+            week_end = now + timedelta(days=7)
+            week_events = [
+                e for e in self._events
+                if now <= e.start <= week_end
+            ]
+            return [
+                {
+                    "title": e.title,
+                    "start": e.start.isoformat(),
+                    "end": e.end.isoformat(),
+                    "location": e.location,
+                    "source": e.source,
+                }
+                for e in sorted(week_events, key=lambda x: x.start)
+            ]
+
+        entries = self._calendar_sync.week_schedule()
+        return [
+            {
+                "title": e.title,
+                "start": e.start.isoformat(),
+                "end": e.end.isoformat(),
+                "location": e.location,
+                "source": e.source,
+                "event_id": e.event_id,
+            }
+            for e in entries
+        ]
+
+    def calendar_status(self) -> dict[str, Any]:
+        """Return the status of the Google Calendar connection."""
+        if not self._calendar_sync:
+            return {"connected": False, "reason": "Calendar sync not initialized"}
+        status = self._calendar_sync.status()
+        status["last_sync"] = self._last_sync.isoformat() if self._last_sync else None
+        return status
 
     # ------------------------------------------------------------------
     # Sleep analysis
@@ -189,6 +363,15 @@ class Chronos(BaseAgent):
         recommendations: list[str] = []
         actions: list[str] = []
 
+        # Attempt Google Calendar sync
+        if self._calendar_sync and self._calendar_sync.is_connected:
+            sync_result = self.sync_google_calendar()
+            if sync_result["synced"]:
+                actions.append(
+                    f"Synced {sync_result['events_pulled']} events from Google Calendar "
+                    f"({sync_result['new_added']} new)."
+                )
+
         # Check upcoming events
         upcoming = self.upcoming_events(hours=12)
         if upcoming:
@@ -213,7 +396,13 @@ class Chronos(BaseAgent):
             actions_taken=actions,
             recommendations=recommendations,
             alerts=alerts,
-            data={"upcoming_count": len(upcoming), "sleep": sleep_info},
+            data={
+                "upcoming_count": len(upcoming),
+                "sleep": sleep_info,
+                "calendar_connected": bool(
+                    self._calendar_sync and self._calendar_sync.is_connected
+                ),
+            },
         )
 
     def report(self) -> AgentReport:
@@ -226,5 +415,9 @@ class Chronos(BaseAgent):
                 "routines": len(self._routines),
                 "workflows": len(self._workflow_index),
                 "sleep_records": len(self._sleep_log),
+                "calendar_connected": bool(
+                    self._calendar_sync and self._calendar_sync.is_connected
+                ),
+                "last_sync": self._last_sync.isoformat() if self._last_sync else None,
             },
         )

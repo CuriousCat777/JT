@@ -16,6 +16,10 @@ Usage:
     python main.py --csv PATH   # Parse a local Rocket Money CSV and summarize
     python main.py --notify     # Run daily review and send notifications (email/SMS)
     python main.py --notify-test # Send a test notification to verify email/SMS setup
+    python main.py --calendar       # Show today's schedule + calendar status
+    python main.py --calendar-week  # Show this week's schedule
+    python main.py --calendar-sync  # Sync Google Calendar → Chronos + push bills to calendar
+    python main.py --calendar-auth  # Authorize Google Calendar (opens browser for OAuth)
 """
 
 from __future__ import annotations
@@ -237,6 +241,10 @@ def main() -> None:
     parser.add_argument("--eval-interval", type=int, default=86400, help="Evaluation cycle interval in seconds (default: 86400 = 24h)")
     parser.add_argument("--notify", action="store_true", help="Run daily review and send notifications")
     parser.add_argument("--notify-test", action="store_true", help="Send a test notification to verify setup")
+    parser.add_argument("--calendar", action="store_true", help="Show today's schedule + calendar status")
+    parser.add_argument("--calendar-week", action="store_true", help="Show this week's schedule")
+    parser.add_argument("--calendar-sync", action="store_true", help="Sync Google Calendar + push bills to calendar")
+    parser.add_argument("--calendar-auth", action="store_true", help="Authorize Google Calendar (OAuth flow)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -327,6 +335,115 @@ def main() -> None:
                     print(f"\n  {mgr.held_count} notification(s) held for quiet hours (will send after 7 AM).")
             else:
                 print("  CFO agent not available.")
+    elif args.calendar_auth:
+        chronos = guardian.get_agent("chronos")
+        if chronos and isinstance(chronos, Chronos):
+            from guardian_one.integrations.calendar_sync import GoogleCalendarProvider
+            provider = GoogleCalendarProvider()
+            if not provider.has_credentials:
+                print("\n  Google Calendar credentials not found.")
+                print("  To set up:")
+                print("  1. Go to Google Cloud Console → APIs → Calendar API → Enable")
+                print("  2. Create OAuth 2.0 credentials (Desktop app)")
+                print("  3. Download the JSON file")
+                print("  4. Save it as config/google_credentials.json")
+                print("     (or set GOOGLE_CALENDAR_CREDENTIALS env var)")
+            else:
+                print("\n  Starting Google Calendar authorization...")
+                success = provider.complete_oauth_flow()
+                if success:
+                    print("\n  Google Calendar authorized successfully!")
+                    print("  Token saved — you can now use --calendar and --calendar-sync.")
+                else:
+                    print(f"\n  Authorization failed: {provider.last_error}")
+        else:
+            print("  Chronos agent not available.")
+    elif args.calendar or args.calendar_week:
+        chronos = guardian.get_agent("chronos")
+        if chronos and isinstance(chronos, Chronos):
+            # Show calendar status
+            status = chronos.calendar_status()
+            connected = status.get("authenticated", False)
+            print(f"\n  Google Calendar: {'connected' if connected else 'offline'}")
+            if not connected:
+                err = status.get("last_error", "")
+                if err:
+                    print(f"  ({err})")
+                print("  Run --calendar-auth to connect your Google Calendar.\n")
+
+            if args.calendar_week:
+                events = chronos.week_schedule()
+                label = "THIS WEEK'S SCHEDULE"
+            else:
+                events = chronos.today_schedule()
+                label = "TODAY'S SCHEDULE"
+
+            print(f"\n  {label}")
+            print("  " + "-" * 56)
+            if not events:
+                if connected:
+                    print("  No events found.")
+                else:
+                    print("  (Calendar offline — showing local events only)")
+            else:
+                for ev in events:
+                    start = ev.get("start", "")
+                    end = ev.get("end", "")
+                    # Format times nicely
+                    try:
+                        s = datetime.fromisoformat(start)
+                        e = datetime.fromisoformat(end)
+                        time_str = f"{s.strftime('%a %b %d %I:%M %p')} — {e.strftime('%I:%M %p')}"
+                    except (ValueError, TypeError):
+                        time_str = f"{start} — {end}"
+                    loc = ev.get("location", "")
+                    loc_str = f" @ {loc}" if loc else ""
+                    print(f"  {time_str}")
+                    print(f"    {ev['title']}{loc_str}")
+                    print()
+            print(f"  Total: {len(events)} event(s)")
+        else:
+            print("  Chronos agent not available.")
+    elif args.calendar_sync:
+        chronos = guardian.get_agent("chronos")
+        if chronos and isinstance(chronos, Chronos):
+            status = chronos.calendar_status()
+            if not status.get("authenticated", False):
+                print("\n  Google Calendar not connected.")
+                print("  Run --calendar-auth first to authorize.")
+            else:
+                print("\n  Syncing Google Calendar...")
+                # 1. Pull events from Google Calendar → Chronos
+                sync_result = chronos.sync_google_calendar()
+                print(f"  Pulled {sync_result['events_pulled']} events "
+                      f"({sync_result.get('new_added', 0)} new)")
+                if sync_result.get("conflicts"):
+                    print(f"  Conflicts detected: {sync_result['conflicts']}")
+                    for detail in sync_result.get("conflict_details", []):
+                        print(f"    [!] {detail}")
+
+                # 2. Push CFO bills → Google Calendar
+                cfo = guardian.get_agent("cfo")
+                if cfo and isinstance(cfo, CFO):
+                    bills = [
+                        {
+                            "name": b.name,
+                            "amount": b.amount,
+                            "due_date": b.due_date,
+                            "auto_pay": b.auto_pay,
+                            "paid": b.paid,
+                        }
+                        for b in cfo._bills
+                    ]
+                    if bills:
+                        bill_result = chronos.sync_bills_to_calendar(bills)
+                        print(f"  Bills → Calendar: {bill_result.get('synced', 0)} added, "
+                              f"{bill_result.get('skipped', 0)} skipped")
+                    else:
+                        print("  No bills to sync to calendar.")
+                print(f"\n  Sync complete. Total events in Chronos: {sync_result.get('total_events', 0)}")
+        else:
+            print("  Chronos agent not available.")
     elif args.sync or args.sync_once:
         cfo = guardian.get_agent("cfo")
         if not (cfo and isinstance(cfo, CFO)):
