@@ -9,6 +9,16 @@ daily_summary_hour: 7   # 7 AM local time
 data_dir: "data"
 log_dir: "logs"
 
+notifications:
+  email_enabled: true
+  sms_enabled: true
+  quiet_hours_start: "22:00"   # 10 PM — hold LOW/MEDIUM alerts
+  quiet_hours_end: "07:00"     # 7 AM — flush held alerts
+  daily_digest: true           # Send daily financial summary email
+  bill_reminders: true         # Alert when bills are due/overdue
+  budget_alerts: true          # Alert when budget is near/over limit
+  transaction_flags: true      # Alert on suspicious transactions
+
 security:
   encryption_enabled: true
   require_2fa: true

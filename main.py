@@ -14,6 +14,8 @@ Usage:
     python main.py --sandbox    # Deploy Chronos+Archivist in sandbox, start daily eval
     python main.py --gmail      # Gmail inbox status + Rocket Money CSV check
     python main.py --csv PATH   # Parse a local Rocket Money CSV and summarize
+    python main.py --notify     # Run daily review and send notifications (email/SMS)
+    python main.py --notify-test # Send a test notification to verify email/SMS setup
 """
 
 from __future__ import annotations
@@ -230,6 +232,8 @@ def main() -> None:
     parser.add_argument("--csv", type=str, help="Parse a local Rocket Money CSV file")
     parser.add_argument("--sandbox", action="store_true", help="Deploy first 2 agents in sandbox + start eval loop")
     parser.add_argument("--eval-interval", type=int, default=86400, help="Evaluation cycle interval in seconds (default: 86400 = 24h)")
+    parser.add_argument("--notify", action="store_true", help="Run daily review and send notifications")
+    parser.add_argument("--notify-test", action="store_true", help="Send a test notification to verify setup")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -284,6 +288,42 @@ def main() -> None:
             print(json.dumps(summary, indent=2, default=str))
         else:
             print("Gmail agent not available.")
+    elif args.notify or args.notify_test:
+        from guardian_one.utils.notifications import build_notification_stack, Urgency
+
+        mgr, router = build_notification_stack(timezone_name=config.timezone)
+
+        # Show channel status
+        channels = [type(c).__name__ for c in mgr._channels]
+        print(f"\n  Notification channels: {', '.join(channels)}")
+
+        if args.notify_test:
+            # Send a test notification to verify the setup
+            n = mgr.notify(
+                "Guardian", "Test Notification",
+                "This is a test from Guardian One. If you see this, notifications are working!",
+                Urgency.HIGH,
+            )
+            print(f"  Test notification sent ({n.urgency.value}).")
+            if mgr.held_count > 0:
+                print(f"  Note: {mgr.held_count} notification(s) held (quiet hours).")
+                print(f"  Use HIGH/CRITICAL urgency during quiet hours.")
+        else:
+            # Full daily review → notifications
+            cfo = guardian.get_agent("cfo")
+            if cfo and isinstance(cfo, CFO):
+                review = cfo.daily_review()
+                net = cfo.net_worth()
+                fired = router.route_daily_review(review, net_worth=net)
+
+                print(f"\n  Daily review complete — {len(fired)} notification(s) fired:")
+                for n in fired:
+                    print(f"    [{n.urgency.value.upper():8s}] {n.title}")
+
+                if mgr.held_count > 0:
+                    print(f"\n  {mgr.held_count} notification(s) held for quiet hours (will send after 7 AM).")
+            else:
+                print("  CFO agent not available.")
     elif args.sync or args.sync_once:
         cfo = guardian.get_agent("cfo")
         if not (cfo and isinstance(cfo, CFO)):
