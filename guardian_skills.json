@@ -1,0 +1,1047 @@
+{
+  "version": "0.1.0",
+  "owner": "Jeremy Tabernero, MD",
+  "skills": [
+    {
+      "id": "skill_0001",
+      "name": "Python Variables & Types",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Lesson 1: used in Guardian entries"
+        }
+      ],
+      "hash": "fa26ce9bbc63cbe9f2d875f05817a5e063d4093cba2a526724ec7c27b4460507"
+    },
+    {
+      "id": "skill_0002",
+      "name": "Python Dictionaries",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Lesson 1: Guardian entries are dicts"
+        }
+      ],
+      "hash": "a972b5242320c3091c6248493382b8e139aec33ec9ae985ea81fa09478862a34"
+    },
+    {
+      "id": "skill_0003",
+      "name": "Python Functions",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Lesson 1: wrote create_entry(), compute_hash()"
+        }
+      ],
+      "hash": "2e0284f86164a64085322359f2dc69ca8c1807fa9db87387d19a4ed5e5cf9110"
+    },
+    {
+      "id": "skill_0004",
+      "name": "Python File I/O",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Lessons 1-2: read/write JSON files"
+        }
+      ],
+      "hash": "ac3ef2872587c817985946d43471fc875f23e790ac15ed34343e9877a7b3ecbd"
+    },
+    {
+      "id": "skill_0005",
+      "name": "Python Loops & Filtering",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 1: basic loops; Lesson 2: list comprehensions"
+        }
+      ],
+      "hash": "e538d5b57fdd4cabf3af8f14378dfe8e018b0cc36fdb72596a03a46d8568c6ab"
+    },
+    {
+      "id": "skill_0006",
+      "name": "Python f-strings",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Used across all lessons"
+        }
+      ],
+      "hash": "cf80afa5fde332af6f02bd788be28a6d835fe3f2cd79f498ab8ad620b5e303fe"
+    },
+    {
+      "id": "skill_0007",
+      "name": "Python Imports",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 1: json, hashlib, datetime, os"
+        }
+      ],
+      "hash": "f8e661752b3a515b7626b2816a60d1c11b65d7c2e7491a0ce9eae74933a4656e"
+    },
+    {
+      "id": "skill_0008",
+      "name": "Python Lists",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Lesson 1: entries stored as lists"
+        }
+      ],
+      "hash": "487b37588b3c0f604416ba3754848e51864a81f9c9936c0a96591598f819ad30"
+    },
+    {
+      "id": "skill_0009",
+      "name": "JSON Format",
+      "domain": "data-formats",
+      "description": "",
+      "dependencies": [],
+      "level": 3,
+      "level_label": "COMPETENT",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 3,
+          "evidence": "Core of Guardian One storage"
+        }
+      ],
+      "hash": "ba2a4d1782e8c7c11f7cffc05b8e9dd45e51e9daaf566446df73f58ac2293410"
+    },
+    {
+      "id": "skill_0010",
+      "name": "SHA-256 Hashing",
+      "domain": "security",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 1: hash chain, verify integrity"
+        }
+      ],
+      "hash": "724518c4fcf90b592dd361f6464eb684721c28ec600079e5d717783b6e12f3e8"
+    },
+    {
+      "id": "skill_0011",
+      "name": "Error Handling (try/except)",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: file loading, JSON parsing"
+        }
+      ],
+      "hash": "2122c59458e9f7c307e0c93ffa58952a9e05bc63ea81acd0d11d8614c59a08a5"
+    },
+    {
+      "id": "skill_0012",
+      "name": "Date Parsing & Comparison",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: strptime, date ranges"
+        }
+      ],
+      "hash": "ada70096531d76f994824403ccdd57b673d7978154651797d3341bdcf5e287bd"
+    },
+    {
+      "id": "skill_0013",
+      "name": "List Comprehensions",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: one-line filtering"
+        }
+      ],
+      "hash": "ca978ad276f8741e8e1ce2d5fff7bf89d0ab44c54fcf7564c101888fe6df686f"
+    },
+    {
+      "id": "skill_0014",
+      "name": "Sorting with Lambda",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: sorted() with key functions"
+        }
+      ],
+      "hash": "c02d2451a3e2a9f84009af73a5a9241445da5c0f73e131ca2c0c44bbd4a961af"
+    },
+    {
+      "id": "skill_0015",
+      "name": "CSV Export",
+      "domain": "data-formats",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: csv module, Excel-ready output"
+        }
+      ],
+      "hash": "6b78d0b2409b0a6be853e6340ac0f51660c00bac8d953c6b43d63685d8532958"
+    },
+    {
+      "id": "skill_0016",
+      "name": "File Backup (shutil)",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: timestamped backups"
+        }
+      ],
+      "hash": "42676df10e870b8f86cc216bd8189749bdca33bff350bfb4b1cfda1edcb41267"
+    },
+    {
+      "id": "skill_0017",
+      "name": "String Methods",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: .strip, .lower, .replace, etc."
+        }
+      ],
+      "hash": "42661a6cb22c55def93946e57ba18a2965c392c349784dbeb31a2aa057e9e1b6"
+    },
+    {
+      "id": "skill_0018",
+      "name": "os.path Operations",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 2: exists, join, getsize, basename"
+        }
+      ],
+      "hash": "1efcb901d5c88a7d47eee78b05a8dc471f8137387274e1107f8714643047da62"
+    },
+    {
+      "id": "skill_0019",
+      "name": "Python Classes & __init__",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: GuardianEntry, GuardianLog"
+        }
+      ],
+      "hash": "a8ef53c8a15efea2c5d7c6f1f8b3a3106c8474b3a6c03fc28b886e0efe6fb05c"
+    },
+    {
+      "id": "skill_0020",
+      "name": "self & Instance Methods",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: methods on objects"
+        }
+      ],
+      "hash": "fe91b68efaaf462d83175b34674414e194d0c44c6971a649a182925354f1d8d6"
+    },
+    {
+      "id": "skill_0021",
+      "name": "Properties (@property)",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: computed attributes"
+        }
+      ],
+      "hash": "670fa4f6d8be1a83f2f0eeca234f90f8348165e0f5f69d455bd65d59c335bc44"
+    },
+    {
+      "id": "skill_0022",
+      "name": "__str__ & __repr__",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: object descriptions"
+        }
+      ],
+      "hash": "d9332c02e43a55cf0b7bccf1396bf9f2cdfae45cfe2ca980ea5c9efbc72f6d1d"
+    },
+    {
+      "id": "skill_0023",
+      "name": "Class Composition",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: GuardianLog contains GuardianEntry"
+        }
+      ],
+      "hash": "69c8de0f528528bfddec40929e8173aa06e6954ac3d915b99523b60ce5fb4795"
+    },
+    {
+      "id": "skill_0024",
+      "name": "Static Methods",
+      "domain": "python-oop",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: @staticmethod"
+        }
+      ],
+      "hash": "69923f94dfef289b48ebbe1bd7a0aad41376dfde879eb74d1da0f07c5a6a58cd"
+    },
+    {
+      "id": "skill_0025",
+      "name": "HTTP Requests (urllib)",
+      "domain": "networking",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: fetch_url(), live API calls"
+        }
+      ],
+      "hash": "d47785c69411b60181c8117a0feb692f930f1cf7dec8b2881f386d0166d79a8b"
+    },
+    {
+      "id": "skill_0026",
+      "name": "JSON API Consumption",
+      "domain": "networking",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: parse API responses"
+        }
+      ],
+      "hash": "6850fc60ec76d5fb502fc5933fe22e62ab69234ea148cff77412d87f99ec54a4"
+    },
+    {
+      "id": "skill_0027",
+      "name": "sys.argv Parsing",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 3: command-line arguments"
+        }
+      ],
+      "hash": "5c1c4f5161abc99ff9feb13c531a9a5d5fc7da26cd70794ee2eacd6affec6f11"
+    },
+    {
+      "id": "skill_0028",
+      "name": "Advanced String Formatting",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 2,
+      "level_label": "BEGINNER",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 2,
+          "evidence": "Lesson 3: alignment, padding, currency"
+        }
+      ],
+      "hash": "212148f92bb236b73def084b2640b30f003525b6f8e2dc70d79f6eb236aeaf24"
+    },
+    {
+      "id": "skill_0029",
+      "name": "HTTP Protocol Basics",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: GET, POST, status codes"
+        }
+      ],
+      "hash": "40873be23b5fe2c990c8765f7f24c6d1e4e0dc92d49ec358d24cc60fb2c5a49e"
+    },
+    {
+      "id": "skill_0030",
+      "name": "Python http.server",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: built-in web server"
+        }
+      ],
+      "hash": "677bf9d6c54b49d0afdb37b2516445885741ffc3d9b453486f67b92cced1677b"
+    },
+    {
+      "id": "skill_0031",
+      "name": "URL Routing",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: path -> handler mapping"
+        }
+      ],
+      "hash": "f570c5819b81c140ee12977d65771a5ad1f24e03dc91652c36add3c65afb6b5b"
+    },
+    {
+      "id": "skill_0032",
+      "name": "HTML Generation",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: server-side rendering"
+        }
+      ],
+      "hash": "6dc4c6af241af07ab0c45bdb4d154e1140e27d80550a83c0ba2b7b7c6e48c76e"
+    },
+    {
+      "id": "skill_0033",
+      "name": "CSS Styling",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: dark theme dashboard"
+        }
+      ],
+      "hash": "78c30d271f57b3a48a582b0b0962ff07e1192f227a70b4c9def08fc43ffa80c6"
+    },
+    {
+      "id": "skill_0034",
+      "name": "JSON API Endpoints",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: /api/entries, /api/stats"
+        }
+      ],
+      "hash": "744c3e7d12c3aaabfeeb2a39a4459b22a7b39349053b26dbc5debdd637af1853"
+    },
+    {
+      "id": "skill_0035",
+      "name": "Query Parameters",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: ?category=financial&limit=5"
+        }
+      ],
+      "hash": "2bea7f55587cd7b375e24093351a8fd9b5a5c4ca0733ab6cce5fc0e9ff8be7c0"
+    },
+    {
+      "id": "skill_0036",
+      "name": "Content Types",
+      "domain": "web-dev",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Lesson 4: text/html vs application/json"
+        }
+      ],
+      "hash": "380c9a3e03a45a772ca42823d8dfcfff160fb2406f03eaac32c4987d4b5a2e25"
+    },
+    {
+      "id": "skill_0037",
+      "name": "Python async/await",
+      "domain": "python-advanced",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "b957d23c741f068b25fa8e180853f1bdca12a670c823153ae2b696c1dd3490ef"
+    },
+    {
+      "id": "skill_0038",
+      "name": "Prompt Engineering",
+      "domain": "ai-engineering",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Used with Claude, not formalized"
+        }
+      ],
+      "hash": "95fb20f2621c24ea64fcfb79661636343ffa5f9c321121cfe4e7405661e53c9e"
+    },
+    {
+      "id": "skill_0039",
+      "name": "LLM API Integration",
+      "domain": "ai-engineering",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "182cc28648503e1d35bead01ba225537126424e781adb1572a5d4696156a3c19"
+    },
+    {
+      "id": "skill_0040",
+      "name": "Agent Loop Architecture",
+      "domain": "ai-engineering",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "f246b3234a4ab98558f6a7674c03b453be83afd8bc4caa943f5edaab3867d41a"
+    },
+    {
+      "id": "skill_0041",
+      "name": "Token Management",
+      "domain": "ai-engineering",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "cda36afdffc7f19b05cce9e47a373ae65c1792e95130c12fe715f02bbd42e058"
+    },
+    {
+      "id": "skill_0042",
+      "name": "Tool Use / Function Calling",
+      "domain": "ai-engineering",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "f976796de6e4ad414c95ea618947dbf6bd4802e227d3c001405cdff915525ef3"
+    },
+    {
+      "id": "skill_0043",
+      "name": "State Machine Design",
+      "domain": "architecture",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "6d9f52e4a495ae16d202239af966bb2fbb0fa69ba7d145a9642c3b61084a7673"
+    },
+    {
+      "id": "skill_0044",
+      "name": "SQLite / Database",
+      "domain": "data-storage",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "3f470b13b67daaf622a751c7bb47592438909c0afed0ceb67766f2d8b698408e"
+    },
+    {
+      "id": "skill_0045",
+      "name": "Logging & Observability",
+      "domain": "operations",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Partial: Guardian log + workflow monitor"
+        }
+      ],
+      "hash": "0588de84d3d849d8630da21af6b5b0b21bfeda05d7c44692c9980ebc9d8d2eb8"
+    },
+    {
+      "id": "skill_0046",
+      "name": "Testing (unittest/pytest)",
+      "domain": "python-core",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "3c35e7d4a53a19824f9d6e5fff5c3519fb36227e737c1ab18f66895664943efc"
+    },
+    {
+      "id": "skill_0047",
+      "name": "Windows PowerShell",
+      "domain": "environment",
+      "description": "",
+      "dependencies": [],
+      "level": 1,
+      "level_label": "EXPOSED",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 1,
+          "evidence": "Learned through friction in CLI session"
+        }
+      ],
+      "hash": "36c3ef72e25c38ade5cdfb873ce0c03fa7132e5671a28ac38d9952d70f001b5a"
+    },
+    {
+      "id": "skill_0048",
+      "name": "Git Version Control",
+      "domain": "environment",
+      "description": "",
+      "dependencies": [],
+      "level": 0,
+      "level_label": "UNKNOWN",
+      "created": "2026-02-23T23:06:23Z",
+      "last_assessed": "2026-02-23T23:06:23Z",
+      "assessment_count": 1,
+      "evidence": [
+        {
+          "date": "2026-02-23T23:06:23Z",
+          "level_from": 0,
+          "level_to": 0,
+          "evidence": "Not yet covered"
+        }
+      ],
+      "hash": "0270a4f7c96297b5b2ed413fd2d2ed14971c5657c8cae6b4166b9dc384621c91"
+    }
+  ],
+  "goals": [
+    {
+      "id": "goal_0001",
+      "name": "Build AI Monitoring Agent",
+      "description": "Self-monitoring AI agent that learns from user behavior, detects misconceptions, and adapts dynamically",
+      "required_skills": [
+        "Python Classes & __init__",
+        "self & Instance Methods",
+        "Error Handling (try/except)",
+        "HTTP Requests (urllib)",
+        "JSON API Consumption",
+        "JSON API Endpoints",
+        "Python async/await",
+        "LLM API Integration",
+        "Agent Loop Architecture",
+        "Token Management",
+        "Tool Use / Function Calling",
+        "State Machine Design",
+        "Prompt Engineering",
+        "Logging & Observability",
+        "SQLite / Database",
+        "Testing (unittest/pytest)"
+      ],
+      "min_level_required": 3,
+      "target_date": "2026-06-01",
+      "status": "active",
+      "created": "2026-02-23T23:06:23Z",
+      "hash": ""
+    }
+  ],
+  "assessments": [],
+  "created": "2026-02-23T23:06:23Z",
+  "last_updated": "2026-02-23T23:06:23Z"
+}

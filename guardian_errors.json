@@ -1,0 +1,59 @@
+{
+  "version": "0.1.0",
+  "errors": [
+    {
+      "id": "err_0001",
+      "timestamp": "2026-02-23T23:06:23Z",
+      "type": "navigation",
+      "what": "Ran python from wrong directory",
+      "why": "Files in Downloads but terminal was in C:\\Users\\jerem",
+      "fix": "cd Downloads first, then python filename.py",
+      "context": "Lesson deployment session",
+      "related_skill": "Windows PowerShell",
+      "recurrence_count": 1,
+      "resolved": true,
+      "hash": "6e140e515b264a6a0b4ab9e048bc1cfa9a5b6abf19c1dbe9e9abd6c1c6e1fb4c"
+    },
+    {
+      "id": "err_0002",
+      "timestamp": "2026-02-23T23:06:23Z",
+      "type": "workflow",
+      "what": "Pasted Python code directly into PowerShell",
+      "why": "Didn't understand difference between running a file and typing code",
+      "fix": "Always use: python filename.py — never paste code into terminal",
+      "context": "Lesson 4 attempt",
+      "related_skill": "Python File I/O",
+      "recurrence_count": 1,
+      "resolved": true,
+      "hash": "3c715350550c7e884cb8c5a7294af908e4a542b602a704a38ced3debbc182b84"
+    },
+    {
+      "id": "err_0003",
+      "timestamp": "2026-02-23T23:06:23Z",
+      "type": "environment",
+      "what": "File downloaded with _2 suffix",
+      "why": "Browser auto-renamed duplicate downloads",
+      "fix": "Check actual filename with: dir or Get-ChildItem",
+      "context": "Guardian CLI deployment",
+      "related_skill": "Windows PowerShell",
+      "recurrence_count": 1,
+      "resolved": true,
+      "hash": "1909826f1112135013065d2a5457cad1e091c8966d551e0910fa859611423b21"
+    },
+    {
+      "id": "err_0004",
+      "timestamp": "2026-02-23T23:06:23Z",
+      "type": "communication",
+      "what": "Used CMD syntax in PowerShell",
+      "why": "dir /s is CMD; PowerShell uses Get-ChildItem -Recurse",
+      "fix": "In PowerShell: Get-ChildItem -Recurse -Filter *.py",
+      "context": "File finding session",
+      "related_skill": "Windows PowerShell",
+      "recurrence_count": 1,
+      "resolved": true,
+      "hash": "19fb48a9b87ff3a2ade3aba4313411baac6b1983fabe46263861f9652b0d7d3e"
+    }
+  ],
+  "created": "2026-02-23T23:06:23Z",
+  "last_updated": "2026-02-23T23:06:23Z"
+}
