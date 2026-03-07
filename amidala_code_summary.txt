@@ -1,0 +1,1032 @@
+========================================================================
+  AMIDALA COMPANY SCAFFOLD — CODE PRESENTATION SUMMARY
+  Generated: 2026-03-07 01:15
+  Author: drjeremytabernero.com
+========================================================================
+
+PROJECT OVERVIEW
+----------------------------------------
+A deployable consulting-company website scaffold built with:
+  - FastAPI (Python async web framework)
+  - SQLAlchemy (ORM / database layer)
+  - Pydantic Settings (env-based configuration)
+  - Jinja2 (HTML templating)
+  - SQLite (default database, swappable)
+  - Stripe (payment placeholder)
+
+ARCHITECTURE
+----------------------------------------
+Routers:  /contact, /booking, /payment, /admin
+Models:   Lead, BookingRequest (SQLAlchemy)
+Auth:     Cookie-based admin sessions, constant-time password compare
+Email:    Optional SMTP (no-op if unconfigured)
+Debug:    debug_preview.py (dry-run + live /debug endpoint)
+
+ROUTES
+----------------------------------------
+  GET    /                         Homepage
+  GET    /contact/                 Contact form
+  POST   /contact/                 Submit contact
+  GET    /booking/                 Booking form
+  POST   /booking/                 Submit booking
+  GET    /payment/                 Payment page (Stripe placeholder)
+  GET    /payment/success          Payment success
+  GET    /payment/cancel           Payment cancelled
+  GET    /admin/login              Admin login form
+  POST   /admin/login              Admin authenticate
+  GET    /admin/dashboard          Admin dashboard (protected)
+  GET    /admin/logout             Admin logout
+
+BUGS FIXED FROM ORIGINAL CODE
+----------------------------------------
+  [CRITICAL] app/init.py -> app/__init__.py (missing dunder)
+  [CRITICAL] tablename -> __tablename__ in SQLAlchemy models
+  [CRITICAL] No indentation in Settings class body (SyntaxError)
+  [CRITICAL] No indentation in get_db() body (SyntaxError)
+  [WARNING ] README.md unclosed markdown code block
+  [SECURITY] Admin password hardcoded in .env.example
+  [MISSING ] app/main.py entry point did not exist
+  [MISSING ] .gitignore not present
+  [MISSING ] templates/ directory not created
+
+DEPENDENCIES (requirements.txt)
+----------------------------------------
+  fastapi==0.115.5
+  uvicorn[standard]==0.32.0
+  jinja2==3.1.4
+  python-multipart==0.0.12
+  pydantic==2.9.2
+  pydantic-settings==2.6.1
+  SQLAlchemy==2.0.36
+  python-dotenv==1.0.1
+
+FILE INVENTORY
+----------------------------------------
+  .env.example                                       (   445 bytes)
+  .gitignore                                         (    87 bytes)
+  README.md                                          ( 2,052 bytes)
+  debug_preview.py                                   ( 6,889 bytes)
+  requirements.txt                                   (   163 bytes)
+  app/__init__.py                                    (     0 bytes)
+  app/config.py                                      (   533 bytes)
+  app/db.py                                          (   404 bytes)
+  app/emailer.py                                     (   697 bytes)
+  app/main.py                                        (   852 bytes)
+  app/models.py                                      (   985 bytes)
+  app/routers/__init__.py                            (     0 bytes)
+  app/routers/admin.py                               ( 2,326 bytes)
+  app/routers/booking.py                             ( 1,317 bytes)
+  app/routers/contact.py                             ( 1,273 bytes)
+  app/routers/payment.py                             (   919 bytes)
+  legal/README.md                                    (   328 bytes)
+  static/style.css                                   ( 1,307 bytes)
+  templates/admin_dashboard.html                     ( 1,161 bytes)
+  templates/admin_login.html                         (   306 bytes)
+  templates/base.html                                (   674 bytes)
+  templates/booking.html                             (   615 bytes)
+  templates/booking_thanks.html                      (   254 bytes)
+  templates/contact.html                             (   613 bytes)
+  templates/contact_thanks.html                      (   239 bytes)
+  templates/index.html                               (   338 bytes)
+  templates/payment.html                             (   315 bytes)
+  templates/payment_cancel.html                      (   250 bytes)
+  templates/payment_success.html                     (   215 bytes)
+  TOTAL                                              29 files
+
+========================================================================
+  FULL SOURCE CODE LISTING
+========================================================================
+
+────────────────────────────────────────────────────────────────────────
+FILE: .env.example
+────────────────────────────────────────────────────────────────────────
+# App
+APP_NAME=Amidala
+BASE_URL=http://127.0.0.1:8000
+
+# Admin (generate a strong password before deploying)
+ADMIN_PASSWORD=
+
+# SMTP (optional — leave blank to disable email notifications)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
+SMTP_TO=
+
+# Stripe (optional — placeholder until you add keys)
+STRIPE_SECRET_KEY=
+STRIPE_SUCCESS_URL=http://127.0.0.1:8000/payment/success
+STRIPE_CANCEL_URL=http://127.0.0.1:8000/payment/cancel
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: .gitignore
+────────────────────────────────────────────────────────────────────────
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.sqlite3
+.DS_Store
+*.egg-info/
+dist/
+build/
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: README.md
+────────────────────────────────────────────────────────────────────────
+# Amidala (Company Scaffold) — drjeremytabernero.com
+
+This is a deployable consulting-company website scaffold built for:
+- clean brand presence
+- contact intake (CV available upon request)
+- booking request intake
+- payment scaffold (Stripe placeholder)
+- admin dashboard
+- legal template pack (attorney review required)
+
+## Quickstart (local)
+```bash
+cd amidala_company
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # then edit .env with your secrets
+uvicorn app.main:app --reload
+```
+
+## Debug / Preview Mode
+```bash
+python3 debug_preview.py          # dry-run: shows all routes, config, DB schema
+python3 debug_preview.py --live   # starts server with debug toolbar at /debug
+```
+
+## Project Structure
+```
+amidala_company/
+├── app/
+│   ├── __init__.py
+│   ├── config.py          # Pydantic settings from .env
+│   ├── db.py              # SQLAlchemy engine + session
+│   ├── models.py          # Lead, BookingRequest tables
+│   ├── emailer.py         # Optional SMTP notifier
+│   ├── main.py            # FastAPI app + all routes
+│   └── routers/
+│       ├── __init__.py
+│       ├── contact.py     # /contact
+│       ├── booking.py     # /booking
+│       ├── payment.py     # /payment (Stripe placeholder)
+│       └── admin.py       # /admin (password-protected)
+├── templates/             # Jinja2 HTML templates
+├── static/                # CSS/JS assets
+├── legal/                 # Legal template docs
+├── debug_preview.py       # Protected debug/preview runner
+├── requirements.txt
+├── .env.example
+├── .gitignore
+└── README.md
+```
+
+## Notes
+- All secrets loaded from `.env` — never commit `.env` to git
+- Admin dashboard is password-protected via `ADMIN_PASSWORD` in `.env`
+- Stripe integration is a placeholder — add your keys to `.env` when ready
+- Legal templates require attorney review before use
+- Licensed under Apache 2.0
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: debug_preview.py
+────────────────────────────────────────────────────────────────────────
+#!/usr/bin/env python3
+"""
+Amidala Scaffold — Protected Debug & Preview Tool
+
+Usage:
+    python3 debug_preview.py            # Dry-run: inspect config, routes, DB schema
+    python3 debug_preview.py --live     # Start server with /debug introspection endpoint
+
+This script lets you safely inspect the application without modifying data.
+All sensitive values (passwords, keys) are masked in output.
+"""
+
+import argparse
+import importlib
+import os
+import sys
+import textwrap
+
+
+def mask(value: str) -> str:
+    """Mask a sensitive string, showing only first 3 chars."""
+    if not value:
+        return "(not set)"
+    if len(value) <= 4:
+        return "****"
+    return value[:3] + "*" * (len(value) - 3)
+
+
+def dry_run():
+    """Print a complete diagnostic report without starting the server."""
+    print("=" * 60)
+    print("  AMIDALA SCAFFOLD — DEBUG PREVIEW (dry-run)")
+    print("=" * 60)
+
+    # --- 1. Environment / Config ---
+    print("\n[1] CONFIGURATION (.env)")
+    print("-" * 40)
+    try:
+        from app.config import settings
+        safe_fields = ["app_name", "base_url", "smtp_port",
+                       "stripe_success_url", "stripe_cancel_url"]
+        secret_fields = ["admin_password", "smtp_host", "smtp_user",
+                         "smtp_pass", "smtp_from", "smtp_to",
+                         "stripe_secret_key"]
+        for f in safe_fields:
+            print(f"  {f}: {getattr(settings, f, '?')}")
+        for f in secret_fields:
+            print(f"  {f}: {mask(getattr(settings, f, ''))}")
+    except Exception as e:
+        print(f"  ERROR loading config: {e}")
+
+    # --- 2. Database Schema ---
+    print("\n[2] DATABASE SCHEMA")
+    print("-" * 40)
+    try:
+        from app.db import Base, engine
+        from app.models import Lead, BookingRequest
+        print("  Tables defined:")
+        for table_name, table in Base.metadata.tables.items():
+            cols = ", ".join(c.name for c in table.columns)
+            print(f"    {table_name}: [{cols}]")
+        print(f"  Engine URL: {engine.url}")
+        print("  Note: Tables are created on app startup (create_all)")
+    except Exception as e:
+        print(f"  ERROR loading models: {e}")
+
+    # --- 3. Routes ---
+    print("\n[3] REGISTERED ROUTES")
+    print("-" * 40)
+    try:
+        from app.main import app
+        for route in app.routes:
+            methods = getattr(route, "methods", None)
+            path = getattr(route, "path", getattr(route, "path_regex", "?"))
+            if methods:
+                for m in sorted(methods):
+                    print(f"  {m:6s} {path}")
+    except Exception as e:
+        print(f"  ERROR loading app: {e}")
+
+    # --- 4. File inventory ---
+    print("\n[4] FILE INVENTORY")
+    print("-" * 40)
+    count = 0
+    for root, dirs, files in os.walk("."):
+        dirs[:] = [d for d in dirs if d not in (".venv", "__pycache__", ".git")]
+        for f in sorted(files):
+            rel = os.path.join(root, f)
+            size = os.path.getsize(rel)
+            print(f"  {rel:50s} ({size:,} bytes)")
+            count += 1
+    print(f"  Total: {count} files")
+
+    # --- 5. Dependency check ---
+    print("\n[5] DEPENDENCY CHECK")
+    print("-" * 40)
+    deps = ["fastapi", "uvicorn", "jinja2", "pydantic", "pydantic_settings",
+            "sqlalchemy", "dotenv", "multipart"]
+    pkg_map = {"dotenv": "dotenv", "multipart": "multipart"}
+    for dep in deps:
+        mod_name = pkg_map.get(dep, dep)
+        try:
+            mod = importlib.import_module(mod_name)
+            ver = getattr(mod, "__version__", "installed")
+            print(f"  {dep:25s} {ver}")
+        except ImportError:
+            print(f"  {dep:25s} MISSING — run: pip install -r requirements.txt")
+
+    # --- 6. Security notes ---
+    print("\n[6] SECURITY CHECKLIST")
+    print("-" * 40)
+    checks = []
+    try:
+        from app.config import settings as s
+        if not s.admin_password:
+            checks.append("WARNING: ADMIN_PASSWORD is empty — admin login disabled")
+        if s.base_url.startswith("http://") and "127.0.0.1" not in s.base_url:
+            checks.append("WARNING: BASE_URL uses HTTP on non-localhost — use HTTPS")
+    except Exception:
+        pass
+    if os.path.exists(".env"):
+        checks.append("OK: .env file exists")
+    else:
+        checks.append("INFO: No .env file — copy .env.example to .env")
+    if os.path.exists(".gitignore"):
+        gi = open(".gitignore").read()
+        if ".env" in gi:
+            checks.append("OK: .env is in .gitignore")
+        else:
+            checks.append("WARNING: .env NOT in .gitignore — secrets may leak")
+    for c in checks:
+        print(f"  {c}")
+
+    print("\n" + "=" * 60)
+    print("  Dry-run complete. No data was modified.")
+    print("=" * 60)
+
+
+def live_server():
+    """Start uvicorn with a /debug introspection endpoint injected."""
+    try:
+        from app.main import app
+        from app.config import settings
+        from fastapi import Request
+        from fastapi.responses import JSONResponse
+
+        @app.get("/debug", tags=["debug"])
+        async def debug_endpoint(request: Request):
+            """Protected introspection endpoint — visible only in debug mode."""
+            from app.db import Base
+            routes = []
+            for route in app.routes:
+                methods = getattr(route, "methods", None)
+                path = getattr(route, "path", "?")
+                if methods:
+                    routes.append({"methods": sorted(methods), "path": path})
+            return JSONResponse({
+                "app_name": settings.app_name,
+                "base_url": settings.base_url,
+                "admin_configured": bool(settings.admin_password),
+                "smtp_configured": bool(settings.smtp_host),
+                "stripe_configured": bool(settings.stripe_secret_key),
+                "tables": list(Base.metadata.tables.keys()),
+                "routes": routes,
+            })
+
+        print("Starting Amidala in DEBUG mode...")
+        print("Debug endpoint available at: http://127.0.0.1:8000/debug")
+        print("Press Ctrl+C to stop.\n")
+
+        import uvicorn
+        uvicorn.run(app, host="127.0.0.1", port=8000)
+
+    except ImportError as e:
+        print(f"Cannot start live server — missing dependency: {e}")
+        print("Run: pip install -r requirements.txt")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Amidala Scaffold Debug Tool")
+    parser.add_argument("--live", action="store_true",
+                        help="Start the server with /debug endpoint")
+    args = parser.parse_args()
+
+    # Ensure we're in the project directory
+    if not os.path.exists("app/main.py"):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(script_dir)
+
+    if args.live:
+        live_server()
+    else:
+        dry_run()
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: requirements.txt
+────────────────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+jinja2==3.1.4
+python-multipart==0.0.12
+pydantic==2.9.2
+pydantic-settings==2.6.1
+SQLAlchemy==2.0.36
+python-dotenv==1.0.1
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/__init__.py
+────────────────────────────────────────────────────────────────────────
+(empty file)
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/config.py
+────────────────────────────────────────────────────────────────────────
+from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class Settings(BaseSettings):
+    app_name: str = "Amidala"
+    base_url: str = "http://127.0.0.1:8000"
+    admin_password: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    smtp_from: str = ""
+    smtp_to: str = ""
+    stripe_secret_key: str = ""
+    stripe_success_url: str = ""
+    stripe_cancel_url: str = ""
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/db.py
+────────────────────────────────────────────────────────────────────────
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+DB_URL = "sqlite:///./amidala.db"
+engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/emailer.py
+────────────────────────────────────────────────────────────────────────
+import smtplib
+from email.message import EmailMessage
+
+from .config import settings
+
+
+def send_email(subject: str, body: str):
+    """Send an email notification. No-op if SMTP is not configured."""
+    if not settings.smtp_host or not settings.smtp_from or not settings.smtp_to:
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.smtp_from
+    msg["To"] = settings.smtp_to
+    msg.set_content(body)
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+        server.starttls()
+        if settings.smtp_user and settings.smtp_pass:
+            server.login(settings.smtp_user, settings.smtp_pass)
+        server.send_message(msg)
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/main.py
+────────────────────────────────────────────────────────────────────────
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from .config import settings
+from .db import Base, engine
+from .routers import contact, booking, payment, admin
+
+# Create all tables on startup
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title=settings.app_name)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# Register routers
+app.include_router(contact.router)
+app.include_router(booking.router)
+app.include_router(payment.router)
+app.include_router(admin.router)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def homepage(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request, "settings": settings})
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/models.py
+────────────────────────────────────────────────────────────────────────
+from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy.sql import func
+
+from .db import Base
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    email = Column(String(300), nullable=False)
+    organization = Column(String(300), nullable=True)
+    message = Column(Text, nullable=True)
+    cv_requested = Column(String(10), default="yes")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class BookingRequest(Base):
+    __tablename__ = "booking_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    email = Column(String(300), nullable=False)
+    requested_datetime = Column(String(100), nullable=False)
+    topic = Column(String(300), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/routers/__init__.py
+────────────────────────────────────────────────────────────────────────
+(empty file)
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/routers/admin.py
+────────────────────────────────────────────────────────────────────────
+import secrets
+
+from fastapi import APIRouter, Depends, Form, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from ..config import settings
+from ..db import get_db
+from ..models import Lead, BookingRequest
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+templates = Jinja2Templates(directory="templates")
+
+# Simple session tokens (in-memory; resets on restart)
+_active_sessions: set[str] = set()
+
+
+def _require_auth(request: Request):
+    token = request.cookies.get("admin_session")
+    if not token or token not in _active_sessions:
+        raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    return templates.TemplateResponse("admin_login.html", {"request": request})
+
+
+@router.post("/login")
+async def admin_login(password: str = Form(...)):
+    if not settings.admin_password:
+        raise HTTPException(status_code=503, detail="Admin password not configured")
+    if not secrets.compare_digest(password, settings.admin_password):
+        raise HTTPException(status_code=403, detail="Invalid password")
+
+    token = secrets.token_urlsafe(32)
+    _active_sessions.add(token)
+
+    response = RedirectResponse(url="/admin/dashboard", status_code=303)
+    response.set_cookie("admin_session", token, httponly=True, samesite="strict")
+    return response
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request, _=Depends(_require_auth), db: Session = Depends(get_db)
+):
+    leads = db.query(Lead).order_by(Lead.created_at.desc()).limit(50).all()
+    bookings = (
+        db.query(BookingRequest)
+        .order_by(BookingRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return templates.TemplateResponse(
+        "admin_dashboard.html",
+        {"request": request, "leads": leads, "bookings": bookings},
+    )
+
+
+@router.get("/logout")
+async def admin_logout(request: Request):
+    token = request.cookies.get("admin_session")
+    if token:
+        _active_sessions.discard(token)
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("admin_session")
+    return response
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/routers/booking.py
+────────────────────────────────────────────────────────────────────────
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..models import BookingRequest
+from ..emailer import send_email
+
+router = APIRouter(prefix="/booking", tags=["booking"])
+templates = Jinja2Templates(directory="templates")
+
+
+@router.get("/", response_class=HTMLResponse)
+async def booking_form(request: Request):
+    return templates.TemplateResponse("booking.html", {"request": request})
+
+
+@router.post("/", response_class=HTMLResponse)
+async def booking_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    requested_datetime: str = Form(...),
+    topic: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    booking = BookingRequest(
+        name=name,
+        email=email,
+        requested_datetime=requested_datetime,
+        topic=topic,
+        notes=notes,
+    )
+    db.add(booking)
+    db.commit()
+
+    send_email(
+        subject=f"New booking request: {name}",
+        body=f"Name: {name}\nEmail: {email}\nWhen: {requested_datetime}\nTopic: {topic}\n\n{notes}",
+    )
+
+    return templates.TemplateResponse(
+        "booking_thanks.html", {"request": request, "name": name}
+    )
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/routers/contact.py
+────────────────────────────────────────────────────────────────────────
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..models import Lead
+from ..emailer import send_email
+
+router = APIRouter(prefix="/contact", tags=["contact"])
+templates = Jinja2Templates(directory="templates")
+
+
+@router.get("/", response_class=HTMLResponse)
+async def contact_form(request: Request):
+    return templates.TemplateResponse("contact.html", {"request": request})
+
+
+@router.post("/", response_class=HTMLResponse)
+async def contact_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    organization: str = Form(""),
+    message: str = Form(""),
+    cv_requested: str = Form("yes"),
+    db: Session = Depends(get_db),
+):
+    lead = Lead(
+        name=name,
+        email=email,
+        organization=organization,
+        message=message,
+        cv_requested=cv_requested,
+    )
+    db.add(lead)
+    db.commit()
+
+    send_email(
+        subject=f"New contact: {name}",
+        body=f"Name: {name}\nEmail: {email}\nOrg: {organization}\n\n{message}",
+    )
+
+    return templates.TemplateResponse(
+        "contact_thanks.html", {"request": request, "name": name}
+    )
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: app/routers/payment.py
+────────────────────────────────────────────────────────────────────────
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+from ..config import settings
+
+router = APIRouter(prefix="/payment", tags=["payment"])
+templates = Jinja2Templates(directory="templates")
+
+
+@router.get("/", response_class=HTMLResponse)
+async def payment_page(request: Request):
+    stripe_configured = bool(settings.stripe_secret_key)
+    return templates.TemplateResponse(
+        "payment.html",
+        {"request": request, "stripe_configured": stripe_configured},
+    )
+
+
+@router.get("/success", response_class=HTMLResponse)
+async def payment_success(request: Request):
+    return templates.TemplateResponse("payment_success.html", {"request": request})
+
+
+@router.get("/cancel", response_class=HTMLResponse)
+async def payment_cancel(request: Request):
+    return templates.TemplateResponse("payment_cancel.html", {"request": request})
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: legal/README.md
+────────────────────────────────────────────────────────────────────────
+# Legal Templates
+
+Place your legal documents here. Common templates to include:
+
+- Terms of Service
+- Privacy Policy
+- Cookie Policy
+- Consulting Agreement Template
+- NDA Template
+
+**Important:** All legal documents require review by a licensed attorney
+before use. These are templates only and do not constitute legal advice.
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: static/style.css
+────────────────────────────────────────────────────────────────────────
+/* Amidala Company Scaffold — minimal default styles */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1rem;
+    color: #222;
+    background: #fafafa;
+}
+nav { display: flex; gap: 1.5rem; padding: 1rem 0; border-bottom: 1px solid #ddd; }
+nav a { text-decoration: none; color: #444; font-weight: 500; }
+nav a:hover { color: #000; }
+main { padding: 2rem 0; }
+footer { border-top: 1px solid #ddd; padding: 1rem 0; color: #888; font-size: 0.85rem; }
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.3rem; margin-top: 2rem; }
+form { display: flex; flex-direction: column; gap: 1rem; max-width: 500px; }
+label { display: flex; flex-direction: column; gap: 0.25rem; font-weight: 500; }
+input, textarea, select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+button { padding: 0.6rem 1.5rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+button:hover { background: #555; }
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #eee; }
+th { font-weight: 600; background: #f0f0f0; }
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/admin_dashboard.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — Amidala{% endblock %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+<p><a href="/admin/logout">Logout</a></p>
+
+<h2>Recent Leads ({{ leads|length }})</h2>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Email</th><th>Organization</th><th>CV?</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+    {% for lead in leads %}
+        <tr>
+            <td>{{ lead.name }}</td>
+            <td>{{ lead.email }}</td>
+            <td>{{ lead.organization or "—" }}</td>
+            <td>{{ lead.cv_requested }}</td>
+            <td>{{ lead.created_at }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Recent Booking Requests ({{ bookings|length }})</h2>
+<table>
+    <thead>
+        <tr><th>Name</th><th>Email</th><th>When</th><th>Topic</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+    {% for b in bookings %}
+        <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.email }}</td>
+            <td>{{ b.requested_datetime }}</td>
+            <td>{{ b.topic or "—" }}</td>
+            <td>{{ b.created_at }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/admin_login.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Admin Login — Amidala{% endblock %}
+{% block content %}
+<h1>Admin Login</h1>
+<form method="post" action="/admin/login">
+    <label>Password <input type="password" name="password" required></label>
+    <button type="submit">Login</button>
+</form>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/base.html
+────────────────────────────────────────────────────────────────────────
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ settings.app_name if settings else "Amidala" }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/contact">Contact</a>
+        <a href="/booking">Book a Consultation</a>
+        <a href="/payment">Payment</a>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>&copy; 2025 Amidala Consulting &mdash; drjeremytabernero.com</p>
+    </footer>
+</body>
+</html>
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/booking.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Book a Consultation — Amidala{% endblock %}
+{% block content %}
+<h1>Book a Consultation</h1>
+<form method="post" action="/booking">
+    <label>Name <input type="text" name="name" required></label>
+    <label>Email <input type="email" name="email" required></label>
+    <label>Preferred Date/Time <input type="datetime-local" name="requested_datetime" required></label>
+    <label>Topic <input type="text" name="topic"></label>
+    <label>Notes <textarea name="notes" rows="4"></textarea></label>
+    <button type="submit">Request Booking</button>
+</form>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/booking_thanks.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Booking Received — Amidala{% endblock %}
+{% block content %}
+<h1>Thank you, {{ name }}!</h1>
+<p>Your booking request has been received. We will confirm shortly.</p>
+<a href="/">Back to Home</a>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/contact.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Contact — Amidala{% endblock %}
+{% block content %}
+<h1>Contact Us</h1>
+<form method="post" action="/contact">
+    <label>Name <input type="text" name="name" required></label>
+    <label>Email <input type="email" name="email" required></label>
+    <label>Organization <input type="text" name="organization"></label>
+    <label>Message <textarea name="message" rows="5"></textarea></label>
+    <label>
+        <input type="checkbox" name="cv_requested" value="yes" checked>
+        Request CV
+    </label>
+    <button type="submit">Send</button>
+</form>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/contact_thanks.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Thank You — Amidala{% endblock %}
+{% block content %}
+<h1>Thank you, {{ name }}!</h1>
+<p>We have received your message and will be in touch soon.</p>
+<a href="/">Back to Home</a>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/index.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Amidala — Consulting{% endblock %}
+{% block content %}
+<h1>Welcome to Amidala Consulting</h1>
+<p>Professional consulting services. CV available upon request.</p>
+<ul>
+    <li><a href="/contact">Get in Touch</a></li>
+    <li><a href="/booking">Book a Consultation</a></li>
+</ul>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/payment.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Payment — Amidala{% endblock %}
+{% block content %}
+<h1>Payment</h1>
+{% if stripe_configured %}
+<p>Stripe is configured. Payment integration is ready.</p>
+{% else %}
+<p>Payment processing is not yet configured. Please contact us directly.</p>
+{% endif %}
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/payment_cancel.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Payment Cancelled — Amidala{% endblock %}
+{% block content %}
+<h1>Payment Cancelled</h1>
+<p>Your payment was not completed. You can try again or contact us.</p>
+<a href="/">Back to Home</a>
+{% endblock %}
+
+
+────────────────────────────────────────────────────────────────────────
+FILE: templates/payment_success.html
+────────────────────────────────────────────────────────────────────────
+{% extends "base.html" %}
+{% block title %}Payment Successful — Amidala{% endblock %}
+{% block content %}
+<h1>Payment Successful</h1>
+<p>Thank you for your payment.</p>
+<a href="/">Back to Home</a>
+{% endblock %}
+
+========================================================================
+  END OF CODE PRESENTATION SUMMARY
+========================================================================
