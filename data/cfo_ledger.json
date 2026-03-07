@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-02-21T16:25:41.990539+00:00",
+  "saved_at": "2026-03-07T06:04:48.147949+00:00",
   "accounts": [
     {
       "name": "Essentia Health 457(b) Deferred Compensation",
@@ -147,6 +147,90 @@
       "balance": 0.0,
       "institution": "Rocket Money",
       "last_synced": "2026-02-21T16:25:41.945865+00:00"
+    },
+    {
+      "name": "Plaid Checking (0000)",
+      "account_type": "checking",
+      "balance": 110.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Saving (1111)",
+      "account_type": "savings",
+      "balance": 210.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid CD (2222)",
+      "account_type": "checking",
+      "balance": 1000.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Credit Card (3333)",
+      "account_type": "credit_card",
+      "balance": -410.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Money Market (4444)",
+      "account_type": "checking",
+      "balance": 43200.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid IRA (5555)",
+      "account_type": "retirement",
+      "balance": 320.76,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid 401k (6666)",
+      "account_type": "retirement",
+      "balance": 23631.9805,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Student Loan (7777)",
+      "account_type": "loan",
+      "balance": -65262.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Mortgage (8888)",
+      "account_type": "loan",
+      "balance": -56302.06,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid HSA (9001)",
+      "account_type": "checking",
+      "balance": 6009.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Cash Management (9002)",
+      "account_type": "checking",
+      "balance": 12060.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+    },
+    {
+      "name": "Plaid Business Credit Card (9999)",
+      "account_type": "credit_card",
+      "balance": -5020.0,
+      "institution": "First Platypus Bank",
+      "last_synced": "2026-03-07T06:04:44.327298+00:00"
     }
   ],
   "transactions": [
@@ -6199,6 +6283,486 @@
       "metadata": {
         "source": "rocket_money"
       }
+    },
+    {
+      "date": "2026-02-28",
+      "description": "United Airlines",
+      "amount": -500.0,
+      "category": "transport",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-26",
+      "description": "Uber 072515 SF**POOL**",
+      "amount": -6.33,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-23",
+      "description": "Tectra Inc",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-22",
+      "description": "AUTOMATIC PAYMENT - THANK",
+      "amount": -2078.5,
+      "category": "savings",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-22",
+      "description": "KFC",
+      "amount": -500.0,
+      "category": "food",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-22",
+      "description": "Madison Bicycle Shop",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-13",
+      "description": "CREDIT CARD 3333 PAYMENT *//",
+      "amount": -25.0,
+      "category": "savings",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-13",
+      "description": "Uber 063015 SF**POOL**",
+      "amount": -5.4,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-12",
+      "description": "ACH Electronic CreditGUSTO PAY 123456",
+      "amount": -5850.0,
+      "category": "utilities",
+      "account": "Plaid Money Market",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-12",
+      "description": "CD DEPOSIT .INITIAL.",
+      "amount": -1000.0,
+      "category": "entertainment",
+      "account": "Plaid CD",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-11",
+      "description": "Touchstone Climbing",
+      "amount": -78.5,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-11",
+      "description": "United Airlines",
+      "amount": 500.0,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-10",
+      "description": "McDonald's",
+      "amount": -12.0,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-10",
+      "description": "Starbucks",
+      "amount": -4.33,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-09",
+      "description": "SparkFun",
+      "amount": -89.4,
+      "category": "entertainment",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-02-08",
+      "description": "INTRST PYMNT",
+      "amount": 4.22,
+      "category": "income",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-29",
+      "description": "United Airlines",
+      "amount": -500.0,
+      "category": "transport",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-27",
+      "description": "Uber 072515 SF**POOL**",
+      "amount": -6.33,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-24",
+      "description": "Tectra Inc",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-23",
+      "description": "AUTOMATIC PAYMENT - THANK",
+      "amount": -2078.5,
+      "category": "savings",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-23",
+      "description": "KFC",
+      "amount": -500.0,
+      "category": "food",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-23",
+      "description": "Madison Bicycle Shop",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-14",
+      "description": "CREDIT CARD 3333 PAYMENT *//",
+      "amount": -25.0,
+      "category": "savings",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-14",
+      "description": "Uber 063015 SF**POOL**",
+      "amount": -5.4,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-13",
+      "description": "ACH Electronic CreditGUSTO PAY 123456",
+      "amount": -5850.0,
+      "category": "utilities",
+      "account": "Plaid Money Market",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-13",
+      "description": "CD DEPOSIT .INITIAL.",
+      "amount": -1000.0,
+      "category": "entertainment",
+      "account": "Plaid CD",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-12",
+      "description": "Touchstone Climbing",
+      "amount": -78.5,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-12",
+      "description": "United Airlines",
+      "amount": 500.0,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-11",
+      "description": "McDonald's",
+      "amount": -12.0,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-11",
+      "description": "Starbucks",
+      "amount": -4.33,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-10",
+      "description": "SparkFun",
+      "amount": -89.4,
+      "category": "entertainment",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-01-09",
+      "description": "INTRST PYMNT",
+      "amount": 4.22,
+      "category": "income",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-30",
+      "description": "United Airlines",
+      "amount": -500.0,
+      "category": "transport",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-28",
+      "description": "Uber 072515 SF**POOL**",
+      "amount": -6.33,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-25",
+      "description": "Tectra Inc",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-24",
+      "description": "AUTOMATIC PAYMENT - THANK",
+      "amount": -2078.5,
+      "category": "savings",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-24",
+      "description": "KFC",
+      "amount": -500.0,
+      "category": "food",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-24",
+      "description": "Madison Bicycle Shop",
+      "amount": -500.0,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-15",
+      "description": "CREDIT CARD 3333 PAYMENT *//",
+      "amount": -25.0,
+      "category": "loan_payment",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-15",
+      "description": "Uber 063015 SF**POOL**",
+      "amount": -5.4,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-14",
+      "description": "ACH Electronic CreditGUSTO PAY 123456",
+      "amount": -5850.0,
+      "category": "utilities",
+      "account": "Plaid Money Market",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-14",
+      "description": "CD DEPOSIT .INITIAL.",
+      "amount": -1000.0,
+      "category": "entertainment",
+      "account": "Plaid CD",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-13",
+      "description": "Touchstone Climbing",
+      "amount": -78.5,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-13",
+      "description": "United Airlines",
+      "amount": 500.0,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-12",
+      "description": "McDonald's",
+      "amount": -12.0,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-12",
+      "description": "Starbucks",
+      "amount": -4.33,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-11",
+      "description": "SparkFun",
+      "amount": -89.4,
+      "category": "entertainment",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2025-12-10",
+      "description": "INTRST PYMNT",
+      "amount": 4.22,
+      "category": "income",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
     }
   ],
   "bills": [
@@ -6219,6 +6783,20 @@
       "frequency": "monthly",
       "auto_pay": false,
       "paid": false
+    }
+  ],
+  "budgets": [],
+  "net_worth_history": [
+    {
+      "date": "2026-03-07",
+      "net_worth": 95162.0105,
+      "by_type": {
+        "retirement": 157665.5805,
+        "checking": 67277.54000000001,
+        "savings": 574.9300000000001,
+        "credit_card": -8791.98,
+        "loan": -121564.06
+      }
     }
   ]
 }
