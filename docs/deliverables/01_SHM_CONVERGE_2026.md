@@ -2,8 +2,11 @@
 ## SHM Converge 2026 — Presentation Framework
 
 **Target audience:** Hospitalists, clinical informaticists, care transition leads
+**Conference:** SHM Converge 2026 — March 29–April 1, Nashville, TN (Music City Center)
+**Track:** AI and Technology (expanded for 2026)
 **Format:** 20-minute oral presentation with slides
 **Tone:** Clinical, evidence-based, no business model content
+**Note:** Robert Wachter keynoting March 30; innovation-forward audience expected
 
 ---
 
@@ -22,11 +25,13 @@
 
 ### By the Numbers
 
-- **19.6%** of Medicare patients are readmitted within 30 days (CMS, 2024)
-- **~$26 billion** annual cost of unplanned readmissions in the US
-- **40–80%** of discharge medical information is lost during handoffs (Coleman & Berenson, JAMA)
-- **50%+** of discharge summaries contain at least one medication discrepancy (Kripalani et al., J Hospital Medicine)
-- **Hospital Readmissions Reduction Program (HRRP):** CMS penalizes ~2,500 hospitals annually, totaling ~$550M in payment reductions
+- **~14%** all-cause 30-day readmission rate (~3.8M readmissions annually); **~20%** for Medicare
+- **$26 billion** annual Medicare readmission cost; **$17 billion** potentially avoidable
+- **53%** median rate of medication errors/discrepancies at discharge (54-study systematic review)
+- **42–82%** of discharge medication lists contain at least one discrepancy
+- **Only 12–34%** of discharge summaries available at first post-discharge visit
+- **38%** of discharge summaries never sent to any outpatient physician
+- **HRRP FY2026:** 240 hospitals (8.1%) face penalties ≥1% — up from 208 in FY2025; FY2027 expected to spike with Medicare Advantage inclusion
 
 **The gap:** We discharge patients with a PDF and a prayer.
 
@@ -259,7 +264,7 @@ Important to set expectations clearly:
 
 | Metric | Current Baseline | Guardian One Target | Evidence Basis |
 |--------|-----------------|-------------------|---------------|
-| Medication discrepancies caught at discharge | ~50% detected by manual process | >90% detected by automated cross-reference | Kripalani et al., 2007 |
+| Medication discrepancies caught at discharge | ~47% detected by manual process (53% missed per systematic review) | >90% detected by automated cross-reference | Almanasreh et al., 2020; Kripalani et al., 2007 |
 | Post-discharge medication non-fill detection | 5–7 days (if ever) | <48 hours | Pharmacy claims integration |
 | Unscheduled follow-up detection | Often discovered at readmission | <24 hours post-discharge | Scheduling system integration |
 | 30-day readmission rate (CHF) | ~22–25% nationally | Target: 15–18% (pilot) | Based on care transition intervention literature |
@@ -309,3 +314,9 @@ Important to set expectations clearly:
 3. Forster AJ, et al. "The incidence and severity of adverse events affecting patients after discharge from the hospital." Ann Intern Med. 2003;138(3):161-167.
 4. CMS Hospital Readmissions Reduction Program. Data.CMS.gov (2024).
 5. ONC 21st Century Cures Act Final Rule. HealthIT.gov (2020).
+6. Almanasreh E, et al. "Medication reconciliation and post-discharge medication errors: a systematic review." Int J Clin Pharm. 2020.
+7. AHRQ PSNet. "Readmissions and Adverse Events After Discharge." Patient Safety Network Primer.
+8. Advisory Board. "More hospitals to face readmission penalties in FY2026." 2025.
+9. StatPearls. "Reducing Hospital Readmissions." NCBI Bookshelf. 2024.
+10. SHM Converge 2026. shmconverge.hospitalmedicine.org.
+11. Journal of Hospital Medicine. "Work Environment and Hospitalist Burnout." 2025.
