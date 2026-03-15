@@ -19,18 +19,21 @@
 
 | Segment | Size | Basis |
 |---------|------|-------|
-| US hospital readmission costs | $26B/year | CMS data, ~3.8M readmissions × $15K avg cost |
-| Care transitions technology | $4.2B by 2028 | Allied Market Research, 18.3% CAGR |
-| Clinical AI market | $17.5B by 2028 | MarketsandMarkets, healthcare AI segment |
-| Remote patient monitoring | $5.6B by 2027 | Grand View Research |
+| US Care Management Solutions | $6.6B (2024) → **$14.5B by 2030** | Grand View Research, 14.1% CAGR |
+| Global Care Coordination Software | $7.5B (2023) → **$17.2B by 2030** | Verified Market Research, 24.5% CAGR |
+| US hospital readmission costs | $26B/year ($17B avoidable) | CMS data, ~3.8M readmissions × $15K avg cost |
+| Clinical AI market | $13.7B (2024) → **$255B by 2033** | FDA AI/ML device market |
+
+**AI funding context:** US digital health startups raised **$14.2B in 2025** (35% YoY increase), with AI companies capturing **55% of all funding**. AI-enabled startups raise **$34.4M per round** on average — an **83% premium** over non-AI peers.
 
 ### Serviceable Addressable Market (SAM)
 
 **$2.1B** — US hospitals with >200 beds that have Epic EHR and active HRRP penalties
 
-- ~2,500 hospitals penalized annually under HRRP
-- Average penalty: ~$220K/year per hospital
-- Total HRRP penalties: ~$550M/year
+- **3,139 hospitals** subject to HRRP evaluation; **~78%** penalized annually
+- Average penalty: **~$217K/year** per hospital (MedPAC)
+- Total HRRP penalties: **~$521M/year** (CMS retained)
+- FY2027: penalties expected to spike when Medicare Advantage patients included (**75–82% of hospitals** projected to face penalties, average penalty rising to **0.44%**)
 - Hospitals spend 2–4x penalty amount on readmission reduction programs
 
 ### Serviceable Obtainable Market (SOM) — Year 3
@@ -84,7 +87,9 @@
 | **CarePort (WellSky)** | Post-acute care referrals, discharge planning | Acquired by WellSky ~$1.35B (2021) | Referral logistics vs. clinical verification |
 | **Collective Medical (PointClickCare)** | ED notifications, care collaboration | Acquired by PointClickCare (2021) | ED-focused vs. full transition narrative |
 | **Pieces Technologies** | AI clinical documentation, discharge summaries | Series B, ~$100M+ valuation | AI-generated summaries vs. verified narratives from source data |
-| **Abridge** | AI ambient clinical documentation | $850M+ valuation (2024) | Documentation capture vs. cross-system verification |
+| **Abridge** | AI ambient clinical documentation | **$5.3B valuation** (2025, $300M Series E led by a16z) | Documentation capture vs. cross-system verification |
+| **Hippocratic AI** | Healthcare AI agents | $1.64B valuation (2025, $141M Series B) | General-purpose health AI vs. care transition verification |
+| **Ambience Healthcare** | Clinical AI workflow | $1.04B valuation (2025, $243M Series C) | Ambient documentation vs. cross-system narrative verification |
 
 ### Guardian One's Moat
 
@@ -138,10 +143,11 @@
 
 | Tier | Firms | Why |
 |------|-------|-----|
-| **Health tech specialists** | General Catalyst (health), a16z Bio + Health, GV (Google Ventures), Andreessen Horowitz | Deep health tech networks, hospital system relationships |
-| **Enterprise health** | Oak HC/FT, Flare Capital, Transformation Capital | Specific health IT expertise, EHR ecosystem knowledge |
-| **Patient safety / quality** | Redesign Health, 7wireVentures, Define Ventures | Mission-aligned, care delivery improvement focus |
-| **Strategic** | Epic Ventures, Optum Ventures, CVS Health Ventures | Distribution channel + integration partnerships |
+| **Tier 1 — Most active** | **General Catalyst** ($750M Health Assurance Fund, embeds into HCA/Jefferson Health), **a16z Bio + Health** (#1 most active, 26 deals in 2024, $500M Lilly partnership), **GV** (led OpenEvidence $200M round), **Khosla Ventures** | Deep health tech networks, hospital system relationships, dominate mega-rounds |
+| **Early-stage specialists** | **Flare Capital** (top 5 early-stage 2025), **Oak HC/FT**, **7wireVentures** | Specific health IT expertise, EHR ecosystem knowledge, right stage |
+| **Strategic** | **Optum Ventures** (care delivery transformation), **CVS Health Ventures** (#1 growth-stage 2025), **HCA Healthcare** (direct partnerships) | Distribution channel + integration partnerships |
+
+**Note:** 75% of VC capital in 2024 came from just 30 of 391 US VC firms. a16z, General Catalyst, and Kleiner Perkins identified as dominant "Goliath" investors in 2025 health tech.
 
 ### Key Metrics for Each Round
 
@@ -170,11 +176,13 @@
 
 | Company | Acquirer | Price | Multiple | Year |
 |---------|----------|-------|----------|------|
-| CarePort Health | WellSky | ~$1.35B | ~30x revenue | 2021 |
-| Bamboo Health | Vista Equity | ~$1.5B | ~25x revenue | 2022 |
-| Vocera | Stryker | $3.09B | 15x revenue | 2022 |
-| Veracyte | (IPO) | $4.8B market cap | 18x revenue | 2023 peak |
-| Abridge | (Private, Series C) | $850M+ valuation | Pre-revenue multiple | 2024 |
+| CarePort Health | WellSky | **$1.35B** | **13x revenue / 21x adj. EBITDA** | 2020 |
+| Commure acquires Augmedix | Commure | $139M | N/A | 2024 |
+| Transcarent acquires Accolade | Transcarent | $621M | N/A (navigation) | 2025 |
+| Waystar | IPO | $968M raised, ~$3.5B mkt cap | $791M rev, 42% EBITDA margin | 2024 |
+| Abridge | Private (Series E) | **$5.3B valuation** | Pre-profit multiple | 2025 |
+
+**2024–2025 health tech IPOs** (Waystar, Tempus AI, Hinge Health, Omada, HeartFlow) added **$36.6B in combined market cap**. ~400 M&A deals closed in health tech in 2025.
 
 ---
 
@@ -184,7 +192,7 @@
 |------|----------|-----------|------------|
 | **Epic integration friction** | High | Medium | FHIR R4 is mandated; start with App Orchard listing; hire Epic-experienced engineers |
 | **Long hospital sales cycles** | High | High | 12–18 month cycles expected; seed funding must cover 2 years of runway |
-| **Regulatory reclassification** | Medium | Low | FDA CDS exemption is clear for our use case; maintain documentation compliance |
+| **Regulatory reclassification** | Medium | Low | FDA CDS exemption clear for our use case (1,250+ AI devices authorized by July 2025); maintain documentation compliance |
 | **HIPAA breach** | Critical | Low | Encrypt everything, SOC 2 / HITRUST, cyber insurance, minimal data retention |
 | **Competitor feature parity** | Medium | Medium | Verification + sovereignty are architectural advantages, not features that can be bolted on |
 | **Clinical validation timeline** | Medium | Medium | Start outcomes study at pilot launch; 6–12 months for publishable data |
