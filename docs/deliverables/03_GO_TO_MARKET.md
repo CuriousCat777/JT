@@ -54,11 +54,14 @@ Budget:                Active readmission reduction budget line item
 
 ### Named Account Examples (Illustrative)
 
-- Johns Hopkins Hospital (HRRP penalty ~$1.2M, Epic, strong hospitalist program)
-- Mount Sinai Health System (multi-hospital, Epic, NYC market)
-- University of Michigan Health (Epic, quality innovation leader)
-- Emory University Hospital (Epic, Southeast market)
-- UCLA Health (Epic, FHIR-forward, large CHF volume)
+- **Johns Hopkins Medicine** (HRRP penalty ~$1.2M, Epic, ACG System manages 200M+ individuals, strong translational entrepreneurship)
+- **Tampa General Hospital** (CareComm Command Center uses AI/predictive analytics — innovation-forward)
+- **Mount Sinai Health System** (multi-hospital, Epic, NYC market — Dr. Alfred Burger chairs SHM Converge 2026)
+- **University of Michigan Health** (Epic, quality innovation leader)
+- **Boston Children's Hospital** (routinely serves as early development partner for tech companies)
+- **UCLA Health** (Epic, FHIR-forward, large CHF volume)
+
+**Market context:** 66% of physicians now report using AI tools in practice; 71% of hospitals run at least one EHR-integrated predictive AI model. CMS launched its **Health Tech Ecosystem Early Adopter** program in 2025 — alignment with this program could accelerate hospital adoption.
 
 ---
 
@@ -213,6 +216,7 @@ Guardian One — Verified Clinical Narratives for Safe Care Transitions
 - [X] pilot LOIs / conversations (fill in when available)
 - Clinical advisors: [names when confirmed]
 - Target: first pilot deployment in [timeframe]
+- **Market context:** AI-enabled health tech startups raise $34.4M per round on average (83% premium over non-AI); median seed valuation $14.5M (Q4 2024)
 
 **Slide 7: Business Model**
 - Enterprise SaaS: $250K–$350K ACV per hospital
@@ -245,10 +249,11 @@ Guardian One — Verified Clinical Narratives for Safe Care Transitions
 |-----------|----------|
 | "Hospital sales cycles are too long" | "We target hospitals already spending on readmission reduction. Budget line items exist. Our clinical champion model shortens cycle to 6–9 months." |
 | "Epic will just build this" | "Epic builds EHR features. Verification requires cross-system data (pharmacy, wearables, other EHRs). Epic won't build a patient-owned portable narrative that works outside Epic." |
-| "How is this different from care coordination platforms?" | "CarePort and Bamboo Health move data between care settings. They don't verify it. We're a verification and error detection layer — complementary, not competitive." |
+| "How is this different from care coordination platforms?" | "CarePort ($1.35B exit at 13x revenue) and Bamboo Health move data between settings. They don't verify it. We're a verification and error detection layer — complementary, not competitive. 49% of hospitals use standalone TOC technology alongside their EMR." |
 | "How do you get hospitals to share data?" | "We don't need hospitals to share. The patient authorizes access to their own data via SMART on FHIR. 21st Century Cures Act mandates this access." |
 | "What about FDA regulation?" | "We're CDS exempt under 21st Century Cures Act Section 3060(a). We display and flag information for clinician review. We don't diagnose or recommend treatment." |
 | "Can you prove readmission reduction?" | "That's exactly what the pilot is designed to measure. We're targeting a 10–15% relative reduction in CHF readmissions. Even 5% makes the ROI positive for the hospital." |
+| "Isn't the health tech market cooling?" | "The opposite — $14.2B raised in 2025, up 35% YoY. AI companies took 55% of all funding. Five health tech IPOs in 2024–2025 added $36.6B in market cap. Capital is concentrating in clinical AI — our exact category." |
 
 ---
 
@@ -293,11 +298,12 @@ Guardian One — Verified Clinical Narratives for Safe Care Transitions
 
 ### Regulatory Gaps to Monitor
 
-1. **FDA AI/ML guidance evolution** — FDA is actively developing frameworks for AI in healthcare. Guardian One currently qualifies for CDS exemption, but regulatory landscape is shifting. Monitor closely.
-2. **State-level AI regulation** — California, Colorado, and others are passing AI-specific laws. Ensure compliance with transparency and disclosure requirements.
-3. **CMS readmission measure updates** — HRRP measure set may expand or change. Guardian One's clinical rules engine must adapt.
-4. **FHIR version updates** — FHIR R5 is emerging. Plan for backward compatibility.
-5. **Patient data portability rules** — ONC is expanding patient access requirements. Guardian One is well-positioned for this trend.
+1. **FDA AI/ML guidance evolution** — **1,250+ AI-enabled medical devices** authorized by July 2025. FDA's Predetermined Change Control Plans (Dec 2024) and Lifecycle Management guidance (Jan 2025) signal ongoing oversight tightening. Guardian One qualifies for CDS exemption under Cures Act Section 3060(a), but landscape is shifting. Maintain detailed intended-use documentation.
+2. **Information blocking enforcement** — HHS announced enforcement **"crackdown" in September 2025**. Penalties up to **$1M per violation** for health IT developers. Provider disincentives effective July 2024. **This is a tailwind** — mandated data sharing makes it easier for Guardian One to access clinical data.
+3. **State-level AI regulation** — California, Colorado, and others are passing AI-specific laws. Ensure compliance with transparency and disclosure requirements.
+4. **CMS readmission measure updates** — HRRP expanding to include Medicare Advantage patients in FY2027. **75–82% of hospitals** projected to face penalties (up from ~78% today). Increases buyer urgency significantly.
+5. **FHIR evolution** — Epic now supports FHIR R4 + CDS Hooks + FHIRcast + International Patient Summary (IPS). HTI-2 implements TEFCA (Jan 2025). Plan for FHIR R5 backward compatibility.
+6. **Patient data portability rules** — ONC expanding patient access requirements. CMS-0057 mandates 50+ APIs. Guardian One's patient-sovereign architecture is well-positioned for this trend.
 
 ---
 
