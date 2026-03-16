@@ -1,12 +1,15 @@
 """Notification system — alerts and reminders for Jeremy.
 
 Channels:
-    - ConsoleChannel  — print to stdout (always on)
-    - EmailChannel    — Gmail SMTP with App Password
-    - SMSChannel      — Twilio REST API (optional, no extra pip deps)
+    - ConsoleChannel   — print to stdout (always on)
+    - EmailChannel     — Gmail SMTP with App Password
+    - SMSChannel       — Twilio REST API (optional, no extra pip deps)
+    - iMessageChannel  — macOS iMessage via osascript (optional)
+    - PushChannel      — Generic push notification (webhook-based)
 
 Features:
     - Quiet hours (no LOW/MEDIUM alerts between 10pm–7am unless CRITICAL)
+    - Rate limiting — configurable cap per rolling window (default: 3 per 2 hours)
     - AlertRouter — turns CFO events into notifications automatically
     - DailyDigest — formats the CFO daily review into a clean HTML email
 """
@@ -18,8 +21,10 @@ import logging
 import os
 import smtplib
 import ssl
+import subprocess
+from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from enum import Enum
@@ -213,14 +218,199 @@ class SMSChannel:
 
 
 # -----------------------------------------------------------------------
-# Notification manager (extended with quiet hours)
+# iMessage channel — macOS osascript (or placeholder on Linux)
+# -----------------------------------------------------------------------
+
+class iMessageChannel:
+    """Send notifications via iMessage (macOS only).
+
+    Requires:
+        - IMESSAGE_RECIPIENT env var (phone number or Apple ID email)
+        - macOS with Messages.app configured
+
+    On non-macOS, this silently skips.
+    """
+
+    def __init__(self, recipient: str | None = None) -> None:
+        self.recipient = recipient or os.getenv("IMESSAGE_RECIPIENT", "")
+
+    @property
+    def configured(self) -> bool:
+        import platform
+        return bool(self.recipient) and platform.system() == "Darwin"
+
+    def send(self, notification: Notification) -> bool:
+        if not self.configured:
+            log.debug("iMessageChannel: not configured or not macOS, skipping")
+            return False
+
+        body = f"[{notification.urgency.value.upper()}] {notification.title}\n{notification.body}"
+        if len(body) > 2000:
+            body = body[:1997] + "..."
+
+        script = (
+            f'tell application "Messages"\n'
+            f'  set targetService to 1st account whose service type = iMessage\n'
+            f'  set targetBuddy to participant "{self.recipient}" of targetService\n'
+            f'  send "{body}" to targetBuddy\n'
+            f'end tell'
+        )
+
+        try:
+            subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, timeout=10, check=True,
+            )
+            log.info("iMessage sent to %s", self.recipient)
+            return True
+        except (subprocess.SubprocessError, FileNotFoundError):
+            log.exception("iMessageChannel: failed to send")
+            return False
+
+
+# -----------------------------------------------------------------------
+# Push notification channel — generic webhook
+# -----------------------------------------------------------------------
+
+class PushChannel:
+    """Send push notifications via a webhook endpoint.
+
+    Supports services like Pushover, ntfy.sh, or custom webhooks.
+
+    Requires:
+        - PUSH_WEBHOOK_URL env var (endpoint URL)
+        - PUSH_API_KEY env var (optional auth token)
+    """
+
+    def __init__(
+        self,
+        webhook_url: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        self.webhook_url = webhook_url or os.getenv("PUSH_WEBHOOK_URL", "")
+        self.api_key = api_key or os.getenv("PUSH_API_KEY", "")
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.webhook_url)
+
+    def send(self, notification: Notification) -> bool:
+        if not self.configured:
+            log.debug("PushChannel: not configured, skipping")
+            return False
+
+        payload = json.dumps({
+            "title": notification.title,
+            "body": notification.body,
+            "priority": notification.urgency.value,
+            "source": notification.source,
+            "timestamp": notification.timestamp,
+        }).encode()
+
+        req = Request(self.webhook_url, data=payload, method="POST")
+        req.add_header("Content-Type", "application/json")
+        if self.api_key:
+            req.add_header("Authorization", f"Bearer {self.api_key}")
+
+        try:
+            with urlopen(req, timeout=10) as resp:
+                log.info("Push notification sent: %s", resp.status)
+                return True
+        except (URLError, Exception):
+            log.exception("PushChannel: failed to send")
+            return False
+
+
+# -----------------------------------------------------------------------
+# Rate limiter — rolling window enforcement
+# -----------------------------------------------------------------------
+
+class NotificationRateLimiter:
+    """Enforces a maximum number of notifications per rolling time window.
+
+    Default: 3 notifications per 2-hour window.
+    CRITICAL notifications always bypass the rate limit.
+    """
+
+    def __init__(
+        self,
+        max_count: int = 3,
+        window: timedelta = timedelta(hours=2),
+    ) -> None:
+        self.max_count = max_count
+        self.window = window
+        self._timestamps: deque[datetime] = deque()
+        self._suppressed: list[Notification] = []
+
+    def _prune(self, now: datetime) -> None:
+        cutoff = now - self.window
+        while self._timestamps and self._timestamps[0] < cutoff:
+            self._timestamps.popleft()
+
+    def allow(self, notification: Notification) -> bool:
+        """Check if notification is allowed under rate limit.
+
+        CRITICAL notifications always pass through.
+        """
+        if notification.urgency == Urgency.CRITICAL:
+            return True
+
+        now = datetime.now(timezone.utc)
+        self._prune(now)
+
+        if len(self._timestamps) >= self.max_count:
+            self._suppressed.append(notification)
+            log.info(
+                "Rate limit reached (%d/%d in %s) — suppressing: %s",
+                len(self._timestamps), self.max_count, self.window, notification.title,
+            )
+            return False
+
+        self._timestamps.append(now)
+        return True
+
+    def record(self) -> None:
+        """Record a sent notification timestamp (called after send)."""
+        pass  # Timestamps are recorded in allow()
+
+    @property
+    def suppressed_count(self) -> int:
+        return len(self._suppressed)
+
+    @property
+    def remaining(self) -> int:
+        self._prune(datetime.now(timezone.utc))
+        return max(0, self.max_count - len(self._timestamps))
+
+    def flush_suppressed(self) -> list[Notification]:
+        """Return and clear suppressed notifications."""
+        flushed = list(self._suppressed)
+        self._suppressed.clear()
+        return flushed
+
+    def status(self) -> dict[str, Any]:
+        """Current rate limiter status."""
+        self._prune(datetime.now(timezone.utc))
+        return {
+            "max_per_window": self.max_count,
+            "window_hours": self.window.total_seconds() / 3600,
+            "sent_in_window": len(self._timestamps),
+            "remaining": self.remaining,
+            "suppressed": self.suppressed_count,
+        }
+
+
+# -----------------------------------------------------------------------
+# Notification manager (extended with quiet hours + rate limiting)
 # -----------------------------------------------------------------------
 
 class NotificationManager:
     """Dispatches notifications through registered channels.
 
-    Supports quiet hours: LOW and MEDIUM alerts are held (not sent)
-    between quiet_start and quiet_end unless urgency is HIGH or CRITICAL.
+    Features:
+        - Quiet hours: LOW and MEDIUM alerts held between quiet_start and quiet_end
+        - Rate limiting: max notifications per rolling window (default 3 per 2 hours)
+        - CRITICAL notifications always bypass both quiet hours and rate limits
     """
 
     def __init__(
@@ -228,6 +418,8 @@ class NotificationManager:
         quiet_start: time = time(22, 0),   # 10:00 PM
         quiet_end: time = time(7, 0),      # 7:00 AM
         timezone_name: str = "America/Chicago",
+        rate_limit_max: int = 3,
+        rate_limit_window: timedelta = timedelta(hours=2),
     ) -> None:
         self._channels: list[NotificationChannel] = [ConsoleChannel()]
         self._history: list[Notification] = []
@@ -235,6 +427,10 @@ class NotificationManager:
         self.quiet_start = quiet_start
         self.quiet_end = quiet_end
         self.timezone_name = timezone_name
+        self.rate_limiter = NotificationRateLimiter(
+            max_count=rate_limit_max,
+            window=rate_limit_window,
+        )
 
     def add_channel(self, channel: NotificationChannel) -> None:
         self._channels.append(channel)
@@ -271,6 +467,11 @@ class NotificationManager:
             self._history.append(notification)
             return notification
 
+        # Rate limiting: suppress if over limit (CRITICAL always passes)
+        if not self.rate_limiter.allow(notification):
+            self._history.append(notification)
+            return notification
+
         for channel in self._channels:
             try:
                 channel.send(notification)
@@ -283,6 +484,8 @@ class NotificationManager:
         """Send all held (quiet-hours) notifications now. Returns what was sent."""
         flushed = list(self._held)
         for notification in flushed:
+            if not self.rate_limiter.allow(notification):
+                continue
             for channel in self._channels:
                 try:
                     channel.send(notification)
@@ -297,6 +500,10 @@ class NotificationManager:
     @property
     def held_count(self) -> int:
         return len(self._held)
+
+    def rate_limit_status(self) -> dict[str, Any]:
+        """Get current rate limiter status."""
+        return self.rate_limiter.status()
 
 
 # -----------------------------------------------------------------------
@@ -583,18 +790,31 @@ class AlertRouter:
 def build_notification_stack(
     enable_email: bool = True,
     enable_sms: bool = True,
+    enable_imessage: bool = True,
+    enable_push: bool = True,
     quiet_start: time = time(22, 0),
     quiet_end: time = time(7, 0),
     timezone_name: str = "America/Chicago",
+    rate_limit_max: int = 3,
+    rate_limit_window_hours: float = 2.0,
 ) -> tuple[NotificationManager, AlertRouter]:
     """Create a NotificationManager + AlertRouter wired to all configured channels.
 
     Channels are added only if their credentials are present in env vars.
     Console is always active.
 
+    Rate limiting defaults to 3 notifications per 2-hour rolling window.
+    CRITICAL notifications always bypass the rate limit.
+
     Returns (manager, router).
     """
-    mgr = NotificationManager(quiet_start=quiet_start, quiet_end=quiet_end, timezone_name=timezone_name)
+    mgr = NotificationManager(
+        quiet_start=quiet_start,
+        quiet_end=quiet_end,
+        timezone_name=timezone_name,
+        rate_limit_max=rate_limit_max,
+        rate_limit_window=timedelta(hours=rate_limit_window_hours),
+    )
 
     if enable_email:
         email = EmailChannel()
@@ -607,6 +827,18 @@ def build_notification_stack(
         if sms.configured:
             mgr.add_channel(sms)
             log.info("SMSChannel configured → %s", sms.to_number)
+
+    if enable_imessage:
+        imsg = iMessageChannel()
+        if imsg.configured:
+            mgr.add_channel(imsg)
+            log.info("iMessageChannel configured → %s", imsg.recipient)
+
+    if enable_push:
+        push = PushChannel()
+        if push.configured:
+            mgr.add_channel(push)
+            log.info("PushChannel configured → %s", push.webhook_url)
 
     router = AlertRouter(mgr)
     return mgr, router

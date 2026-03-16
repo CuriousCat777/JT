@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guardian One — Dev Panel</title>
+<title>Guardian One — Command Center</title>
 <style>
 :root {
   /* Refined light palette — warm ivory & slate */
@@ -465,10 +465,11 @@ tr:hover td { background: var(--bg-primary); }
   <!-- Header -->
   <header class="header">
     <div class="header-left">
-      <div class="logo">GUARDIAN ONE <span>// DEV PANEL</span></div>
+      <div class="logo">GUARDIAN ONE <span>Command Center</span></div>
     </div>
     <div class="header-status">
       <div class="pulse"></div>
+      <span id="headerGreeting" style="margin-right: 12px; font-weight: 500; color: var(--text-primary);"></span>
       <span id="headerTime"></span>
     </div>
   </header>
@@ -476,16 +477,28 @@ tr:hover td { background: var(--bg-primary); }
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="nav-section">
-      <div class="nav-label">Overview</div>
-      <div class="nav-item active" data-panel="dashboard">
-        <span class="nav-icon">&#9632;</span> Dashboard
+      <div class="nav-label">Daily</div>
+      <div class="nav-item active" data-panel="morning">
+        <span class="nav-icon">&#9788;</span> Morning Brief
       </div>
-      <div class="nav-item" data-panel="agents">
-        <span class="nav-icon">&#9654;</span> Agents
+      <div class="nav-item" data-panel="dashboard">
+        <span class="nav-icon">&#9632;</span> Dashboard
       </div>
     </div>
     <div class="nav-section">
-      <div class="nav-label">H.O.M.E. L.I.N.K.</div>
+      <div class="nav-label">Operations</div>
+      <div class="nav-item" data-panel="agents">
+        <span class="nav-icon">&#9654;</span> Agents
+      </div>
+      <div class="nav-item" data-panel="websites">
+        <span class="nav-icon">&#9741;</span> Websites
+      </div>
+      <div class="nav-item" data-panel="finances">
+        <span class="nav-icon">&#9830;</span> Finances
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Infrastructure</div>
       <div class="nav-item" data-panel="services">
         <span class="nav-icon">&#9881;</span> Services
       </div>
@@ -513,8 +526,90 @@ tr:hover td { background: var(--bg-primary); }
   <!-- Main Content -->
   <main class="main">
 
+    <!-- Morning Brief Panel -->
+    <div id="panel-morning" class="panel active">
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;" id="morningTitle">Good morning, Jeremy.</h2>
+        <p style="color: var(--text-muted); font-size: 13px;" id="morningDate"></p>
+      </div>
+
+      <!-- Quick stats row -->
+      <div class="grid-4" id="morningStats"></div>
+
+      <!-- Two-column: websites + notifications -->
+      <div class="grid-2" style="margin-top: 16px;">
+        <div class="card">
+          <div class="card-title">Websites</div>
+          <div id="morningWebsites">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border-subtle)">
+              <div>
+                <div style="font-weight:600;font-size:14px;">jtmdai.com</div>
+                <div style="font-size:12px;color:var(--text-muted)">JTMD AI — Business</div>
+              </div>
+              <span class="agent-badge badge-idle">LIVE</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+              <div>
+                <div style="font-weight:600;font-size:14px;">drjeremytabernero.org</div>
+                <div style="font-size:12px;color:var(--text-muted)">Personal & Professional</div>
+              </div>
+              <span class="agent-badge badge-error">DOWN</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Notifications</div>
+          <div id="morningNotifications">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+              <span style="font-size:13px;color:var(--text-secondary)">Rate limit</span>
+              <span style="font-size:13px;font-weight:600;">3 per 2 hours</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+              <span style="font-size:13px;color:var(--text-secondary)">Channels</span>
+              <span style="font-size:12px;color:var(--text-muted)">Console, Email, SMS, iMessage, Push</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+              <span style="font-size:13px;color:var(--text-secondary)">Quiet hours</span>
+              <span style="font-size:13px;font-weight:500;">10 PM — 7 AM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent status + Audit -->
+      <div class="grid-2" style="margin-top: 16px;">
+        <div class="card">
+          <div class="card-title">Agent Status</div>
+          <div id="morningAgents"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Recent Activity</div>
+          <div id="morningAudit"></div>
+        </div>
+      </div>
+
+      <!-- Service health -->
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-title">Service Health</div>
+        <div class="table-wrap">
+          <table id="morningServices">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Circuit</th>
+                <th>Success Rate</th>
+                <th>Latency</th>
+                <th>Risk</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Dashboard Panel -->
-    <div id="panel-dashboard" class="panel active">
+    <div id="panel-dashboard" class="panel">
       <div class="grid-4" id="dashStats"></div>
       <div class="grid-2" style="margin-top: 16px;">
         <div class="card">
@@ -552,6 +647,111 @@ tr:hover td { background: var(--bg-primary); }
         <button class="btn btn-primary" onclick="runAllAgents()">Run All Agents</button>
       </div>
       <div class="grid-2" id="agentCards"></div>
+    </div>
+
+    <!-- Websites Panel -->
+    <div id="panel-websites" class="panel">
+      <h3 style="color: var(--text-primary); margin-bottom: 16px;">Website Management</h3>
+      <div class="grid-2" id="websiteCards">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div>
+              <div style="font-weight:700;font-size:16px;">jtmdai.com</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">JTMD AI — AI Solutions & Technology</div>
+            </div>
+            <span class="agent-badge badge-idle">LIVE</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.8;">
+            <div>Type: <strong>Business</strong></div>
+            <div>Hosting: <strong>Cloud VPS</strong></div>
+            <div>Pages: index, about, services, contact, case-studies</div>
+            <div>Features: service catalog, case studies, AI demos, contact form</div>
+          </div>
+          <div style="margin-top:14px;" class="btn-group">
+            <button class="btn btn-sm" onclick="toast('Building jtmdai.com...')">Build</button>
+            <button class="btn btn-sm" onclick="toast('Deploying jtmdai.com...')">Deploy</button>
+          </div>
+        </div>
+        <div class="card" style="border-color: var(--red); border-left: 3px solid var(--red);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div>
+              <div style="font-weight:700;font-size:16px;">drjeremytabernero.org</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Personal & Professional</div>
+            </div>
+            <span class="agent-badge badge-error">DOWN</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.8;">
+            <div>Type: <strong>Professional</strong></div>
+            <div>Hosting: <strong>Cloud VPS</strong></div>
+            <div>Pages: index, about, contact, CV, publications</div>
+            <div>Features: CV download, publications list, contact form</div>
+            <div style="color:var(--red);font-weight:500;margin-top:4px;">Action needed: site is offline</div>
+          </div>
+          <div style="margin-top:14px;" class="btn-group">
+            <button class="btn btn-sm" onclick="toast('Building drjeremytabernero.org...')">Build</button>
+            <button class="btn btn-sm btn-primary" onclick="toast('Deploying drjeremytabernero.org...')">Deploy Now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Finances Panel -->
+    <div id="panel-finances" class="panel">
+      <h3 style="color: var(--text-primary); margin-bottom: 16px;">Financial Overview</h3>
+      <div class="grid-3" id="financeStats">
+        <div class="stat-card">
+          <div class="stat-label">Primary Tracker</div>
+          <div style="font-size:18px;font-weight:700;margin-top:6px;color:var(--accent);">Rocket Money</div>
+          <div class="stat-sub">API mode, syncing via CFO agent</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Providers</div>
+          <div style="font-size:18px;font-weight:700;margin-top:6px;">3 Active</div>
+          <div class="stat-sub">Plaid, Empower, Rocket Money</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Dashboard</div>
+          <div style="font-size:18px;font-weight:700;margin-top:6px;color:var(--green);">Ready</div>
+          <div class="stat-sub">Excel dashboard with password lock</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title">Quick Actions</div>
+        <div class="btn-group" style="flex-wrap:wrap;gap:10px;">
+          <button class="btn" onclick="toast('Running CFO daily review...')">Run Daily Review</button>
+          <button class="btn" onclick="toast('Syncing financial data...')">Sync All Accounts</button>
+          <button class="btn" onclick="toast('Generating Excel dashboard...')">Generate Dashboard</button>
+          <button class="btn" onclick="toast('Checking for Rocket Money CSV in Gmail...')">Check Gmail for CSV</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title">Connected Services</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Service</th><th>Type</th><th>Mode</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr>
+                <td style="font-weight:600;">Rocket Money</td>
+                <td>Account aggregation</td>
+                <td>API + CSV fallback</td>
+                <td><span style="color:var(--green);font-weight:600;">Active</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;">Plaid</td>
+                <td>Direct bank connections</td>
+                <td>OAuth + Link</td>
+                <td><span style="color:var(--green);font-weight:600;">Active</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;">Empower</td>
+                <td>Retirement & investments</td>
+                <td>API key</td>
+                <td><span style="color:var(--green);font-weight:600;">Active</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Services Panel -->
@@ -704,6 +904,90 @@ document.querySelectorAll('.nav-item').forEach(item => {
 });
 
 // ---------------------------------------------------------------------------
+// Morning Brief
+// ---------------------------------------------------------------------------
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+async function loadMorning() {
+  const greeting = getGreeting();
+  document.getElementById('morningTitle').textContent = `${greeting}, Jeremy.`;
+  document.getElementById('headerGreeting').textContent = greeting;
+  document.getElementById('morningDate').textContent = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  const [status, health, audit] = await Promise.all([
+    api('/api/status'),
+    api('/api/homelink/health'),
+    api('/api/audit?limit=8'),
+  ]);
+
+  const activeAgents = status.agents.filter(a => a.enabled).length;
+  const totalAgents = status.agents.length;
+  const maxRisk = health.length ? Math.max(...health.map(h => h.risk_score)) : 0;
+  const avgSuccess = health.length
+    ? (health.reduce((s, h) => s + h.success_rate, 0) / health.length * 100).toFixed(0)
+    : 100;
+
+  document.getElementById('morningStats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Agents Active</div>
+      <div class="stat-value" style="color:var(--green)">${activeAgents}<span style="font-size:14px;color:var(--text-muted);font-weight:400;">/${totalAgents}</span></div>
+      <div class="stat-sub">all systems operational</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Services</div>
+      <div class="stat-value" style="color:var(--accent)">${health.length}</div>
+      <div class="stat-sub">monitored integrations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Risk Level</div>
+      <div class="stat-value" style="color:${maxRisk >= 4 ? 'var(--red)' : maxRisk >= 3 ? 'var(--yellow)' : 'var(--green)'}">${maxRisk}/5</div>
+      <div class="stat-sub">${maxRisk <= 2 ? 'looking good' : maxRisk <= 3 ? 'monitor closely' : 'needs attention'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Success Rate</div>
+      <div class="stat-value" style="color:var(--green)">${avgSuccess}%</div>
+      <div class="stat-sub">across all services</div>
+    </div>
+  `;
+
+  // Agent mini-list
+  document.getElementById('morningAgents').innerHTML = status.agents.map(a => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+      <span style="font-weight:500;font-size:13px;">${a.name}</span>
+      <span class="agent-badge ${badgeClass(a.status)}">${a.status}</span>
+    </div>
+  `).join('');
+
+  // Audit mini-list
+  document.getElementById('morningAudit').innerHTML = audit.slice(0, 6).map(e => `
+    <div class="log-entry" style="border:none;padding:5px 0">
+      <span class="log-sev ${sevClass(e.severity)}">${e.severity}</span>
+      <span class="log-agent">${e.agent}</span>
+      <span class="log-action">${e.action}</span>
+    </div>
+  `).join('') || '<div style="color:var(--text-muted);padding:8px 0">No recent activity</div>';
+
+  // Services table
+  const tbody = document.querySelector('#morningServices tbody');
+  tbody.innerHTML = health.map(h => `
+    <tr>
+      <td style="font-weight:600">${h.service}</td>
+      <td><span style="color:${h.circuit_state === 'closed' ? 'var(--green)' : h.circuit_state === 'open' ? 'var(--red)' : 'var(--yellow)'}">${h.circuit_state}</span></td>
+      <td>${(h.success_rate * 100).toFixed(0)}%</td>
+      <td>${h.avg_latency_ms.toFixed(0)}ms</td>
+      <td>${riskMeter(h.risk_score)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="color:var(--text-muted)">No services registered</td></tr>';
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
 async function loadDashboard() {
@@ -729,7 +1013,7 @@ async function loadDashboard() {
     </div>
     <div class="stat-card">
       <div class="stat-label">Services</div>
-      <div class="stat-value" style="color:var(--cyan)">${health.length}</div>
+      <div class="stat-value" style="color:var(--accent)">${health.length}</div>
       <div class="stat-sub">monitored integrations</div>
     </div>
     <div class="stat-card">
@@ -746,8 +1030,8 @@ async function loadDashboard() {
 
   // Agent mini-list
   document.getElementById('dashAgents').innerHTML = status.agents.map(a => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(42,58,78,0.3)">
-      <span style="font-weight:600">${a.name}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+      <span style="font-weight:500">${a.name}</span>
       <span class="agent-badge ${badgeClass(a.status)}">${a.status}</span>
     </div>
   `).join('');
@@ -864,7 +1148,7 @@ async function loadVault() {
   document.getElementById('vaultStats').innerHTML = `
     <div class="stat-card">
       <div class="stat-label">Total Credentials</div>
-      <div class="stat-value" style="color:var(--cyan)">${h.total_credentials}</div>
+      <div class="stat-value" style="color:var(--accent)">${h.total_credentials}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Due for Rotation</div>
@@ -903,7 +1187,7 @@ async function loadRegistry() {
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">${r.description}</div>
       <div style="font-size:11px;color:var(--text-muted)">
         Auth: ${r.auth_method} &middot; Agent: ${r.owner_agent || 'system'} &middot; Threats: ${r.threat_count}
-        &middot; URL: <span style="color:var(--cyan)">${r.base_url}</span>
+        &middot; URL: <span style="color:var(--accent)">${r.base_url}</span>
       </div>
       <div style="margin-top:8px">
         <button class="btn btn-sm" onclick="showThreats('${r.name}')">View Threat Model</button>
@@ -1032,8 +1316,11 @@ async function loadSummary() {
 // Loader map & init
 // ---------------------------------------------------------------------------
 const loaders = {
+  morning: loadMorning,
   dashboard: loadDashboard,
   agents: loadAgents,
+  websites: () => {},   // Static content, no loader needed
+  finances: () => {},   // Static content, no loader needed
   services: loadServices,
   vault: loadVault,
   registry: loadRegistry,
@@ -1047,13 +1334,14 @@ function updateClock() {
     new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' });
 }
 
-// Boot
+// Boot — morning brief is the default landing page
 updateClock();
 setInterval(updateClock, 1000);
-loadDashboard();
+loadMorning();
 
-// Auto-refresh dashboard every 30s
+// Auto-refresh morning brief every 30s if active
 setInterval(() => {
+  if (document.querySelector('#panel-morning.active')) loadMorning();
   if (document.querySelector('#panel-dashboard.active')) loadDashboard();
 }, 30000);
 </script>

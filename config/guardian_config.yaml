@@ -1,23 +1,47 @@
 # Guardian One — System Configuration
 # ====================================
 # Owner: Jeremy Paulo Salvino Tabernero
-# Last updated: 2026-02-19
+# Last updated: 2026-03-16
 
 owner: "Jeremy Paulo Salvino Tabernero"
 timezone: "America/Chicago"
 daily_summary_hour: 7   # 7 AM local time
 data_dir: "data"
 log_dir: "logs"
+phone: "6028100527"
 
 notifications:
   email_enabled: true
   sms_enabled: true
+  imessage_enabled: true       # iMessage via macOS Messages.app
+  push_enabled: true           # Push notifications via webhook
   quiet_hours_start: "22:00"   # 10 PM — hold LOW/MEDIUM alerts
   quiet_hours_end: "07:00"     # 7 AM — flush held alerts
   daily_digest: true           # Send daily financial summary email
   bill_reminders: true         # Alert when bills are due/overdue
   budget_alerts: true          # Alert when budget is near/over limit
   transaction_flags: true      # Alert on suspicious transactions
+  rate_limit:
+    max_per_window: 3          # Max 3 notifications per rolling window
+    window_hours: 2            # 2-hour rolling window
+    bypass_critical: true      # CRITICAL notifications always get through
+
+# External services & platforms
+services:
+  notion:
+    enabled: true
+    mode: write_only           # Never read from Notion for decisions
+  google:
+    calendar: true
+    gmail: true
+  zapier:
+    enabled: true              # Workflow automation bridge
+    use_case: "cross-service triggers and automation"
+  cloud:
+    provider: "cloud_vps"      # Cloud VPS for hosting
+    hosting:
+      jtmdai_com: true         # Live
+      drjeremytabernero_org: false  # Down — needs redeployment
 
 security:
   encryption_enabled: true
@@ -60,7 +84,9 @@ agents:
       - bills
       - scenarios
     custom:
+      primary_tracker: rocket_money   # Rocket Money is the primary finance tracker
       rocket_money_sync: true
+      rocket_money_mode: api          # api or csv (csv via Gmail attachment)
       bill_alert_days_before: 3
       encrypt_financial_records: true
 
@@ -99,6 +125,7 @@ agents:
         drjeremytabernero.org:
           label: "Dr. Jeremy Tabernero — Personal & Professional"
           site_type: professional
+          status: down              # Currently offline — needs redeployment
           pages:
             - index.html
             - about.html
@@ -109,11 +136,12 @@ agents:
             - contact_form
             - cv_download
             - publications_list
-          hosting: tbd
+          hosting: cloud_vps
           notion_dashboard: true
         jtmdai.com:
           label: "JTMD AI — AI Solutions & Technology"
           site_type: business
+          status: live              # Currently live and operational
           pages:
             - index.html
             - about.html
@@ -125,5 +153,5 @@ agents:
             - case_studies
             - contact_form
             - ai_demos
-          hosting: tbd
+          hosting: cloud_vps
           notion_dashboard: true
