@@ -126,7 +126,10 @@ class GuardianOne:
                     name=record.name,
                     base_url=record.base_url,
                     rate_limit=RateLimitConfig(max_requests=60, window_seconds=60),
-                    allowed_agents=[record.owner_agent] if record.owner_agent else [],
+                    allowed_agents=(
+                        [record.owner_agent] + getattr(record, "additional_agents", [])
+                        if record.owner_agent else []
+                    ),
                 ))
 
     # ------------------------------------------------------------------

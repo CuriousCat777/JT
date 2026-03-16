@@ -593,7 +593,7 @@ class TestRegistryIntegration:
         assert len(phi_threats) >= 1
 
     def test_notion_integration_owner_agent(self):
-        assert NOTION_INTEGRATION.owner_agent == "guardian_one"
+        assert NOTION_INTEGRATION.owner_agent == "notion_sync"
 
     def test_notion_integration_vault_keys(self):
         assert "NOTION_TOKEN" in NOTION_INTEGRATION.vault_keys
