@@ -87,9 +87,43 @@ agents:
       - security_scans
       - uptime_records
     custom:
-      domains: []
+      domains:
+        - drjeremytabernero.org
+        - jtmdai.com
       enforce_security_headers: true
       ssl_required: true
       uptime_check_interval_minutes: 5
       coordinate_with_archivist: true
       coordinate_with_cfo: true
+      sites:
+        drjeremytabernero.org:
+          label: "Dr. Jeremy Tabernero — Personal & Professional"
+          site_type: professional
+          pages:
+            - index.html
+            - about.html
+            - contact.html
+            - cv.html
+            - publications.html
+          features:
+            - contact_form
+            - cv_download
+            - publications_list
+          hosting: tbd
+          notion_dashboard: true
+        jtmdai.com:
+          label: "JTMD AI — AI Solutions & Technology"
+          site_type: business
+          pages:
+            - index.html
+            - about.html
+            - services.html
+            - contact.html
+            - case-studies.html
+          features:
+            - service_catalog
+            - case_studies
+            - contact_form
+            - ai_demos
+          hosting: tbd
+          notion_dashboard: true

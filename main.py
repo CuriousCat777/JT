@@ -20,6 +20,10 @@ Usage:
     python main.py --calendar-week  # Show this week's schedule
     python main.py --calendar-sync  # Sync Google Calendar → Chronos + push bills to calendar
     python main.py --calendar-auth  # Authorize Google Calendar (opens browser for OAuth)
+    python main.py --websites           # Show status of all managed websites
+    python main.py --website-build DOMAIN  # Build a site (or 'all')
+    python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
+    python main.py --website-sync       # Push website dashboards to Notion
 """
 
 from __future__ import annotations
@@ -245,6 +249,10 @@ def main() -> None:
     parser.add_argument("--calendar-week", action="store_true", help="Show this week's schedule")
     parser.add_argument("--calendar-sync", action="store_true", help="Sync Google Calendar + push bills to calendar")
     parser.add_argument("--calendar-auth", action="store_true", help="Authorize Google Calendar (OAuth flow)")
+    parser.add_argument("--websites", action="store_true", help="Show status of all managed websites")
+    parser.add_argument("--website-build", type=str, default=None, help="Build a website by domain (or 'all')")
+    parser.add_argument("--website-deploy", type=str, default=None, help="Deploy a website by domain (or 'all')")
+    parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -519,6 +527,71 @@ def main() -> None:
                 print(f"  [BUDGET] {alert}")
         else:
             print("CFO agent not available.")
+    elif args.websites or args.website_build or args.website_deploy or args.website_sync:
+        from guardian_one.agents.website_manager import WebsiteManager
+
+        wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
+        mgr = WebsiteManager(config=wa_cfg, audit=guardian.audit)
+        mgr.initialize()
+
+        if args.website_build:
+            domain = args.website_build
+            if domain == "all":
+                results = mgr.build_all()
+                for d, build in results.items():
+                    print(f"  [{build.status.upper()}] {d} — {len(build.pages_built)} pages built")
+            else:
+                build = mgr.build_site(domain)
+                print(f"  [{build.status.upper()}] {domain} — {len(build.pages_built)} pages built")
+                if build.errors:
+                    for err in build.errors:
+                        print(f"    [ERROR] {err}")
+
+        elif args.website_deploy:
+            domain = args.website_deploy
+            if domain == "all":
+                # Build first, then deploy
+                mgr.build_all()
+                results = mgr.deploy_all()
+                for d, result in results.items():
+                    if result.get("success"):
+                        print(f"  [DEPLOYED] {d} — {result['pages_deployed']} pages, SSL enabled")
+                    else:
+                        print(f"  [FAILED] {d} — {result.get('error', 'unknown')}")
+            else:
+                mgr.build_site(domain)
+                result = mgr.deploy_site(domain)
+                if result.get("success"):
+                    print(f"  [DEPLOYED] {domain} — {result['pages_deployed']} pages, SSL enabled")
+                else:
+                    print(f"  [FAILED] {domain} — {result.get('error', 'unknown')}")
+
+        elif args.website_sync:
+            from guardian_one.integrations.notion_website_sync import NotionWebsiteDashboard
+            from guardian_one.integrations.notion_sync import NotionSync
+            import os
+
+            root_page_id = os.environ.get("NOTION_ROOT_PAGE_ID", "")
+            if not root_page_id:
+                print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+            else:
+                sync = NotionSync(
+                    gateway=guardian.gateway,
+                    vault=guardian.vault,
+                    audit=guardian.audit,
+                    root_page_id=root_page_id,
+                )
+                dashboard = NotionWebsiteDashboard(sync, guardian.audit)
+                all_data = {d: mgr.site_dashboard_data(d) for d in mgr.list_sites()}
+                results = dashboard.sync_all(all_data)
+                for key, sr in results.items():
+                    status = "OK" if sr.success else "FAILED"
+                    print(f"  [{status}] {key} — {sr.blocks_written} blocks written")
+
+        else:
+            # --websites: show status
+            print(mgr.summary())
+
     elif args.summary:
         print(guardian.daily_summary())
     else:
