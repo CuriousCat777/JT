@@ -66,7 +66,7 @@ class NotionWebsiteDashboard:
         children = [
             self._sync._callout(
                 f"Website Management Hub | Last sync: {now}",
-                "#",
+                "🌐",
             ),
             self._sync._paragraph(
                 "Dashboards for all managed web properties. "
@@ -149,7 +149,7 @@ class NotionWebsiteDashboard:
         children = [
             self._sync._callout(
                 f"{deploy_status} | SSL: {ssl_status} | Security: {sec_status}",
-                "#" if deployed else "!",
+                "🟢" if deployed else "🔴",
             ),
             self._sync._heading("Site Overview", 2),
             self._sync._bulleted(f"Domain: {domain}"),
@@ -258,7 +258,7 @@ class NotionWebsiteDashboard:
         children = [
             self._sync._callout(
                 f"{live_count}/{total_sites} sites live | Last sync: {now}",
-                "#",
+                "🌐",
             ),
             self._sync._heading("Managed Websites", 2),
         ]
