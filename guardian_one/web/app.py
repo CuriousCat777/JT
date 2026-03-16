@@ -353,7 +353,7 @@ def run_devpanel(guardian: GuardianOne | None = None, port: int = 5100, debug: b
     if guardian is not None:
         _guardian = guardian
     app = create_app()
-    print(f"\n  Guardian One Dev Panel")
+    print(f"\n  Guardian One — Command Center")
     print(f"  http://localhost:{port}")
     print(f"  Press Ctrl+C to stop.\n")
     app.run(host="0.0.0.0", port=port, debug=debug)
