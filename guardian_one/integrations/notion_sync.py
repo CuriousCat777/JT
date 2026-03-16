@@ -1111,3 +1111,223 @@ class NotionSync:
             "page_keys": list(self._page_cache.keys()),
             "token_available": self._get_token() is not None,
         }
+
+    # ------------------------------------------------------------------
+    # Preview — render Notion workspace structure to terminal
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _render_block(block: dict[str, Any], indent: int = 4) -> str:
+        """Convert a Notion block dict to a terminal-friendly string."""
+        pad = " " * indent
+        btype = block.get("type", "")
+
+        if btype == "divider":
+            return f"{pad}{'─' * 56}"
+
+        if btype == "table_of_contents":
+            return f"{pad}[Table of Contents]"
+
+        # Extract text from rich_text
+        sub = block.get(btype, {})
+        rich = sub.get("rich_text", [])
+        text = "".join(rt.get("text", {}).get("content", "") for rt in rich)
+
+        if btype.startswith("heading_"):
+            level = int(btype[-1])
+            prefix = "#" * level
+            return f"{pad}{prefix} {text}"
+        if btype == "paragraph":
+            return f"{pad}{text}"
+        if btype == "bulleted_list_item":
+            return f"{pad}  - {text}"
+        if btype == "callout":
+            emoji = sub.get("icon", {}).get("emoji", "!")
+            return f"{pad}[{emoji}] {text}"
+        if btype == "code":
+            lang = sub.get("language", "")
+            return f"{pad}```{lang}\n{pad}{text}\n{pad}```"
+
+        return f"{pad}({btype}) {text}"
+
+    def preview_workspace(
+        self,
+        agents: list[dict[str, Any]],
+        roadmap_phases: list[dict[str, Any]],
+        services: list[dict[str, Any]],
+        deliverables: list[dict[str, Any]],
+        decisions: list[dict[str, Any]] | None = None,
+        system_status: str = "operational",
+    ) -> str:
+        """Render a terminal preview of the full Notion workspace.
+
+        Shows exactly what pages, databases, and blocks would be created
+        on a real sync — no API credentials required.
+        """
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        lines: list[str] = []
+        w = lines.append
+
+        w("=" * 64)
+        w("  NOTION WORKSPACE PREVIEW — Guardian One")
+        w(f"  Generated: {now}")
+        w("=" * 64)
+        w("")
+        w(f"  Root Page: Guardian One Workspace")
+        w(f"  {'─' * 58}")
+        w("")
+
+        # ── 1. Command Center ──
+        w("  [PAGE] Command Center")
+        w("  " + "─" * 40)
+        cc_children = [
+            self._callout(f"System Status: {system_status} | Last sync: {now}", "#"),
+            self._table_of_contents(),
+            self._heading("Agent Status", 2),
+        ]
+        for agent in agents:
+            name = str(agent.get("name", "unknown"))
+            status = str(agent.get("status", "unknown"))
+            health = str(agent.get("health_score", "N/A"))
+            schedule = str(agent.get("schedule", "N/A"))
+            cc_children.append(self._heading(name, 3))
+            cc_children.append(self._bulleted(f"Status: {status}"))
+            cc_children.append(self._bulleted(f"Health score: {health}"))
+            cc_children.append(self._bulleted(f"Schedule: {schedule}"))
+        cc_children.append(self._divider())
+        cc_children.append(self._heading("Quick Links", 2))
+        cc_children.append(self._bulleted("Agent Registry -- full agent database"))
+        cc_children.append(self._bulleted("Roadmap -- production deployment progress"))
+        cc_children.append(self._bulleted("Deliverables -- SHM, business model, GTM"))
+        for b in cc_children:
+            w(self._render_block(b))
+        w("")
+
+        # ── 2. Agent Registry ──
+        w("  [DATABASE] Agent Registry")
+        w("  " + "─" * 40)
+        w("    | Name             | Status  | Health | Schedule   | Resources      |")
+        w("    |" + "─" * 17 + "|" + "─" * 9 + "|" + "─" * 8 + "|" + "─" * 12 + "|" + "─" * 16 + "|")
+        for agent in agents:
+            name = str(agent.get("name", ""))[:15]
+            status = str(agent.get("status", ""))[:7]
+            health = str(agent.get("health_score", ""))[:6]
+            sched = str(agent.get("schedule", ""))[:10]
+            res = str(agent.get("allowed_resources", "default"))[:14]
+            w(f"    | {name:<15} | {status:<7} | {health:<6} | {sched:<10} | {res:<14} |")
+        w("")
+
+        # ── 3. Production Roadmap ──
+        w("  [DATABASE] Production Roadmap")
+        w("  " + "─" * 40)
+        w("    | Phase                              | Status      | Priority |")
+        w("    |" + "─" * 38 + "|" + "─" * 13 + "|" + "─" * 10 + "|")
+        for phase in roadmap_phases:
+            pname = str(phase.get("phase", ""))[:36]
+            status = str(phase.get("status", ""))[:11]
+            prio = str(phase.get("priority", ""))[:8]
+            w(f"    | {pname:<36} | {status:<11} | {prio:<8} |")
+            desc = phase.get("description", "")
+            if desc:
+                w(f"    |   {desc[:60]:<60}|")
+        w("")
+
+        # ── 4. Integration Health ──
+        w("  [DATABASE] Integration Health")
+        w("  " + "─" * 40)
+        w("    | Service          | Circuit | Success | Latency | Risk |")
+        w("    |" + "─" * 18 + "|" + "─" * 9 + "|" + "─" * 9 + "|" + "─" * 9 + "|" + "─" * 6 + "|")
+        for svc in services:
+            name = str(svc.get("name", ""))[:16]
+            circuit = str(svc.get("circuit_state", ""))[:7]
+            success = svc.get("success_rate", 0)
+            latency = svc.get("avg_latency_ms", 0)
+            risk = svc.get("risk_score", 0)
+            w(f"    | {name:<16} | {circuit:<7} | {success:>6.0%} | {latency:>5.0f}ms | {risk:<4} |")
+        w("")
+
+        # ── 5. Deliverables ──
+        w("  [DATABASE] Deliverables")
+        w("  " + "─" * 40)
+        w("    | Title                      | Status    | Due        |")
+        w("    |" + "─" * 28 + "|" + "─" * 11 + "|" + "─" * 12 + "|")
+        for d in deliverables:
+            title = str(d.get("title", ""))[:26]
+            status = str(d.get("status", ""))[:9]
+            due = str(d.get("due_date", ""))[:10]
+            w(f"    | {title:<26} | {status:<9} | {due:<10} |")
+        w("")
+
+        # ── 6. Architecture Wiki ──
+        w("  [PAGE] Architecture")
+        w("  " + "─" * 40)
+        arch_children = [
+            self._callout("Guardian One Architecture Overview", "#"),
+            self._heading("System Overview", 2),
+            self._paragraph(
+                "Multi-agent AI orchestration platform with data sovereignty."
+            ),
+            self._heading("Core Modules", 2),
+            self._bulleted("Guardian - Central coordinator, agent lifecycle"),
+            self._bulleted("Mediator - Cross-agent conflict resolution"),
+            self._bulleted("Scheduler - Task scheduling and execution"),
+            self._bulleted("Audit - Thread-safe append-only audit log"),
+            self._bulleted("Security - RBAC, encryption, access control"),
+            self._divider(),
+            self._heading("H.O.M.E. L.I.N.K. Subsystem", 2),
+            self._bulleted("Gateway - TLS-enforced API gateway with circuit breaker"),
+            self._bulleted("Vault - Encrypted credential store (PBKDF2 + Fernet)"),
+            self._bulleted("Registry - Integration catalog with threat models"),
+            self._bulleted("Monitor - Health scoring and anomaly detection"),
+        ]
+        for b in arch_children:
+            w(self._render_block(b))
+        w("")
+
+        # ── 7. Decision Log ──
+        if decisions:
+            w("  [DATABASE] Decision Log")
+            w("  " + "─" * 40)
+            w("    | Decision                   | Date       | Revisit    |")
+            w("    |" + "─" * 28 + "|" + "─" * 12 + "|" + "─" * 12 + "|")
+            for d in decisions:
+                dec = str(d.get("decision", ""))[:26]
+                date = str(d.get("date", ""))[:10]
+                rev = str(d.get("revisit_date", ""))[:10]
+                w(f"    | {dec:<26} | {date:<10} | {rev:<10} |")
+            w("")
+
+        # ── Website Management (sub-workspace) ──
+        w("  [PAGE] Website Management")
+        w("  " + "─" * 40)
+        w("    Sub-pages for each managed domain:")
+        w("      - drjeremytabernero.org (Professional)")
+        w("      - jtmdai.com (Business / JTMD AI)")
+        w("    Each with: Site overview, Page inventory, Build history,")
+        w("    Security & SSL status, Feature list")
+        w("")
+
+        # ── Summary ──
+        page_count = 3  # Command Center + Architecture + Website Management
+        db_count = 4    # Agent Registry + Roadmap + Health + Deliverables
+        if decisions:
+            db_count += 1
+        total_blocks = len(cc_children) + len(arch_children)
+        total_blocks += len(agents) + len(roadmap_phases) + len(services) + len(deliverables)
+        if decisions:
+            total_blocks += len(decisions)
+
+        w("=" * 64)
+        w(f"  SUMMARY: {page_count} pages + {db_count} databases")
+        w(f"  Total blocks/rows: ~{total_blocks}")
+        w(f"  Notion API calls needed: ~{page_count + db_count + total_blocks}")
+        w("")
+        w("  To push this to Notion:")
+        w("    1. Create integration at https://www.notion.so/my-integrations")
+        w("    2. Share a root page with the integration")
+        w("    3. Set NOTION_ROOT_PAGE_ID in .env")
+        w("    4. Store token: vault.store('NOTION_TOKEN', 'ntn_...')")
+        w("    5. Run: python main.py --notion-sync")
+        w("=" * 64)
+
+        return "\n".join(lines)

@@ -255,6 +255,7 @@ def main() -> None:
     parser.add_argument("--website-deploy", type=str, default=None, help="Deploy a website by domain (or 'all')")
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
+    parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -627,6 +628,82 @@ def main() -> None:
             if result.errors:
                 for err in result.errors:
                     print(f"    [ERROR] {err}")
+
+    elif args.notion_preview:
+        from guardian_one.integrations.notion_sync import NotionSync
+
+        # Build a lightweight sync instance (no API needed for preview)
+        sync = NotionSync(
+            gateway=guardian.gateway,
+            vault=guardian.vault,
+            audit=guardian.audit,
+            root_page_id="preview-mode",
+        )
+
+        # Collect agent data
+        agents_data = []
+        for name in guardian.list_agents():
+            agent = guardian.get_agent(name)
+            if agent:
+                try:
+                    report = agent.report()
+                    agents_data.append({
+                        "name": name,
+                        "status": report.status,
+                        "health_score": 90 if report.status == "idle" else 70,
+                        "schedule": f"every {agent.config.schedule_interval_minutes}m",
+                        "allowed_resources": ", ".join(agent.config.allowed_resources) or "default",
+                    })
+                except Exception:
+                    agents_data.append({
+                        "name": name,
+                        "status": "unknown",
+                        "health_score": 50,
+                        "schedule": "manual",
+                        "allowed_resources": "default",
+                    })
+
+        # Integration health from gateway
+        services_data = []
+        for svc_name in guardian.gateway.list_services():
+            status = guardian.gateway.service_status(svc_name)
+            health = guardian.monitor.assess_service(svc_name)
+            services_data.append({
+                "name": svc_name,
+                "circuit_state": status.get("circuit_state", "unknown"),
+                "success_rate": status.get("success_rate", 0),
+                "avg_latency_ms": status.get("avg_latency_ms", 0),
+                "risk_score": health.risk_score,
+            })
+
+        roadmap = [
+            {"phase": "Phase 1 — Foundation", "status": "complete", "priority": "P0",
+             "description": "Core agents, Vault, Gateway, Audit, CLI"},
+            {"phase": "Phase 2 — Financial Intelligence", "status": "complete", "priority": "P0",
+             "description": "CFO agent, Plaid, Empower, Rocket Money, Excel dashboards"},
+            {"phase": "Phase 3 — Integrations", "status": "in_progress", "priority": "P1",
+             "description": "Notion sync, Google Calendar, Gmail, notifications"},
+            {"phase": "Phase 4 — Web Properties", "status": "in_progress", "priority": "P1",
+             "description": "Website management, builds, deploys, security scans"},
+            {"phase": "Phase 5 — Autonomy", "status": "planned", "priority": "P2",
+             "description": "Sandbox evaluator, self-healing, multi-device sync"},
+        ]
+
+        deliverables = [
+            {"title": "Notion Workspace Sync", "status": "complete", "audience": "Jeremy",
+             "due_date": "2026-03-16", "description": "Write-only Notion dashboard push"},
+            {"title": "Website Management", "status": "complete", "audience": "Jeremy",
+             "due_date": "2026-03-10", "description": "Build/deploy pipeline for 2 sites"},
+            {"title": "Financial Dashboard", "status": "complete", "audience": "Jeremy",
+             "due_date": "2026-02-28", "description": "Excel dashboard + daily review"},
+        ]
+
+        print(sync.preview_workspace(
+            agents=agents_data,
+            roadmap_phases=roadmap,
+            services=services_data,
+            deliverables=deliverables,
+        ))
 
     elif args.websites or args.website_build or args.website_deploy or args.website_sync:
         from guardian_one.agents.website_manager import WebsiteManager
