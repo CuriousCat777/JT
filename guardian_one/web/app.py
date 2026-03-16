@@ -347,8 +347,11 @@ def create_app() -> Flask:
 # Standalone runner
 # ---------------------------------------------------------------------------
 
-def run_devpanel(port: int = 5100, debug: bool = False) -> None:
+def run_devpanel(guardian: GuardianOne | None = None, port: int = 5100, debug: bool = False) -> None:
     """Start the dev panel server."""
+    global _guardian
+    if guardian is not None:
+        _guardian = guardian
     app = create_app()
     print(f"\n  Guardian One Dev Panel")
     print(f"  http://localhost:{port}")

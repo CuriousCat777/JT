@@ -265,7 +265,7 @@ def main() -> None:
 
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
-        run_devpanel(port=args.devpanel_port)
+        run_devpanel(guardian, port=args.devpanel_port)
         return
 
     if args.sandbox:
