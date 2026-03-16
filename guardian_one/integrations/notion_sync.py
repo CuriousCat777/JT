@@ -373,7 +373,7 @@ class NotionSync:
         }
 
     @staticmethod
-    def _callout(text: str, emoji: str = "!") -> dict[str, Any]:
+    def _callout(text: str, emoji: str = "💡") -> dict[str, Any]:
         return {
             "object": "block",
             "type": "callout",
@@ -481,7 +481,7 @@ class NotionSync:
             resp = self._create_page(
                 self._root_page_id,
                 "Command Center",
-                icon_emoji="#",
+                icon_emoji="🎛️",
                 children=children,
             )
 
@@ -946,7 +946,7 @@ class NotionSync:
         result = SyncResult(success=False)
 
         children = [
-            self._callout("Guardian One Architecture Overview", "#"),
+            self._callout("Guardian One Architecture Overview", "🏗️"),
             self._table_of_contents(),
             self._heading("System Overview", 2),
             self._paragraph(
@@ -1262,7 +1262,7 @@ class NotionSync:
         w("  [PAGE] Architecture")
         w("  " + "─" * 40)
         arch_children = [
-            self._callout("Guardian One Architecture Overview", "#"),
+            self._callout("Guardian One Architecture Overview", "🏗️"),
             self._heading("System Overview", 2),
             self._paragraph(
                 "Multi-agent AI orchestration platform with data sovereignty."
