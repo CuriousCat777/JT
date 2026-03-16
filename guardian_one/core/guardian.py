@@ -69,6 +69,9 @@ class GuardianOne:
         # Register gateway services for known integrations
         self._setup_gateway_services()
 
+        # Auto-load Notion token from .env into Vault if present and not yet stored
+        self._seed_vault_from_env()
+
         self.audit.record(
             agent="guardian_one",
             action="system_boot",
@@ -94,6 +97,26 @@ class GuardianOne:
             level=AccessLevel.MENTOR,
             allowed_resources=["audit_log", "reports", "config_readonly"],
         ))
+
+    def _seed_vault_from_env(self) -> None:
+        """Auto-load API tokens from environment into Vault if not already stored.
+
+        This bridges the gap between .env configuration and the encrypted Vault,
+        so users don't have to manually store tokens via the Vault API.
+        """
+        env_to_vault = [
+            ("NOTION_TOKEN", "notion", "write"),
+        ]
+        for env_key, service, scope in env_to_vault:
+            value = os.environ.get(env_key, "")
+            if value and not self.vault.retrieve(env_key):
+                self.vault.store(env_key, value, service=service, scope=scope)
+                self.audit.record(
+                    agent="guardian_one",
+                    action=f"vault_seed:{env_key}",
+                    severity=Severity.INFO,
+                    details={"source": ".env", "service": service},
+                )
 
     def _setup_gateway_services(self) -> None:
         """Register external services in the gateway from the integration registry."""
