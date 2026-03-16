@@ -251,6 +251,42 @@ PLAID_INTEGRATION = IntegrationRecord(
     owner_agent="cfo",
 )
 
+NOTION_INTEGRATION = IntegrationRecord(
+    name="notion",
+    description="Notion API — write-only workspace sync for operational dashboards",
+    base_url="https://api.notion.com",
+    auth_method="api_key",
+    data_flow="Guardian pushes agent status, roadmap progress, integration health, "
+              "and deliverable tracking to Notion.  Strictly write-only — Guardian "
+              "never reads Notion content for decision-making.  Content classification "
+              "gate blocks PHI/PII/credentials from leaving the system.",
+    vault_keys=["NOTION_TOKEN"],
+    threat_model=[
+        ThreatEntry("Token exfiltration grants workspace write access", "critical",
+                    "Token stored in encrypted Vault (PBKDF2+Fernet); loaded on-demand, "
+                    "never cached as attribute; auth headers redacted from audit log."),
+        ThreatEntry("PHI/PII accidentally synced to Notion cloud", "critical",
+                    "Content classification gate with regex pattern matching blocks SSN, "
+                    "MRN, credit cards, bank accounts, emails.  Only allow-listed categories sync."),
+        ThreatEntry("Notion used as C2 channel (attacker writes commands)", "high",
+                    "Write-only architecture: Guardian pushes to Notion but never reads "
+                    "content for execution.  No eval/exec/shell of Notion-sourced data."),
+        ThreatEntry("Rate limit exhaustion causes sync failures", "medium",
+                    "350ms minimum between requests; Retry-After header respected; "
+                    "Gateway circuit breaker at 5 failures; batch writes (100 blocks/call)."),
+        ThreatEntry("Notion outage blocks operational visibility", "low",
+                    "Graceful degradation — Guardian operates independently; "
+                    "Notion is a read-only mirror, not a control plane."),
+    ],
+    failure_impact="Notion workspace shows stale data.  Guardian One continues "
+                   "operating normally — Notion is observability only, not control.",
+    rollback_procedure="1. Remove NOTION_TOKEN from Vault. "
+                       "2. Disable notion sync in config YAML. "
+                       "3. Revoke integration at notion.so/my-integrations. "
+                       "4. Review audit log for unauthorized sync operations.",
+    owner_agent="guardian_one",
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -323,5 +359,6 @@ class IntegrationRegistry:
             GMAIL_INTEGRATION,
             NORDVPN_INTEGRATION,
             N8N_INTEGRATION,
+            NOTION_INTEGRATION,
         ]:
             self.register(record)
