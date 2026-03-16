@@ -252,6 +252,64 @@ class NotionSync:
         return result
 
     # ------------------------------------------------------------------
+    # Cache warm-up — discover existing pages to avoid duplicates
+    # ------------------------------------------------------------------
+
+    # Map of page/database titles to the cache keys used internally
+    _TITLE_TO_CACHE_KEY: dict[str, str] = {
+        "Command Center": "command_center",
+        "Agent Registry": "agent_registry",
+        "Production Roadmap": "roadmap_db",
+        "Integration Health": "integration_health_db",
+        "Deliverables": "deliverables_db",
+        "Architecture": "architecture",
+        "Decision Log": "decision_log_db",
+    }
+
+    def _load_existing_pages(self) -> None:
+        """Query Notion for children of root page and pre-fill the cache.
+
+        This prevents duplicate page creation across runs by discovering
+        pages that were created in previous sessions.  Failures are
+        silently ignored — the worst case is creating a new page.
+        """
+        try:
+            resp = self._request(
+                "GET", f"/v1/blocks/{self._root_page_id}/children",
+            )
+            if not resp.get("success") or not resp.get("data"):
+                return
+
+            results = resp["data"].get("results", [])
+            for block in results:
+                # child_page blocks
+                if block.get("type") == "child_page":
+                    title = block.get("child_page", {}).get("title", "")
+                    cache_key = self._TITLE_TO_CACHE_KEY.get(title)
+                    if cache_key and cache_key not in self._page_cache:
+                        self._page_cache[cache_key] = NotionPage(
+                            page_id=block["id"],
+                            title=title,
+                            parent_id=self._root_page_id,
+                            page_type="dashboard",
+                            guardian_key=cache_key,
+                        )
+                # child_database blocks
+                elif block.get("type") == "child_database":
+                    title = block.get("child_database", {}).get("title", "")
+                    cache_key = self._TITLE_TO_CACHE_KEY.get(title)
+                    if cache_key and cache_key not in self._page_cache:
+                        self._page_cache[cache_key] = NotionPage(
+                            page_id=block["id"],
+                            title=title,
+                            parent_id=self._root_page_id,
+                            page_type="database",
+                            guardian_key=cache_key,
+                        )
+        except Exception:
+            pass  # Best-effort — duplicates are better than crashing
+
+    # ------------------------------------------------------------------
     # Page operations
     # ------------------------------------------------------------------
 
@@ -1063,6 +1121,9 @@ class NotionSync:
         """
         start = time.monotonic()
         combined = SyncResult(success=True)
+
+        # Discover pages from previous runs to avoid duplicates
+        self._load_existing_pages()
 
         self._audit.record(
             agent="notion_sync",
