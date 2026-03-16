@@ -372,6 +372,30 @@ class NotionSync:
         }
         return self._request("POST", "/v1/pages", body)
 
+    def _clear_page(self, page_id: str) -> None:
+        """Delete all child blocks from a page before re-populating."""
+        try:
+            resp = self._request(
+                "GET", f"/v1/blocks/{page_id}/children",
+            )
+            if not resp.get("success") or not resp.get("data"):
+                return
+            for block in resp["data"].get("results", []):
+                block_id = block.get("id")
+                if block_id:
+                    self._request("DELETE", f"/v1/blocks/{block_id}")
+        except Exception:
+            pass  # Best-effort — append will still work
+
+    def _replace_blocks(
+        self,
+        page_id: str,
+        children: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Clear existing content then append new blocks."""
+        self._clear_page(page_id)
+        return self._append_blocks(page_id, children)
+
     def _append_blocks(
         self,
         page_id: str,
@@ -534,7 +558,7 @@ class NotionSync:
         cached = self._page_cache.get(cache_key)
 
         if cached:
-            resp = self._append_blocks(cached.page_id, children)
+            resp = self._replace_blocks(cached.page_id, children)
         else:
             resp = self._create_page(
                 self._root_page_id,
@@ -633,16 +657,21 @@ class NotionSync:
             cached = self._page_cache[cache_key]
             result.pages_created = 1
 
+        # Valid status options matching the database schema
+        _valid_statuses = {"running", "idle", "error", "disabled"}
+
         # Add rows for each agent
         for agent in agents:
             name = str(agent.get("name", "unknown"))
-            status = str(agent.get("status", "idle"))
+            raw_status = str(agent.get("status", "idle"))
+            status = raw_status if raw_status in _valid_statuses else "idle"
             health = agent.get("health_score", 0)
             interval = agent.get("schedule_interval", 60)
             last_run = str(agent.get("last_run", "never"))
-            resources = ", ".join(agent.get("allowed_resources", []))
+            res = agent.get("allowed_resources", [])
+            resources = ", ".join(res) if isinstance(res, list) else str(res)
 
-            row_props = {
+            row_props: dict[str, Any] = {
                 "Name": {"title": [{"text": {"content": name[:100]}}]},
                 "Status": {"select": {"name": status[:100]}},
                 "Health Score": {"number": health if isinstance(health, (int, float)) else 0},
@@ -829,14 +858,17 @@ class NotionSync:
             cached = self._page_cache[cache_key]
             result.pages_created = 1
 
+        _valid_circuits = {"closed", "half_open", "open"}
+
         for svc in services:
             name = str(svc.get("name", "unknown"))
-            circuit = str(svc.get("circuit_state", "closed"))
+            raw_circuit = str(svc.get("circuit_state", "closed"))
+            circuit = raw_circuit if raw_circuit in _valid_circuits else "closed"
             success = svc.get("success_rate", 1.0)
             latency = svc.get("avg_latency_ms", 0)
             risk = svc.get("risk_score", 1)
 
-            row_props = {
+            row_props: dict[str, Any] = {
                 "Service": {"title": [{"text": {"content": name[:100]}}]},
                 "Circuit State": {"select": {"name": circuit[:100]}},
                 "Success Rate": {"number": success if isinstance(success, (int, float)) else 0},
@@ -913,9 +945,12 @@ class NotionSync:
             cached = self._page_cache[cache_key]
             result.pages_created = 1
 
+        _valid_del_statuses = {"draft", "in_progress", "review", "complete"}
+
         for d in deliverables:
             title = str(d.get("title", ""))
-            status = str(d.get("status", "draft"))
+            raw_status = str(d.get("status", "draft"))
+            status = raw_status if raw_status in _valid_del_statuses else "draft"
             audience = str(d.get("audience", ""))
             due = d.get("due_date", "")
             desc = str(d.get("description", ""))
@@ -1067,7 +1102,7 @@ class NotionSync:
         cached = self._page_cache.get(cache_key)
 
         if cached:
-            resp = self._append_blocks(cached.page_id, children)
+            resp = self._replace_blocks(cached.page_id, children)
         else:
             resp = self._create_page(
                 self._root_page_id,
