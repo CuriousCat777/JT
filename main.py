@@ -253,6 +253,8 @@ def main() -> None:
     parser.add_argument("--website-build", type=str, default=None, help="Build a website by domain (or 'all')")
     parser.add_argument("--website-deploy", type=str, default=None, help="Deploy a website by domain (or 'all')")
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
+    parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
+    parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -260,6 +262,11 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    if args.devpanel:
+        from guardian_one.web.app import run_devpanel
+        run_devpanel(port=args.devpanel_port)
+        return
 
     if args.sandbox:
         from guardian_one.core.sandbox import SandboxDeployer
