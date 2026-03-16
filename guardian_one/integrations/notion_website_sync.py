@@ -79,7 +79,7 @@ class NotionWebsiteDashboard:
         resp = self._sync._create_page(
             self._sync._root_page_id,
             "Website Management",
-            icon_emoji="#",
+            icon_emoji="🌐",
             children=children,
         )
 
@@ -192,7 +192,7 @@ class NotionWebsiteDashboard:
             resp = self._sync._create_page(
                 parent_id,
                 f"{label} ({domain})",
-                icon_emoji="#",
+                icon_emoji="🌐",
                 children=children,
             )
 
@@ -288,7 +288,7 @@ class NotionWebsiteDashboard:
             resp = self._sync._create_page(
                 parent_id,
                 "Sites Overview",
-                icon_emoji="#",
+                icon_emoji="🌐",
                 children=children,
             )
 
