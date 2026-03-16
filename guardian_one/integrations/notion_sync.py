@@ -639,9 +639,12 @@ class NotionSync:
                 "Priority Tier": {
                     "select": {
                         "options": [
+                            {"name": "P0", "color": "red"},
+                            {"name": "P1", "color": "orange"},
+                            {"name": "P2", "color": "blue"},
                             {"name": "Foundation", "color": "purple"},
-                            {"name": "Reliability", "color": "blue"},
-                            {"name": "Deployment", "color": "orange"},
+                            {"name": "Reliability", "color": "default"},
+                            {"name": "Deployment", "color": "yellow"},
                             {"name": "Go-Live", "color": "green"},
                         ]
                     }
@@ -670,24 +673,40 @@ class NotionSync:
             cached = self._page_cache[cache_key]
             result.pages_created = 1
 
-        for phase in phases:
-            num = phase.get("phase_number", "?")
-            title = str(phase.get("title", ""))
-            status = str(phase.get("status", "not_started"))
-            tier = str(phase.get("priority_tier", ""))
+        # Normalise status values to match select options
+        _status_map = {
+            "complete": "completed",
+            "done": "completed",
+            "planned": "not_started",
+            "pending": "not_started",
+        }
+
+        for idx, phase in enumerate(phases, 1):
+            # Support both {"phase": "..."} and {"phase_number":..., "title":...}
+            phase_label = str(
+                phase.get("phase", "")
+                or f"{phase.get('phase_number', idx)}. {phase.get('title', '')}"
+            )
+            raw_status = str(phase.get("status", "not_started"))
+            status = _status_map.get(raw_status, raw_status)
+            tier = str(phase.get("priority_tier", "") or phase.get("priority", ""))
             desc = str(phase.get("description", ""))
 
-            row_props = {
-                "Phase": {"title": [{"text": {"content": f"{num}. {title}"[:100]}}]},
+            row_props: dict[str, Any] = {
+                "Phase": {"title": [{"text": {"content": phase_label[:100]}}]},
                 "Status": {"select": {"name": status[:100]}},
-                "Priority Tier": {"select": {"name": tier[:100]}},
                 "Description": {"rich_text": [{"text": {"content": desc[:2000]}}]},
             }
+            # Only include Priority Tier if non-empty (empty select name is rejected)
+            if tier:
+                row_props["Priority Tier"] = {"select": {"name": tier[:100]}}
+
             row_resp = self._add_database_row(cached.page_id, row_props)
             if row_resp.get("success"):
                 result.blocks_written += 1
             else:
-                result.errors.append(f"Failed to add phase {num}")
+                error = row_resp.get("error", "unknown")
+                result.errors.append(f"Failed to add phase {idx}: {error}")
 
         result.success = len(result.errors) == 0
         result.duration_ms = (time.monotonic() - start) * 1000
