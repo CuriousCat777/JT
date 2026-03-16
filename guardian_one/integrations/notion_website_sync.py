@@ -187,7 +187,7 @@ class NotionWebsiteDashboard:
         cached = self._sync._page_cache.get(cache_key)
 
         if cached:
-            resp = self._sync._append_blocks(cached.page_id, children)
+            resp = self._sync._replace_blocks(cached.page_id, children)
         else:
             resp = self._sync._create_page(
                 parent_id,
@@ -283,7 +283,7 @@ class NotionWebsiteDashboard:
         cached = self._sync._page_cache.get(cache_key)
 
         if cached:
-            resp = self._sync._append_blocks(cached.page_id, children)
+            resp = self._sync._replace_blocks(cached.page_id, children)
         else:
             resp = self._sync._create_page(
                 parent_id,

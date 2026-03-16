@@ -563,16 +563,18 @@ def main() -> None:
                             "name": name,
                             "status": report.status,
                             "health_score": 90 if report.status == "idle" else 70,
-                            "schedule": f"every {agent.config.schedule_interval_minutes}m",
-                            "allowed_resources": ", ".join(agent.config.allowed_resources) or "default",
+                            "schedule_interval": agent.config.schedule_interval_minutes,
+                            "last_run": getattr(report, "last_run", "never"),
+                            "allowed_resources": agent.config.allowed_resources,
                         })
                     except Exception:
                         agents_data.append({
                             "name": name,
                             "status": "unknown",
                             "health_score": 50,
-                            "schedule": "manual",
-                            "allowed_resources": "default",
+                            "schedule_interval": 0,
+                            "last_run": "never",
+                            "allowed_resources": [],
                         })
 
             # Collect integration health from gateway
