@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-03-07T06:04:48.147949+00:00",
+  "saved_at": "2026-03-16T01:15:13.831930+00:00",
   "accounts": [
     {
       "name": "Essentia Health 457(b) Deferred Compensation",
@@ -153,84 +153,84 @@
       "account_type": "checking",
       "balance": 110.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Saving (1111)",
       "account_type": "savings",
       "balance": 210.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid CD (2222)",
       "account_type": "checking",
       "balance": 1000.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Credit Card (3333)",
       "account_type": "credit_card",
       "balance": -410.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Money Market (4444)",
       "account_type": "checking",
       "balance": 43200.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid IRA (5555)",
       "account_type": "retirement",
       "balance": 320.76,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid 401k (6666)",
       "account_type": "retirement",
       "balance": 23631.9805,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Student Loan (7777)",
       "account_type": "loan",
       "balance": -65262.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Mortgage (8888)",
       "account_type": "loan",
       "balance": -56302.06,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid HSA (9001)",
       "account_type": "checking",
       "balance": 6009.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Cash Management (9002)",
       "account_type": "checking",
       "balance": 12060.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     },
     {
       "name": "Plaid Business Credit Card (9999)",
       "account_type": "credit_card",
       "balance": -5020.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-07T06:04:44.327298+00:00"
+      "last_synced": "2026-03-16T01:15:11.493569+00:00"
     }
   ],
   "transactions": [
@@ -6763,6 +6763,106 @@
       "metadata": {
         "source": "plaid"
       }
+    },
+    {
+      "date": "2026-03-15",
+      "description": "CREDIT CARD 3333 PAYMENT *//",
+      "amount": -25.0,
+      "category": "savings",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-15",
+      "description": "Uber 063015 SF**POOL**",
+      "amount": -5.4,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-14",
+      "description": "ACH Electronic CreditGUSTO PAY 123456",
+      "amount": -5850.0,
+      "category": "utilities",
+      "account": "Plaid Money Market",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-14",
+      "description": "CD DEPOSIT .INITIAL.",
+      "amount": -1000.0,
+      "category": "entertainment",
+      "account": "Plaid CD",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-13",
+      "description": "Touchstone Climbing",
+      "amount": -78.5,
+      "category": "entertainment",
+      "account": "Plaid Credit Card",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-13",
+      "description": "United Airlines",
+      "amount": 500.0,
+      "category": "transport",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-12",
+      "description": "McDonald's",
+      "amount": -12.0,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-12",
+      "description": "Starbucks",
+      "amount": -4.33,
+      "category": "food",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-11",
+      "description": "SparkFun",
+      "amount": -89.4,
+      "category": "entertainment",
+      "account": "Plaid Checking",
+      "metadata": {
+        "source": "plaid"
+      }
+    },
+    {
+      "date": "2026-03-10",
+      "description": "INTRST PYMNT",
+      "amount": 4.22,
+      "category": "income",
+      "account": "Plaid Saving",
+      "metadata": {
+        "source": "plaid"
+      }
     }
   ],
   "bills": [
@@ -6789,6 +6889,17 @@
   "net_worth_history": [
     {
       "date": "2026-03-07",
+      "net_worth": 95162.0105,
+      "by_type": {
+        "retirement": 157665.5805,
+        "checking": 67277.54000000001,
+        "savings": 574.9300000000001,
+        "credit_card": -8791.98,
+        "loan": -121564.06
+      }
+    },
+    {
+      "date": "2026-03-16",
       "net_worth": 95162.0105,
       "by_type": {
         "retirement": 157665.5805,
