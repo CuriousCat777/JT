@@ -41,6 +41,7 @@ class IntegrationRecord:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     owner_agent: str = ""    # Which agent primarily uses this
+    additional_agents: list[str] = field(default_factory=list)  # Extra agents allowed
     status: str = "active"   # active, disabled, deprecated
 
 
@@ -284,7 +285,8 @@ NOTION_INTEGRATION = IntegrationRecord(
                        "2. Disable notion sync in config YAML. "
                        "3. Revoke integration at notion.so/my-integrations. "
                        "4. Review audit log for unauthorized sync operations.",
-    owner_agent="guardian_one",
+    owner_agent="notion_sync",
+    additional_agents=["notion_website_sync"],
 )
 
 NORDVPN_INTEGRATION = IntegrationRecord(
