@@ -288,7 +288,8 @@ def test_monitor_weekly_brief_text():
 # Integration with Guardian One
 # ========================================================================
 
-def test_guardian_has_homelink():
+def test_guardian_has_homelink(monkeypatch):
+    monkeypatch.delenv("NOTION_TOKEN", raising=False)
     from guardian_one.core.config import GuardianConfig, AgentConfig
 
     config = GuardianConfig(
