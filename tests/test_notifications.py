@@ -140,7 +140,10 @@ def test_notify_with_metadata_kwarg():
 # ------------------------------------------------------------------
 
 
-def test_email_channel_not_configured():
+def test_email_channel_not_configured(monkeypatch):
+    monkeypatch.delenv("GMAIL_FROM", raising=False)
+    monkeypatch.delenv("GMAIL_APP_PASSWORD", raising=False)
+    monkeypatch.delenv("NOTIFY_EMAIL", raising=False)
     ch = EmailChannel(from_email="", to_email="", app_password="")
     assert ch.configured is False
     assert ch.send(Notification(source="t", title="T", body="B")) is False
