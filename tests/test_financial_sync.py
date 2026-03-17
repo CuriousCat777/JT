@@ -426,7 +426,9 @@ def test_cfo_registry_integrations():
 # PlaidProvider — read-only enforcement
 # ---------------------------------------------------------------------------
 
-def test_plaid_no_credentials():
+def test_plaid_no_credentials(monkeypatch):
+    monkeypatch.delenv("PLAID_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PLAID_SECRET", raising=False)
     provider = PlaidProvider(client_id="", secret="")
     assert not provider.has_credentials
     assert not provider.authenticate()
@@ -558,7 +560,9 @@ def test_cfo_has_plaid_provider():
     assert cfo.plaid is not None
 
 
-def test_cfo_plaid_status():
+def test_cfo_plaid_status(monkeypatch):
+    monkeypatch.delenv("PLAID_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PLAID_SECRET", raising=False)
     data_dir = _make_data_dir()
     cfo = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
     cfo.initialize()
@@ -568,7 +572,9 @@ def test_cfo_plaid_status():
     assert status["read_only"] is True
 
 
-def test_cfo_plaid_sync_not_connected():
+def test_cfo_plaid_sync_not_connected(monkeypatch):
+    monkeypatch.delenv("PLAID_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PLAID_SECRET", raising=False)
     data_dir = _make_data_dir()
     cfo = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
     cfo.initialize()
@@ -584,8 +590,10 @@ def test_cfo_dashboard_includes_plaid():
     assert "plaid" in dashboard
 
 
-def test_cfo_run_includes_plaid_recommendation():
+def test_cfo_run_includes_plaid_recommendation(monkeypatch):
     """When no Plaid credentials, run() should recommend setup."""
+    monkeypatch.delenv("PLAID_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PLAID_SECRET", raising=False)
     data_dir = _make_data_dir()
     cfo = CFO(AgentConfig(name="cfo"), _make_audit(), data_dir=data_dir)
     cfo.initialize()
