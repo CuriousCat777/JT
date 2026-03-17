@@ -37,8 +37,9 @@ data/evaluations.jsonl
 # Sensitive financial data (Rocket Money exports)
 data/rocket_money_transactions.csv
 
-# OAuth tokens (sensitive)
+# OAuth tokens & credentials (sensitive)
 config/gmail_token.json
+config/google_credentials.json
 
 # Plaid access tokens (sensitive — bank connection credentials)
 data/plaid_tokens.json
