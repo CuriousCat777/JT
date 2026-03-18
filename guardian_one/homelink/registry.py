@@ -329,6 +329,11 @@ WEBFLOW_INTEGRATION = IntegrationRecord(
               "Builds and deploys managed through Webflow dashboard and Cloudflare Workers.",
     vault_keys=["WEBFLOW_API_TOKEN"],
     threat_model=[
+        ThreatEntry("CMS files publicly accessible via CDN even if page is password-protected", "critical",
+                    "NEVER upload PHI, PII, credentials, contracts, or financial docs to Webflow CMS. "
+                    "All CMS uploads are publicly accessible via CDN URL regardless of page protection. "
+                    "Deleted files PERSIST on CDN until Webflow Support manually purges them. "
+                    "Content classification gate must block sensitive uploads."),
         ThreatEntry("CMS upload contains malicious files or metadata", "medium",
                     "All uploaded files audited by Archivist; metadata stripped on deploy."),
         ThreatEntry("Custom code embed introduces XSS vulnerability", "high",

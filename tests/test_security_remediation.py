@@ -89,7 +89,7 @@ class TestTrackerQuerying:
         tracker = SecurityRemediationTracker()
         tracker.load_defaults()
         critical = tracker.tasks_by_severity(RemediationSeverity.CRITICAL)
-        assert len(critical) == 1  # SSL/TLS Full Strict
+        assert len(critical) == 2  # SSL/TLS Full Strict + Webflow CDN exposure
 
     def test_tasks_by_status_all_not_started(self) -> None:
         tracker = SecurityRemediationTracker()
@@ -202,7 +202,7 @@ class TestSummaryStats:
         assert stats["completed"] == 0
         assert stats["remaining"] == 16
         assert stats["completion_pct"] == 0.0
-        assert stats["critical_open"] == 1
+        assert stats["critical_open"] == 2  # jtmdai-001 (SSL) + jtmdai-006 (Webflow CDN exposure)
 
     def test_summary_stats_after_completion(self) -> None:
         tracker = SecurityRemediationTracker()
@@ -218,7 +218,7 @@ class TestSummaryStats:
 
         stats = tracker.summary_stats()
         assert stats["completed"] == 1
-        assert stats["critical_open"] == 0
+        assert stats["critical_open"] == 1  # jtmdai-006 (Webflow CDN) still open
         assert stats["remaining"] == 15
 
     def test_summary_stats_empty_tracker(self) -> None:

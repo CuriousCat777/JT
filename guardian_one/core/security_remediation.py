@@ -161,19 +161,43 @@ def _jtmdai_remediation_tasks() -> list[RemediationTask]:
             category=RemediationCategory.CLOUDFLARE_CONFIG,
             severity=RemediationSeverity.HIGH,
             due_date="2026-03-15",
-            notes="Check SecurityTrails (securitytrails.com) for historical A records "
-                  "that may have exposed the origin server IP.",
+            notes="AUDIT FINDINGS (2026-03-18):\n"
+                  "  jtmdai.com current A: 104.21.68.33, 172.67.185.218 (Cloudflare)\n"
+                  "  jtmdai.com current AAAA: 2606:4700:3030::ac43:b9da, 2606:4700:3035::6815:4421 (Cloudflare)\n"
+                  "  drjeremytabernero.org current A: 104.26.6.33, 104.26.7.33, 172.67.69.100 (Cloudflare)\n"
+                  "  drjeremytabernero.org current AAAA: 2606:4700:20::681a:621, 2606:4700:20::681a:721, 2606:4700:20::ac43:4564 (Cloudflare)\n"
+                  "  MX records: NONE for either domain (GOOD — no origin leak via MX)\n"
+                  "  Subdomains checked (mail, ftp, direct, staging, api): NONE resolve (GOOD)\n"
+                  "  Root CNAME: not set (A records used, proxied via Cloudflare)\n"
+                  "  All IPs are in Cloudflare ranges (104.x, 172.67.x, 2606:4700:x) — no origin exposure.\n"
+                  "  REMAINING: Check SecurityTrails, ViewDNS.info, Censys manually for HISTORICAL A records\n"
+                  "  that may have existed BEFORE Cloudflare was enabled. These services require\n"
+                  "  authenticated browser access.\n"
+                  "  CHECK: https://securitytrails.com/domain/jtmdai.com/dns\n"
+                  "  CHECK: https://securitytrails.com/domain/drjeremytabernero.org/dns\n"
+                  "  CHECK: https://viewdns.info/iphistory/?domain=jtmdai.com\n"
+                  "  CHECK: https://viewdns.info/iphistory/?domain=drjeremytabernero.org\n"
+                  "  CHECK: https://search.censys.io/hosts?q=jtmdai.com\n"
+                  "  CHECK: https://search.censys.io/hosts?q=drjeremytabernero.org",
             verification_method="dns_history_check",
             auto_verifiable=False,
         ),
         RemediationTask(
             task_id="jtmdai-006",
-            title="MEDIUM-HIGH — Audit Webflow CMS for uploaded files",
+            title="CRITICAL — Audit Webflow CMS for uploaded files (CDN exposure risk)",
             category=RemediationCategory.WEBFLOW_PLATFORM,
-            severity=RemediationSeverity.MEDIUM,
-            due_date="2026-03-16",
-            notes="Files uploaded to Webflow CMS may contain metadata. "
-                  "Review all uploads for sensitive data.",
+            severity=RemediationSeverity.CRITICAL,
+            due_date="2026-03-18",
+            notes="CRITICAL FINDING: Files uploaded to Webflow CMS are PUBLICLY accessible\n"
+                  "via CDN URL even if the page is password-protected. Deleted files PERSIST\n"
+                  "on the CDN until Webflow Support manually removes them.\n"
+                  "ACTION REQUIRED:\n"
+                  "  1. Audit ALL files uploaded to Webflow CMS for both domains\n"
+                  "  2. Verify NO PHI, PII, credentials, contracts, or financial documents exist\n"
+                  "  3. If sensitive files found: contact Webflow Support for CDN purge\n"
+                  "  4. Add content classification gate to WebsiteManager upload pipeline\n"
+                  "  5. NEVER upload sensitive documents to Webflow CMS — use Vault instead\n"
+                  "DOMAINS: jtmdai.com, drjeremytabernero.org (if Webflow-hosted)",
             verification_method="manual_review",
             auto_verifiable=False,
         ),
@@ -190,11 +214,18 @@ def _jtmdai_remediation_tasks() -> list[RemediationTask]:
         ),
         RemediationTask(
             task_id="jtmdai-008",
-            title="MEDIUM — Enable TLS 1.3 minimum, disable older versions",
+            title="HIGH — TLS hardening: minimum TLS 1.2+, enable 1.3, force HTTPS",
             category=RemediationCategory.CLOUDFLARE_CONFIG,
-            severity=RemediationSeverity.MEDIUM,
+            severity=RemediationSeverity.HIGH,
             due_date="2026-03-19",
-            notes="In Cloudflare → SSL/TLS → Edge Certificates → set minimum TLS to 1.3.",
+            notes="Full TLS hardening checklist for jtmdai.com:\n"
+                  "  1. Cloudflare → SSL/TLS → Edge Certificates → Minimum TLS Version: TLS 1.2 (minimum)\n"
+                  "  2. Enable TLS 1.3 toggle\n"
+                  "  3. Enable Automatic HTTPS Rewrites\n"
+                  "  4. Enable Always Use HTTPS\n"
+                  "  5. Run SSL Labs test: ssllabs.com/ssltest/analyze.html?d=jtmdai.com\n"
+                  "  6. Target grade: A or higher\n"
+                  "  7. Repeat for drjeremytabernero.org",
             verification_method="tls_version_check",
             auto_verifiable=True,
         ),
