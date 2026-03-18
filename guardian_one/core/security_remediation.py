@@ -52,6 +52,7 @@ class RemediationCategory(Enum):
     HTTP_SECURITY = "HTTP Security"
     INFRASTRUCTURE = "Infrastructure"
     BRAND_PROTECTION = "Brand Protection"
+    CONNECTOR_SECURITY = "Connector Security"
 
 
 # Agent ownership mapping: which Guardian One agent is responsible
@@ -62,6 +63,7 @@ CATEGORY_AGENT_MAP: dict[RemediationCategory, str] = {
     RemediationCategory.HTTP_SECURITY: "web_architect",
     RemediationCategory.INFRASTRUCTURE: "web_architect",
     RemediationCategory.BRAND_PROTECTION: "archivist",
+    RemediationCategory.CONNECTOR_SECURITY: "archivist",
 }
 
 
@@ -460,11 +462,17 @@ class SecurityRemediationTracker:
             for task in _drjt_remediation_tasks():
                 self._tasks[task.task_id] = task
 
+    def load_connector_tasks(self) -> None:
+        """Load connector/MCP security remediation tasks."""
+        for task in _connector_remediation_tasks():
+            self._tasks[task.task_id] = task
+
     def load_all_domains(self) -> None:
-        """Load remediation tasks for all managed domains."""
+        """Load remediation tasks for all managed domains + connectors."""
         self.load_defaults()
         for task in _drjt_remediation_tasks():
             self._tasks[task.task_id] = task
+        self.load_connector_tasks()
 
     def domains(self) -> list[str]:
         """Return all unique domains in the tracker."""
@@ -605,5 +613,148 @@ def _drjt_remediation_tasks() -> list[RemediationTask]:
             notes="Verify Cloudflare SSL/TLS is set to Full (Strict) for this domain.",
             verification_method="ssl_check",
             auto_verifiable=True,
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Connector security remediation tasks
+# Addresses Claude Desktop/MCP connector attack surface
+# ---------------------------------------------------------------------------
+
+def _connector_remediation_tasks() -> list[RemediationTask]:
+    """Remediation tasks for Claude connector/MCP attack surface.
+
+    Based on audit of active connectors in Claude Desktop:
+        Web: 19 connectors (7 needed, 12 unnecessary attack surface)
+        Desktop: 10 connectors (3 DANGEROUS, 4 unused)
+    """
+    return [
+        RemediationTask(
+            task_id="conn-001",
+            title="CRITICAL — Disconnect Desktop Commander MCP when not in active use",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.CRITICAL,
+            due_date="2026-03-18",
+            domain="system",
+            notes="Desktop Commander grants unrestricted shell execution. "
+                  "Can read .env, vault files, kill processes, exfiltrate data. "
+                  "ONLY enable during active supervised development.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-002",
+            title="CRITICAL — Disconnect Windows-MCP when not in active use",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.CRITICAL,
+            due_date="2026-03-18",
+            domain="system",
+            notes="Windows-MCP grants PowerShell execution, registry access, "
+                  "service management. Can disable Defender, access Credential Manager. "
+                  "ONLY enable during active supervised admin tasks.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-003",
+            title="HIGH — Scope AWS API MCP to read-only IAM policy",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.HIGH,
+            due_date="2026-03-19",
+            domain="system",
+            notes="AWS MCP with broad IAM permissions can create resources, "
+                  "incur costs, access S3 data. Restrict to read-only. "
+                  "Set billing alerts at $10/$50/$100.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-004",
+            title="HIGH — Scope Filesystem MCP to project directories only",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.HIGH,
+            due_date="2026-03-19",
+            domain="system",
+            notes="Filesystem MCP should NOT have access to home directory root, "
+                  "/etc, or any directory containing credentials. "
+                  "Restrict to ~/JT and specific project paths.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-005",
+            title="HIGH — Disconnect 12 unused web connectors",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.HIGH,
+            due_date="2026-03-20",
+            domain="system",
+            notes="Disconnect: AWS Marketplace, bioRxiv, Canva, Clinical Trials, "
+                  "CMS Coverage, Common Room, Consensus, Kiwi.com, Lumin, "
+                  "NPI Registry, Spotify, Weather. "
+                  "Each unused connector is attack surface maintained for free.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-006",
+            title="HIGH — Audit Zapier connected services and active Zaps",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.HIGH,
+            due_date="2026-03-20",
+            domain="system",
+            notes="Zapier account compromise cascades to ALL connected services. "
+                  "Audit active Zaps, disable unused ones, enable 2FA, "
+                  "review OAuth scopes granted to each connection.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-007",
+            title="MEDIUM — Enable 2FA on all connected service accounts",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.MEDIUM,
+            due_date="2026-03-22",
+            domain="system",
+            notes="Verify 2FA is enabled on: GitHub, Google (Gmail/Calendar/Drive), "
+                  "Cloudflare, Webflow, Notion, Zapier, n8n cloud, AWS.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-008",
+            title="MEDIUM — Review GitHub PAT/OAuth token scopes",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.MEDIUM,
+            due_date="2026-03-21",
+            domain="system",
+            notes="GitHub token should have minimum required scopes. "
+                  "No admin:org, no delete_repo. Review at github.com/settings/tokens.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-009",
+            title="MEDIUM — Restrict Google Drive OAuth scope to specific folders",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.MEDIUM,
+            due_date="2026-03-22",
+            domain="system",
+            notes="Google Drive OAuth should use drive.file or folder-scoped access, "
+                  "NOT drive (full access). Re-authorize with restricted scope.",
+            verification_method="manual_review",
+            auto_verifiable=False,
+        ),
+        RemediationTask(
+            task_id="conn-010",
+            title="INFO — Document all active connectors and their justification",
+            category=RemediationCategory.CONNECTOR_SECURITY,
+            severity=RemediationSeverity.INFO,
+            due_date="2026-03-25",
+            domain="system",
+            notes="Create a connector inventory: name, purpose, OAuth scopes, "
+                  "owner agent, last used date. Disconnect anything unused for 30+ days.",
+            verification_method="manual_review",
+            auto_verifiable=False,
         ),
     ]

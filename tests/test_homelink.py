@@ -196,6 +196,13 @@ def test_registry_load_defaults():
     assert "nordvpn" in reg.list_all()
     assert "cloudflare" in reg.list_all()
     assert "webflow" in reg.list_all()
+    assert "github" in reg.list_all()
+    assert "zapier" in reg.list_all()
+    assert "google_drive" in reg.list_all()
+    assert "desktop_commander_mcp" in reg.list_all()
+    assert "filesystem_mcp" in reg.list_all()
+    assert "aws_api_mcp" in reg.list_all()
+    assert "windows_mcp" in reg.list_all()
 
 
 def test_registry_by_agent():
@@ -222,6 +229,50 @@ def test_doordash_integration_has_threat_model():
     assert len(DOORDASH_INTEGRATION.threat_model) == 5
     assert DOORDASH_INTEGRATION.rollback_procedure != ""
     assert DOORDASH_INTEGRATION.failure_impact != ""
+
+
+def test_registry_dangerous_connectors():
+    reg = IntegrationRegistry()
+    reg.load_defaults()
+    dangerous = reg.dangerous_connectors()
+    names = [r.name for r in dangerous]
+    assert "desktop_commander_mcp" in names
+    assert "windows_mcp" in names
+    assert "aws_api_mcp" in names
+    assert len(dangerous) == 3
+
+
+def test_registry_connector_audit():
+    reg = IntegrationRegistry()
+    reg.load_defaults()
+    audit = reg.connector_audit()
+    assert audit["total_registered"] >= 18
+    assert audit["guardian_integrations"] > 0
+    assert audit["mcp_connectors"] > 0
+    assert audit["total_threats_modeled"] > 0
+    assert len(audit["dangerous_connectors"]) == 3
+    assert "desktop_commander_mcp" in audit["dangerous_connectors"]
+    assert isinstance(audit["untracked_connectors"], list)
+    assert "recommendation" in audit
+
+
+def test_github_integration_has_threat_model():
+    from guardian_one.homelink.registry import GITHUB_INTEGRATION
+    assert len(GITHUB_INTEGRATION.threat_model) == 5
+    assert any(t.severity == "critical" for t in GITHUB_INTEGRATION.threat_model)
+    assert GITHUB_INTEGRATION.owner_agent == "archivist"
+
+
+def test_zapier_integration_has_threat_model():
+    from guardian_one.homelink.registry import ZAPIER_INTEGRATION
+    assert len(ZAPIER_INTEGRATION.threat_model) == 5
+    assert any(t.severity == "critical" for t in ZAPIER_INTEGRATION.threat_model)
+
+
+def test_desktop_commander_all_critical():
+    from guardian_one.homelink.registry import DESKTOP_COMMANDER_CONNECTOR
+    critical_count = sum(1 for t in DESKTOP_COMMANDER_CONNECTOR.threat_model if t.severity == "critical")
+    assert critical_count >= 4  # Most threats are critical
 
 
 # ========================================================================

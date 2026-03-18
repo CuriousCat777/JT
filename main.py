@@ -28,6 +28,7 @@ Usage:
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
+    python main.py --connector-audit     # Audit Claude connector attack surface
 """
 
 from __future__ import annotations
@@ -263,6 +264,8 @@ def main() -> None:
                         help="Security remediation review (domain or 'all')")
     parser.add_argument("--security-sync", action="store_true",
                         help="Push remediation status to Notion")
+    parser.add_argument("--connector-audit", action="store_true",
+                        help="Audit Claude connector/MCP attack surface")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -713,6 +716,41 @@ def main() -> None:
             services=services_data,
             deliverables=deliverables,
         ))
+
+    elif args.connector_audit:
+        audit_report = guardian.registry.connector_audit()
+        print()
+        print("  CLAUDE CONNECTOR / MCP ATTACK SURFACE AUDIT")
+        print("  " + "=" * 56)
+        print(f"  Total registered:      {audit_report['total_registered']}")
+        print(f"  Guardian integrations:  {audit_report['guardian_integrations']}")
+        print(f"  MCP connectors:        {audit_report['mcp_connectors']}")
+        print(f"  Total threats modeled:  {audit_report['total_threats_modeled']}")
+        print()
+
+        if audit_report["dangerous_connectors"]:
+            print("  [!!] DANGEROUS CONNECTORS (disconnect when idle):")
+            for name in audit_report["dangerous_connectors"]:
+                record = guardian.registry.get(name)
+                if record:
+                    crits = sum(1 for t in record.threat_model if t.severity == "critical")
+                    print(f"    [CRITICAL x{crits}] {name}: {record.description[:60]}...")
+            print()
+
+        if audit_report["critical_threat_services"]:
+            print("  Services with CRITICAL threats:")
+            for svc in audit_report["critical_threat_services"]:
+                print(f"    {svc['service']}: {svc['count']} critical threat(s)")
+            print()
+
+        if audit_report["untracked_connectors"]:
+            print(f"  Untracked connectors ({len(audit_report['untracked_connectors'])}):")
+            for name in audit_report["untracked_connectors"]:
+                print(f"    [-] {name}")
+            print()
+
+        print(f"  Recommendation: {audit_report['recommendation']}")
+        print()
 
     elif args.security_review is not None or args.security_sync:
         from guardian_one.core.security_remediation import SecurityRemediationTracker
