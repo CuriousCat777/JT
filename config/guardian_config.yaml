@@ -209,3 +209,45 @@ agents:
             - ai_demos
           hosting: cloud_vps
           notion_dashboard: true
+
+  device_agent:
+    enabled: true
+    schedule_interval_minutes: 15
+    allowed_resources:
+      - devices
+      - network
+      - smart_home
+      - cameras
+    custom:
+      # Network security policy
+      iot_vlan_required: true           # IoT devices MUST be on isolated VLAN
+      block_iot_internet: true          # Block IoT devices from internet where possible
+      firmware_check_daily: true        # Check for firmware updates daily
+      unknown_device_alert: true        # Alert on new unknown devices
+      # Smart home ecosystems
+      ecosystems:
+        tplink_kasa:
+          enabled: true
+          local_only: true              # Block cloud, use python-kasa local API
+        philips_hue:
+          enabled: true
+          local_only: true              # Use bridge local API only
+          bridge_ip: ""                 # Set after discovery
+        govee:
+          enabled: true
+          prefer_lan: true              # Use LAN UDP API for newer models
+        security_cameras:
+          enabled: true
+          local_nvr: true               # Store on local NVR, not cloud
+          rtsp_encryption: true         # Require encrypted streams
+        smart_tv:
+          enabled: true
+          acr_disabled: true            # Automatic Content Recognition off
+          telemetry_blocked: true       # Block telemetry at router
+        vehicle:
+          enabled: true
+          obd2_readonly: true           # OBD-II read-only mode
+          remote_access: false          # Disable remote start/lock by default
+        flipper_zero:
+          enabled: true
+          authorized_testing_only: true # Legal compliance reminder

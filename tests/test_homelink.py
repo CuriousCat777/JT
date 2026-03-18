@@ -246,7 +246,7 @@ def test_registry_connector_audit():
     reg = IntegrationRegistry()
     reg.load_defaults()
     audit = reg.connector_audit()
-    assert audit["total_registered"] >= 18
+    assert audit["total_registered"] >= 25  # 14 guardian + 7 IoT + 4 MCP
     assert audit["guardian_integrations"] > 0
     assert audit["mcp_connectors"] > 0
     assert audit["total_threats_modeled"] > 0

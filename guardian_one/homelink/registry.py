@@ -381,6 +381,254 @@ NORDVPN_INTEGRATION = IntegrationRecord(
     owner_agent="archivist",
 )
 
+# ---------------------------------------------------------------------------
+# IoT / Smart Home integrations
+# ---------------------------------------------------------------------------
+
+TPLINK_KASA_INTEGRATION = IntegrationRecord(
+    name="tplink_kasa",
+    description="TP-Link Kasa/Tapo — smart plugs and switches via local LAN API",
+    base_url="local_lan",
+    auth_method="api_key",
+    data_flow="DeviceAgent discovers TP-Link devices via UDP broadcast on LAN. "
+              "Controls power state, schedules, and energy monitoring via python-kasa. "
+              "All communication stays on local network — no cloud dependency required.",
+    vault_keys=["TPLINK_CLOUD_USER", "TPLINK_CLOUD_PASS"],
+    threat_model=[
+        ThreatEntry("Unencrypted LAN commands allow replay attacks", "high",
+                    "TP-Link local protocol uses XOR obfuscation, not encryption. "
+                    "Mitigate: isolate on IoT VLAN; block internet access at router."),
+        ThreatEntry("Cloud account compromise grants remote device control", "high",
+                    "Use local-only mode where possible; disable cloud features in app; "
+                    "enable 2FA on TP-Link account; unique password in Vault."),
+        ThreatEntry("Firmware vulnerability enables device takeover", "high",
+                    "Monitor CVE feeds for TP-Link Kasa/Tapo models; auto-update enabled; "
+                    "replace if vendor drops support."),
+        ThreatEntry("Device used as network pivot to reach trusted LAN", "medium",
+                    "IoT VLAN isolation prevents lateral movement; firewall rules "
+                    "block IoT-to-trusted traffic."),
+        ThreatEntry("Energy monitoring data reveals occupancy patterns", "medium",
+                    "Data stays local; no cloud sync of usage patterns; "
+                    "energy data treated as PII by content classification gate."),
+    ],
+    failure_impact="Smart plugs remain in last state. Manual control via physical button. "
+                   "No safety risk — plugs fail-safe to last state.",
+    rollback_procedure="1. Reset plug to factory via physical button (hold 5s). "
+                       "2. Remove from TP-Link cloud account. "
+                       "3. Re-pair with local-only configuration.",
+    owner_agent="device_agent",
+)
+
+PHILIPS_HUE_INTEGRATION = IntegrationRecord(
+    name="philips_hue",
+    description="Philips Hue — smart lighting via Zigbee through Hue Bridge local API",
+    base_url="local_lan",
+    auth_method="api_key",
+    data_flow="DeviceAgent communicates with Hue Bridge over local HTTPS API (port 443). "
+              "Bridge controls all Hue bulbs/strips via Zigbee. API key obtained by "
+              "physical button press on bridge. No cloud required for local control.",
+    vault_keys=["HUE_BRIDGE_API_KEY"],
+    threat_model=[
+        ThreatEntry("Bridge API key theft grants full lighting control", "medium",
+                    "API key in Vault; requires physical button press to generate; "
+                    "revoke via bridge factory reset if compromised."),
+        ThreatEntry("Zigbee protocol vulnerabilities (ZigBee Light Link)", "high",
+                    "Hue Bridge firmware addresses known Zigbee vulnerabilities. "
+                    "Keep firmware updated. Zigbee range limited to ~30m."),
+        ThreatEntry("Bridge firmware vulnerability enables network pivot", "high",
+                    "Bridge on IoT VLAN; firmware auto-update enabled; "
+                    "Philips has strong security track record (Signify)."),
+        ThreatEntry("Cloud account enables remote access if connected", "medium",
+                    "Disable Hue cloud/remote access if not needed; use local-only; "
+                    "enable 2FA on Hue account if cloud features used."),
+        ThreatEntry("Lighting patterns reveal occupancy to outside observers", "low",
+                    "Schedule randomization available; away-mode varies patterns; "
+                    "not a high risk for apartment/house with curtains."),
+    ],
+    failure_impact="Lights remain in last state. Physical switches still work. "
+                   "Bridge reboot restores full control.",
+    rollback_procedure="1. Factory reset Hue Bridge (pin hole button, hold 5s). "
+                       "2. Re-pair bulbs (power cycle 5x). "
+                       "3. Generate new API key via physical button press. "
+                       "4. Store new key in Vault.",
+    owner_agent="device_agent",
+)
+
+GOVEE_INTEGRATION = IntegrationRecord(
+    name="govee",
+    description="Govee — smart LED lights/strips via LAN UDP API or cloud REST API",
+    base_url="https://developer-api.govee.com",
+    auth_method="api_key",
+    data_flow="DeviceAgent controls Govee devices via local LAN UDP broadcast (newer models) "
+              "or Govee cloud API (older models). LAN mode preferred for latency and privacy.",
+    vault_keys=["GOVEE_API_KEY"],
+    threat_model=[
+        ThreatEntry("Cloud API key grants control of all Govee devices", "medium",
+                    "API key in Vault; rate limited by Govee (100 req/min); "
+                    "use local LAN API where supported to avoid cloud dependency."),
+        ThreatEntry("Unencrypted UDP broadcast on LAN", "medium",
+                    "LAN UDP commands are not encrypted; isolate on IoT VLAN; "
+                    "acceptable risk for lighting control."),
+        ThreatEntry("Cloud account compromise", "medium",
+                    "Enable 2FA on Govee account; unique password; "
+                    "disable cloud features if only using local LAN API."),
+        ThreatEntry("BLE pairing allows nearby unauthorized control", "low",
+                    "BLE range limited to ~10m; pairing required; "
+                    "acceptable for indoor use."),
+        ThreatEntry("Firmware update mechanism not verified", "medium",
+                    "Govee OTA updates over WiFi; verify firmware versions periodically; "
+                    "replace device if vendor drops support."),
+    ],
+    failure_impact="Lights remain in last state. Govee app provides backup control. "
+                   "Physical power switch always works.",
+    rollback_procedure="1. Revoke API key at developer.govee.com. "
+                       "2. Remove key from Vault. "
+                       "3. Factory reset device (varies by model). "
+                       "4. Re-pair via Govee app.",
+    owner_agent="device_agent",
+)
+
+SECURITY_CAMERA_INTEGRATION = IntegrationRecord(
+    name="security_cameras",
+    description="Security cameras — RTSP/ONVIF local streams with optional NVR",
+    base_url="local_lan",
+    auth_method="basic",
+    data_flow="DeviceAgent monitors camera health and streams via RTSP/ONVIF. "
+              "Video stored on local NVR or NAS — never cloud unless explicitly configured. "
+              "Motion detection alerts routed through Guardian One notifications.",
+    vault_keys=["CAMERA_ADMIN_USER", "CAMERA_ADMIN_PASS"],
+    threat_model=[
+        ThreatEntry("Default credentials exposed to internet (Shodan/Censys)", "critical",
+                    "CHANGE DEFAULT PASSWORD IMMEDIATELY. Use unique credentials per camera. "
+                    "Store in Vault. NEVER expose RTSP port to internet."),
+        ThreatEntry("Unencrypted RTSP stream intercepted on LAN", "high",
+                    "Use RTMPS or RTSP over TLS where supported; isolate cameras on IoT VLAN; "
+                    "accept risk if VLAN-isolated and no sensitive areas recorded."),
+        ThreatEntry("Camera firmware vulnerability enables RCE", "critical",
+                    "Keep firmware updated; subscribe to CVE alerts for camera model; "
+                    "block camera internet access at router (local NVR only); "
+                    "replace camera if vendor drops security patches."),
+        ThreatEntry("Cloud-dependent cameras stream video to vendor servers", "high",
+                    "Prefer cameras with local RTSP/ONVIF support; disable cloud features; "
+                    "block camera internet access at router if not needed."),
+        ThreatEntry("Physical tampering or camera repositioning", "medium",
+                    "Mount cameras at height; use tamper-detection alerts if supported; "
+                    "pair with motion detectors for redundancy."),
+    ],
+    failure_impact="Camera offline — no recording for affected area. Motion detectors "
+                   "provide backup alerts. NVR continues recording other cameras.",
+    rollback_procedure="1. Factory reset camera (usually pinhole button). "
+                       "2. Change admin password immediately. "
+                       "3. Store new credentials in Vault. "
+                       "4. Re-add to NVR/recording system. "
+                       "5. Verify RTSP stream is not internet-accessible.",
+    owner_agent="device_agent",
+)
+
+VEHICLE_INTEGRATION = IntegrationRecord(
+    name="vehicle_telematics",
+    description="Connected vehicle — OBD-II diagnostics and manufacturer API",
+    base_url="local_obd2",
+    auth_method="api_key",
+    data_flow="OBD-II dongle provides local diagnostic data (engine codes, fuel, battery). "
+              "Manufacturer app/API provides remote features (lock, start, GPS). "
+              "GPS and location data is PII — classified and never synced externally.",
+    vault_keys=["VEHICLE_API_KEY", "VEHICLE_ACCOUNT_PASS"],
+    threat_model=[
+        ThreatEntry("Manufacturer API compromise enables remote vehicle control", "critical",
+                    "Enable 2FA on manufacturer account; unique password in Vault; "
+                    "disable remote start if not needed; review API data sharing policy."),
+        ThreatEntry("OBD-II dongle as attack vector for CAN bus injection", "high",
+                    "Use read-only OBD-II adapters (ELM327); never leave dongle plugged in "
+                    "when not in use; disable Bluetooth on dongle when not actively reading."),
+        ThreatEntry("GPS/location data reveals home address and daily patterns", "high",
+                    "Location data classified as PII; never synced to external services; "
+                    "review manufacturer data sharing and opt out where possible."),
+        ThreatEntry("Relay attack enables keyless entry theft", "high",
+                    "Use Faraday pouch for key fob when at home; disable passive entry "
+                    "if supported; Flipper Zero can test for relay vulnerabilities."),
+        ThreatEntry("Vehicle API sells telemetry to insurance/data brokers", "medium",
+                    "Review manufacturer privacy policy; opt out of data sharing; "
+                    "consider aftermarket OBD-II only (no manufacturer cloud)."),
+    ],
+    failure_impact="Vehicle functions normally without API. Remote features unavailable. "
+                   "OBD-II dongle provides independent diagnostics.",
+    rollback_procedure="1. Revoke API access at manufacturer portal. "
+                       "2. Remove credentials from Vault. "
+                       "3. Disconnect OBD-II dongle. "
+                       "4. Change account password.",
+    owner_agent="device_agent",
+)
+
+FLIPPER_ZERO_INTEGRATION = IntegrationRecord(
+    name="flipper_zero",
+    description="Flipper Zero — multi-protocol security research tool (sub-GHz, NFC, IR, BLE)",
+    base_url="local_usb",
+    auth_method="api_key",
+    data_flow="USB serial connection only. No network connectivity (unless WiFi dev board). "
+              "Used for authorized security testing of owned IoT devices: sub-GHz signal "
+              "analysis, NFC badge cloning, IR remote learning, BLE device testing.",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("Unauthorized sub-GHz transmission violates FCC regulations", "high",
+                    "Only transmit on frequencies legal in your jurisdiction. "
+                    "Use for RECEIVE/ANALYZE only unless testing owned devices. "
+                    "Sub-GHz TX is region-locked in official firmware."),
+        ThreatEntry("Captured NFC/RFID data from access badges stored insecurely", "high",
+                    "Captured badge data is sensitive — store on Flipper only for authorized testing. "
+                    "Delete captures after testing. Never clone badges you don't own."),
+        ThreatEntry("Custom/third-party firmware introduces vulnerabilities", "medium",
+                    "Use official Flipper firmware or well-audited alternatives. "
+                    "Verify firmware checksums. Keep updated via qFlipper."),
+        ThreatEntry("Physical theft of Flipper exposes captured signals", "medium",
+                    "Enable PIN lock on Flipper Zero. Regularly purge captured data. "
+                    "Treat Flipper as a security-sensitive device."),
+        ThreatEntry("WiFi dev board adds network attack surface", "medium",
+                    "If WiFi dev board attached: isolate on guest network; "
+                    "disable when not actively testing; Marauder firmware for "
+                    "authorized WiFi security auditing only."),
+    ],
+    failure_impact="No impact on home automation. Security testing capabilities unavailable.",
+    rollback_procedure="1. Factory reset Flipper via Settings → Storage → Factory Reset. "
+                       "2. Reflash official firmware via qFlipper. "
+                       "3. Delete all saved captures.",
+    owner_agent="device_agent",
+)
+
+SMART_TV_INTEGRATION = IntegrationRecord(
+    name="smart_tv",
+    description="Smart TV — LAN API control with telemetry blocking",
+    base_url="local_lan",
+    auth_method="api_key",
+    data_flow="DeviceAgent communicates with TV via LAN API (Samsung SmartThings / LG ThinQ / Roku). "
+              "ACR (Automatic Content Recognition) disabled. Telemetry domains blocked at router.",
+    vault_keys=["TV_API_TOKEN"],
+    threat_model=[
+        ThreatEntry("ACR tracks viewing habits and sells data to advertisers", "high",
+                    "DISABLE ACR in TV settings immediately. Block TV telemetry domains "
+                    "at router/Pi-hole: samsungacr.com, lgtvsdp.com, etc."),
+        ThreatEntry("TV microphone/camera enables surveillance", "high",
+                    "Disable voice assistant; cover camera if present; "
+                    "block TV internet access except for streaming apps."),
+        ThreatEntry("Smart TV firmware vulnerability", "medium",
+                    "Keep firmware updated; subscribe to CVE alerts for TV model; "
+                    "isolate on IoT VLAN."),
+        ThreatEntry("Streaming app credentials stored on TV", "medium",
+                    "Use unique passwords for streaming accounts; enable 2FA; "
+                    "factory reset TV before selling/disposing."),
+        ThreatEntry("UPnP/DLNA on TV exposes media server to network", "medium",
+                    "Disable UPnP on TV and router; IoT VLAN isolation prevents "
+                    "access to trusted LAN media."),
+    ],
+    failure_impact="TV functions normally for broadcast/HDMI. Smart features unavailable. "
+                   "Use streaming device (Roku/Fire Stick) as backup.",
+    rollback_procedure="1. Factory reset TV via settings menu. "
+                       "2. Re-disable ACR and voice features. "
+                       "3. Re-block telemetry domains at router. "
+                       "4. Re-isolate on IoT VLAN.",
+    owner_agent="device_agent",
+)
+
 
 GITHUB_INTEGRATION = IntegrationRecord(
     name="github",
@@ -677,6 +925,13 @@ class IntegrationRegistry:
             GITHUB_INTEGRATION,
             ZAPIER_INTEGRATION,
             GOOGLE_DRIVE_INTEGRATION,
+            TPLINK_KASA_INTEGRATION,
+            PHILIPS_HUE_INTEGRATION,
+            GOVEE_INTEGRATION,
+            SECURITY_CAMERA_INTEGRATION,
+            VEHICLE_INTEGRATION,
+            FLIPPER_ZERO_INTEGRATION,
+            SMART_TV_INTEGRATION,
             DESKTOP_COMMANDER_CONNECTOR,
             FILESYSTEM_MCP_CONNECTOR,
             AWS_MCP_CONNECTOR,
