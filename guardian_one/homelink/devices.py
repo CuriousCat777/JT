@@ -4,11 +4,16 @@ Manages Jeremy's local network devices including:
 - Security cameras and motion detectors
 - Smart plugs (TP-Link Kasa/Tapo)
 - Smart lights (Philips Hue, Govee)
+- Smart blinds (Ryse SmartShades)
 - Smart TV
 - Connected vehicle (OBD-II / manufacturer API)
 - Flipper Zero (RF/NFC/IR security tool)
 - Network infrastructure (router, switches, APs)
 
+Naming convention:  {category}-{location}-{index}
+  Examples: cam-front-door-01, light-hue-bedroom-01, blind-ryse-living-01
+
+Room model maps physical rooms to device groups for automations.
 All device communication routes through the Gateway with full audit trail.
 Device credentials stored in Vault. Threat models in Registry.
 """
@@ -30,6 +35,7 @@ class DeviceCategory(Enum):
     MOTION_DETECTOR = "motion_detector"
     SMART_PLUG = "smart_plug"
     SMART_LIGHT = "smart_light"
+    SMART_BLIND = "smart_blind"
     SMART_TV = "smart_tv"
     VEHICLE = "vehicle"
     SECURITY_TOOL = "security_tool"
@@ -131,6 +137,66 @@ class DeviceRecord:
 
 
 # ---------------------------------------------------------------------------
+# Room model — maps physical spaces to device groups
+# ---------------------------------------------------------------------------
+
+class RoomType(Enum):
+    BEDROOM = "bedroom"
+    LIVING_ROOM = "living_room"
+    KITCHEN = "kitchen"
+    BATHROOM = "bathroom"
+    OFFICE = "office"
+    HALLWAY = "hallway"
+    GARAGE = "garage"
+    EXTERIOR = "exterior"
+    ENTRY = "entry"
+    OTHER = "other"
+
+
+@dataclass
+class Room:
+    """A physical room/zone with associated devices and automation policies."""
+    room_id: str                          # e.g., "bedroom-master"
+    name: str                             # e.g., "Master Bedroom"
+    room_type: RoomType
+    floor: int = 1                        # Floor number (1 = ground)
+    device_ids: list[str] = field(default_factory=list)
+    # Automation policies for this room
+    auto_lights: bool = True              # Auto lights on occupancy
+    auto_blinds: bool = True              # Auto blinds on schedule
+    occupancy_sensor_id: str = ""         # Motion detector for this room
+    notes: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Flipper Zero capabilities model
+# ---------------------------------------------------------------------------
+
+class FlipperCapability(Enum):
+    """What the Flipper Zero can do for each device."""
+    IR_CAPTURE = "ir_capture"             # Learn IR remote codes
+    IR_TRANSMIT = "ir_transmit"           # Send IR commands
+    SUB_GHZ_CAPTURE = "sub_ghz_capture"   # Record sub-GHz signals
+    SUB_GHZ_TRANSMIT = "sub_ghz_transmit" # Replay sub-GHz signals
+    NFC_READ = "nfc_read"                 # Read NFC tags
+    NFC_EMULATE = "nfc_emulate"           # Emulate NFC tags
+    BLE_SCAN = "ble_scan"                 # Scan BLE devices
+    GPIO_CONTROL = "gpio_control"         # GPIO pin control
+
+
+@dataclass
+class FlipperProfile:
+    """Maps a device to its Flipper Zero interaction capabilities."""
+    device_id: str                        # Which device this profile is for
+    capabilities: list[FlipperCapability] = field(default_factory=list)
+    ir_remote_file: str = ""              # Path to .ir file on Flipper SD
+    sub_ghz_file: str = ""                # Path to .sub file on Flipper SD
+    notes: str = ""
+    tested: bool = False                  # Has this been verified working?
+    last_tested: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Device registry
 # ---------------------------------------------------------------------------
 
@@ -144,6 +210,8 @@ class DeviceRegistry:
 
     def __init__(self) -> None:
         self._devices: dict[str, DeviceRecord] = {}
+        self._rooms: dict[str, Room] = {}
+        self._flipper_profiles: dict[str, FlipperProfile] = {}
 
     def register(self, device: DeviceRecord) -> None:
         self._devices[device.device_id] = device
@@ -260,13 +328,81 @@ class DeviceRegistry:
         return counts
 
     # ------------------------------------------------------------------
+    # Room management
+    # ------------------------------------------------------------------
+
+    def add_room(self, room: Room) -> None:
+        self._rooms[room.room_id] = room
+
+    def get_room(self, room_id: str) -> Room | None:
+        return self._rooms.get(room_id)
+
+    def all_rooms(self) -> list[Room]:
+        return list(self._rooms.values())
+
+    def devices_in_room(self, room_id: str) -> list[DeviceRecord]:
+        room = self._rooms.get(room_id)
+        if not room:
+            return []
+        return [d for d in self._devices.values() if d.device_id in room.device_ids]
+
+    def room_for_device(self, device_id: str) -> Room | None:
+        for room in self._rooms.values():
+            if device_id in room.device_ids:
+                return room
+        return None
+
+    def rooms_by_type(self, room_type: RoomType) -> list[Room]:
+        return [r for r in self._rooms.values() if r.room_type == room_type]
+
+    def room_summary(self) -> list[dict[str, Any]]:
+        """Summary of all rooms with device counts."""
+        result = []
+        for room in self._rooms.values():
+            devices = self.devices_in_room(room.room_id)
+            result.append({
+                "room_id": room.room_id,
+                "name": room.name,
+                "type": room.room_type.value,
+                "device_count": len(devices),
+                "device_ids": [d.device_id for d in devices],
+                "auto_lights": room.auto_lights,
+                "auto_blinds": room.auto_blinds,
+            })
+        return result
+
+    # ------------------------------------------------------------------
+    # Flipper Zero profiles
+    # ------------------------------------------------------------------
+
+    def add_flipper_profile(self, profile: FlipperProfile) -> None:
+        self._flipper_profiles[profile.device_id] = profile
+
+    def get_flipper_profile(self, device_id: str) -> FlipperProfile | None:
+        return self._flipper_profiles.get(device_id)
+
+    def all_flipper_profiles(self) -> list[FlipperProfile]:
+        return list(self._flipper_profiles.values())
+
+    def flipper_controllable_devices(self) -> list[DeviceRecord]:
+        """Devices that have a Flipper profile (IR/sub-GHz/NFC control)."""
+        return [
+            d for d in self._devices.values()
+            if d.device_id in self._flipper_profiles
+        ]
+
+    # ------------------------------------------------------------------
     # Load Jeremy's known devices
     # ------------------------------------------------------------------
 
     def load_defaults(self) -> None:
-        """Register all of Jeremy's known devices."""
+        """Register all of Jeremy's known devices, rooms, and Flipper profiles."""
         for device in _jeremys_devices():
             self.register(device)
+        for room in _jeremys_rooms():
+            self.add_room(room)
+        for profile in _jeremys_flipper_profiles():
+            self.add_flipper_profile(profile)
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +522,26 @@ def _jeremys_devices() -> list[DeviceRecord]:
             tags=["vehicle", "telematics"],
         ),
 
+        # --- Smart blinds (Ryse SmartShades) ---
+        DeviceRecord(
+            device_id="blind-ryse-01",
+            name="Ryse SmartShade Motor 1",
+            category=DeviceCategory.SMART_BLIND,
+            manufacturer="Ryse",
+            model="SmartShade",
+            protocols=[DeviceProtocol.BLE, DeviceProtocol.WIFI, DeviceProtocol.CLOUD_API],
+            network_segment=NetworkSegment.IOT_VLAN,
+            integration_name="ryse_smartshade",
+            notes="Ryse SmartShade motorizes existing blinds. BLE for local control, "
+                  "WiFi via SmartBridge for remote/automation. Supports open/close/position. "
+                  "Schedule via Chronos: open at sunrise, close at sunset. "
+                  "Controllable via Flipper Zero IR if IR receiver present. "
+                  "Guardian One can send commands through SmartBridge local API or cloud.",
+            vault_credential_key="RYSE_API_KEY",
+            location="living_room",
+            tags=["smart_home", "blinds", "automation", "chronos"],
+        ),
+
         # --- Flipper Zero ---
         DeviceRecord(
             device_id="flipper-zero",
@@ -408,5 +564,128 @@ def _jeremys_devices() -> list[DeviceRecord]:
                   "LEGAL: Only use on devices you own or have written authorization to test.",
             firmware=FirmwareInfo(auto_update=False),
             tags=["security", "pentest", "research"],
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Jeremy's room layout
+# ---------------------------------------------------------------------------
+
+def _jeremys_rooms() -> list[Room]:
+    """Room definitions mapping physical spaces to device groups."""
+    return [
+        Room(
+            room_id="living-room",
+            name="Living Room",
+            room_type=RoomType.LIVING_ROOM,
+            device_ids=[
+                "tv-main", "light-govee-01", "plug-tplink-01",
+                "blind-ryse-01", "motion-01",
+            ],
+            auto_lights=True,
+            auto_blinds=True,
+            occupancy_sensor_id="motion-01",
+        ),
+        Room(
+            room_id="bedroom-master",
+            name="Master Bedroom",
+            room_type=RoomType.BEDROOM,
+            device_ids=["light-hue-bridge"],
+            auto_lights=True,
+            auto_blinds=True,
+            notes="Hue bridge here controls all Hue bulbs house-wide via Zigbee.",
+        ),
+        Room(
+            room_id="office",
+            name="Office",
+            room_type=RoomType.OFFICE,
+            device_ids=["flipper-zero"],
+            auto_lights=True,
+            auto_blinds=False,
+            notes="Primary workspace. Flipper Zero USB-connected to workstation.",
+        ),
+        Room(
+            room_id="exterior-front",
+            name="Front Exterior",
+            room_type=RoomType.EXTERIOR,
+            device_ids=["cam-01"],
+            auto_lights=False,
+            auto_blinds=False,
+            notes="Front-facing security camera. Motion detection for alerts.",
+        ),
+        Room(
+            room_id="garage",
+            name="Garage",
+            room_type=RoomType.GARAGE,
+            device_ids=["vehicle-01"],
+            auto_lights=False,
+            auto_blinds=False,
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Flipper Zero interaction profiles
+# ---------------------------------------------------------------------------
+
+def _jeremys_flipper_profiles() -> list[FlipperProfile]:
+    """Defines how the Flipper Zero can interact with each device.
+
+    These profiles tell the DeviceAgent which devices can be controlled,
+    audited, or tested via the Flipper Zero.
+    """
+    return [
+        FlipperProfile(
+            device_id="tv-main",
+            capabilities=[
+                FlipperCapability.IR_CAPTURE,
+                FlipperCapability.IR_TRANSMIT,
+            ],
+            ir_remote_file="infrared/tv_main.ir",
+            notes="Learn TV power, volume, input, mute via IR. "
+                  "Flipper can serve as universal remote backup.",
+        ),
+        FlipperProfile(
+            device_id="blind-ryse-01",
+            capabilities=[
+                FlipperCapability.BLE_SCAN,
+                FlipperCapability.IR_CAPTURE,
+                FlipperCapability.IR_TRANSMIT,
+            ],
+            notes="BLE scan to verify Ryse SmartShade is broadcasting. "
+                  "If Ryse has IR receiver, capture/replay open/close commands.",
+        ),
+        FlipperProfile(
+            device_id="plug-tplink-01",
+            capabilities=[FlipperCapability.BLE_SCAN],
+            notes="BLE scan to detect if plug is broadcasting. "
+                  "TP-Link Kasa plugs don't use sub-GHz or IR — LAN API only.",
+        ),
+        FlipperProfile(
+            device_id="light-govee-01",
+            capabilities=[
+                FlipperCapability.BLE_SCAN,
+                FlipperCapability.IR_CAPTURE,
+                FlipperCapability.IR_TRANSMIT,
+            ],
+            notes="Govee devices often include IR remote. Capture with Flipper "
+                  "for backup control. BLE scan to verify device presence.",
+        ),
+        FlipperProfile(
+            device_id="cam-01",
+            capabilities=[FlipperCapability.BLE_SCAN],
+            notes="BLE scan to detect camera presence. "
+                  "Test: does camera expose any unprotected BLE services?",
+        ),
+        FlipperProfile(
+            device_id="motion-01",
+            capabilities=[
+                FlipperCapability.SUB_GHZ_CAPTURE,
+                FlipperCapability.BLE_SCAN,
+            ],
+            notes="If motion detector uses 433MHz sub-GHz, capture signals "
+                  "to verify encryption. BLE scan if WiFi/BLE model. "
+                  "SECURITY AUDIT: verify signals are encrypted, not replayable.",
         ),
     ]

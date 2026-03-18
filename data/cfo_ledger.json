@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-03-18T16:05:27.111930+00:00",
+  "saved_at": "2026-03-18T20:16:20.822555+00:00",
   "accounts": [
     {
       "name": "Essentia Health 457(b) Deferred Compensation",
@@ -153,84 +153,84 @@
       "account_type": "checking",
       "balance": 110.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Saving (1111)",
       "account_type": "savings",
       "balance": 210.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid CD (2222)",
       "account_type": "checking",
       "balance": 1000.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Credit Card (3333)",
       "account_type": "credit_card",
       "balance": -410.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Money Market (4444)",
       "account_type": "checking",
       "balance": 43200.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid IRA (5555)",
       "account_type": "retirement",
       "balance": 320.76,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid 401k (6666)",
       "account_type": "retirement",
       "balance": 23631.9805,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Student Loan (7777)",
       "account_type": "loan",
       "balance": -65262.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Mortgage (8888)",
       "account_type": "loan",
       "balance": -56302.06,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid HSA (9001)",
       "account_type": "checking",
       "balance": 6009.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Cash Management (9002)",
       "account_type": "checking",
       "balance": 12060.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     },
     {
       "name": "Plaid Business Credit Card (9999)",
       "account_type": "credit_card",
       "balance": -5020.0,
       "institution": "First Platypus Bank",
-      "last_synced": "2026-03-18T16:05:24.344104+00:00"
+      "last_synced": "2026-03-18T20:16:18.400027+00:00"
     }
   ],
   "transactions": [
