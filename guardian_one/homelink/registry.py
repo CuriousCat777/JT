@@ -560,6 +560,42 @@ VEHICLE_INTEGRATION = IntegrationRecord(
     owner_agent="device_agent",
 )
 
+RYSE_SMARTSHADE_INTEGRATION = IntegrationRecord(
+    name="ryse_smartshade",
+    description="Ryse SmartShade — motorized window blinds via BLE/WiFi SmartBridge",
+    base_url="local_lan",
+    auth_method="api_key",
+    data_flow="DeviceAgent controls Ryse SmartShade motors via SmartBridge local API. "
+              "BLE for direct pairing, WiFi via bridge for automation. "
+              "Open/close/position commands from Chronos schedule events. "
+              "Cloud API available but local preferred.",
+    vault_keys=["RYSE_API_KEY"],
+    threat_model=[
+        ThreatEntry("BLE pairing allows nearby unauthorized blind control", "medium",
+                    "BLE range ~10m; requires initial pairing via Ryse app; "
+                    "acceptable for indoor residential use."),
+        ThreatEntry("SmartBridge cloud API exposes blind state/schedule", "medium",
+                    "Use local API via SmartBridge on IoT VLAN; disable cloud if not needed; "
+                    "blind position data is low-sensitivity."),
+        ThreatEntry("Firmware vulnerability in SmartBridge", "medium",
+                    "Keep SmartBridge firmware updated via Ryse app; "
+                    "isolate on IoT VLAN to prevent lateral movement."),
+        ThreatEntry("Blind schedule reveals occupancy patterns", "low",
+                    "Schedule randomization available; pair with light automations "
+                    "to simulate occupancy when away."),
+        ThreatEntry("Motor failure leaves blinds in last position", "low",
+                    "Manual override always available via physical chain/cord. "
+                    "No safety risk — blinds fail-safe to last position."),
+    ],
+    failure_impact="Blinds remain in last position. Manual cord/chain control always works. "
+                   "SmartBridge reboot typically restores connectivity.",
+    rollback_procedure="1. Factory reset SmartBridge via pinhole button. "
+                       "2. Re-pair motors via Ryse app. "
+                       "3. Store new API key in Vault. "
+                       "4. Re-configure automation rules.",
+    owner_agent="device_agent",
+)
+
 FLIPPER_ZERO_INTEGRATION = IntegrationRecord(
     name="flipper_zero",
     description="Flipper Zero — multi-protocol security research tool (sub-GHz, NFC, IR, BLE)",
@@ -930,6 +966,7 @@ class IntegrationRegistry:
             GOVEE_INTEGRATION,
             SECURITY_CAMERA_INTEGRATION,
             VEHICLE_INTEGRATION,
+            RYSE_SMARTSHADE_INTEGRATION,
             FLIPPER_ZERO_INTEGRATION,
             SMART_TV_INTEGRATION,
             DESKTOP_COMMANDER_CONNECTOR,

@@ -25,8 +25,12 @@ Usage:
     python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
     python main.py --website-sync       # Push website dashboards to Notion
     python main.py --notion-sync        # Full Notion workspace sync (agents, roadmap, health)
-    python main.py --devices             # Show all managed IoT/LAN devices
+    python main.py --devices             # H.O.M.E. L.I.N.K. full dashboard
     python main.py --device-audit        # Run device security audit
+    python main.py --rooms               # Show room layout with devices
+    python main.py --scene movie         # Activate a scene (movie, work, away, goodnight)
+    python main.py --home-event wake     # Fire event (wake, sleep, leave, arrive, sunrise, sunset)
+    python main.py --flipper             # Flipper Zero device profiles
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
@@ -266,6 +270,14 @@ def main() -> None:
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
                         help="Run device security audit")
+    parser.add_argument("--scene", type=str, default=None,
+                        help="Activate a home scene (movie, work, away, goodnight)")
+    parser.add_argument("--home-event", type=str, default=None,
+                        help="Fire a schedule event (wake, sleep, leave, arrive, sunrise, sunset)")
+    parser.add_argument("--flipper", action="store_true",
+                        help="Show Flipper Zero device profiles and capabilities")
+    parser.add_argument("--rooms", action="store_true",
+                        help="Show room layout with devices")
     parser.add_argument("--security-review", nargs="?", const="all", default=None,
                         help="Security remediation review (domain or 'all')")
     parser.add_argument("--security-sync", action="store_true",
@@ -310,7 +322,7 @@ def main() -> None:
         guardian.shutdown()
         return
 
-    if args.devices or args.device_audit:
+    if args.devices or args.device_audit or args.scene or args.home_event or args.flipper or args.rooms:
         from guardian_one.agents.device_agent import DeviceAgent
         from guardian_one.homelink.devices import DeviceRegistry
         dev_config = AgentConfig(name="device_agent", enabled=True,
@@ -320,15 +332,75 @@ def main() -> None:
                                 device_registry=dev_registry)
         dev_agent.initialize()
 
-        if args.device_audit:
+        if args.scene:
+            scene_id = f"scene-{args.scene}" if not args.scene.startswith("scene-") else args.scene
+            results = dev_agent.activate_scene(scene_id)
+            scene = dev_agent.automation.get_scene(scene_id)
+            if scene:
+                print(f"\n  Scene activated: {scene.name}")
+                print(f"  {scene.description}")
+                print(f"  Actions executed: {len(results)}")
+                for r in results:
+                    target = r["device_id"] or r["room_id"]
+                    print(f"    -> {r['action']} on {target}")
+            else:
+                print(f"\n  Scene '{scene_id}' not found.")
+                print("  Available scenes:")
+                for s in dev_agent.automation.all_scenes():
+                    print(f"    {s.scene_id}: {s.name}")
+
+        elif args.home_event:
+            event = args.home_event
+            if event in ("sunrise", "sunset"):
+                results = dev_agent.handle_solar_event(event)
+            else:
+                results = dev_agent.handle_schedule_event(event)
+            print(f"\n  Event fired: {event}")
+            print(f"  Actions executed: {len(results)}")
+            for r in results:
+                target = r["device_id"] or r["room_id"]
+                print(f"    -> {r['action']} on {target}")
+
+        elif args.flipper:
+            flipper = dev_agent.flipper_audit()
+            print("\n  FLIPPER ZERO — DEVICE INTERACTION PROFILES")
+            print("  " + "=" * 50)
+            for fp in flipper["devices"]:
+                tested = "VERIFIED" if fp["tested"] else "UNTESTED"
+                print(f"\n  {fp['device_id']}  [{tested}]")
+                print(f"    Capabilities: {', '.join(fp['capabilities'])}")
+                if fp["ir_file"]:
+                    print(f"    IR remote: {fp['ir_file']}")
+                if fp["sub_ghz_file"]:
+                    print(f"    Sub-GHz: {fp['sub_ghz_file']}")
+                if fp["notes"]:
+                    print(f"    Notes: {fp['notes']}")
+            print(f"\n  Total: {flipper['total_profiles']} profiles, "
+                  f"{flipper['controllable_devices']} controllable, "
+                  f"{flipper['untested_profiles']} untested")
+
+        elif args.rooms:
+            rooms = dev_registry.room_summary()
+            print("\n  H.O.M.E. L.I.N.K. — ROOM LAYOUT")
+            print("  " + "=" * 50)
+            for room in rooms:
+                auto_flags = []
+                if room["auto_lights"]:
+                    auto_flags.append("lights")
+                if room["auto_blinds"]:
+                    auto_flags.append("blinds")
+                auto_str = f"  [auto: {', '.join(auto_flags)}]" if auto_flags else ""
+                print(f"\n  {room['name']} ({room['type']}){auto_str}")
+                for did in room["device_ids"]:
+                    d = dev_registry.get(did)
+                    if d:
+                        print(f"    - {d.name} ({d.category.value})")
+
+        elif args.device_audit:
             report = dev_agent.run()
-            print(dev_agent.status_text())
-            print()
-            audit = dev_registry.security_audit()
-            if audit["issues"]:
-                print(f"  {audit['issue_count']} security issues found (risk {audit['risk_score']}/5)")
+            print(dev_agent.dashboard_text())
             if report.recommendations:
-                print("\n  Recommendations:")
+                print("  Recommendations:")
                 for rec in report.recommendations:
                     print(f"    - {rec}")
             if report.alerts:
@@ -336,7 +408,7 @@ def main() -> None:
                 for alert in report.alerts:
                     print(f"    [!!] {alert}")
         else:
-            print(dev_agent.status_text())
+            print(dev_agent.dashboard_text())
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
