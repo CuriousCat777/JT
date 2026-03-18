@@ -34,7 +34,7 @@ class TestTrackerLoading:
         tracker = SecurityRemediationTracker()
         tracker.load_all_domains()
         tasks = tracker.all_tasks()
-        assert len(tasks) == 21  # 16 jtmdai + 5 drjt
+        assert len(tasks) == 31  # 16 jtmdai + 5 drjt + 10 connector
 
     def test_load_domain_defaults_jtmdai(self) -> None:
         tracker = SecurityRemediationTracker()
@@ -51,13 +51,23 @@ class TestTrackerLoading:
         tracker.load_domain_defaults("unknown.com")
         assert len(tracker.all_tasks()) == 0
 
+    def test_load_connector_tasks(self) -> None:
+        tracker = SecurityRemediationTracker()
+        tracker.load_connector_tasks()
+        tasks = tracker.all_tasks()
+        assert len(tasks) == 10
+        # Should have CRITICAL connector tasks
+        critical = [t for t in tasks if t.severity == RemediationSeverity.CRITICAL]
+        assert len(critical) == 2  # Desktop Commander + Windows MCP
+
     def test_domains_returns_unique_domains(self) -> None:
         tracker = SecurityRemediationTracker()
         tracker.load_all_domains()
         domains = tracker.domains()
         assert "jtmdai.com" in domains
         assert "drjeremytabernero.org" in domains
-        assert len(domains) == 2
+        assert "system" in domains
+        assert len(domains) == 3
 
 
 class TestTrackerQuerying:

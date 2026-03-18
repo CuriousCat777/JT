@@ -67,6 +67,43 @@ security_remediation:
   #   - CRM Agent: tracks vendor security contacts
   #   - Inbox Organizer: categorizes security notifications
 
+# Claude connector/MCP attack surface policy
+connector_security:
+  # Connectors required by Guardian One (keep connected)
+  required_connectors:
+    - cloudflare       # Both domains on Cloudflare
+    - github           # Source code repository
+    - gmail            # GmailAgent
+    - google_calendar  # Chronos
+    - n8n              # WebArchitect workflows
+    - notion           # Write-only dashboard sync
+    - webflow          # jtmdai.com CMS
+    - zapier           # Cross-service automation bridge
+  # Connectors to evaluate (may be needed, review scope)
+  evaluate_connectors:
+    - google_drive     # Potential Archivist use — restrict to readonly
+    - figma            # Disconnect unless actively designing
+  # DANGEROUS: disconnect when not in active supervised use
+  dangerous_connectors:
+    - desktop_commander_mcp   # Unrestricted shell execution
+    - windows_mcp             # OS-level access, PowerShell, registry
+    - aws_api_mcp             # Cloud resource control (scope to read-only)
+    - filesystem_mcp          # Restrict to project dirs only
+  # DISCONNECT: not needed, only adds attack surface
+  disconnect_connectors:
+    - aws_marketplace
+    - biorxiv
+    - canva
+    - clinical_trials
+    - cms_coverage
+    - common_room
+    - consensus
+    - kiwi_com
+    - lumin
+    - npi_registry
+    - spotify
+    - weather
+
 agents:
   chronos:
     enabled: true

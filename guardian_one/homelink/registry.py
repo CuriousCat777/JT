@@ -377,6 +377,250 @@ NORDVPN_INTEGRATION = IntegrationRecord(
 )
 
 
+GITHUB_INTEGRATION = IntegrationRecord(
+    name="github",
+    description="GitHub — source code repository, CI/CD, issue tracking for Guardian One",
+    base_url="https://api.github.com",
+    auth_method="oauth2",
+    data_flow="Claude Code pushes commits, creates PRs, and manages issues. "
+              "Full read/write access to repository contents, branches, and workflows.",
+    vault_keys=["GITHUB_TOKEN"],
+    threat_model=[
+        ThreatEntry("PAT/OAuth token theft grants full repo access", "critical",
+                    "Token stored in vault; scoped to minimal required permissions; "
+                    "90-day rotation enforced; audit log tracks all pushes."),
+        ThreatEntry("Malicious code injection via compromised push", "critical",
+                    "Branch protection rules enforced; code scanning enabled; "
+                    "signed commits recommended; PR review required for main."),
+        ThreatEntry("Secrets accidentally committed to repository", "critical",
+                    ".gitignore blocks .env, credentials, tokens; pre-commit hook "
+                    "scans for secrets; GitHub secret scanning enabled."),
+        ThreatEntry("Webhook secret compromise enables event injection", "high",
+                    "Webhook secrets in vault; payload signatures verified; "
+                    "webhook URLs not publicly listed."),
+        ThreatEntry("CI/CD pipeline manipulation via workflow modification", "high",
+                    "Workflow files require PR approval; no self-hosted runners "
+                    "without network isolation; GITHUB_TOKEN scoped per-job."),
+    ],
+    failure_impact="Code push/PR operations unavailable. Local development continues. "
+                   "CI/CD pipelines paused until GitHub reconnects.",
+    rollback_procedure="1. Revoke token at github.com/settings/tokens. "
+                       "2. Delete token from vault. "
+                       "3. Rotate any secrets that may have been exposed. "
+                       "4. Review recent commits and PR activity for unauthorized changes. "
+                       "5. Enable branch protection if not already set.",
+    owner_agent="archivist",
+    additional_agents=["web_architect"],
+)
+
+ZAPIER_INTEGRATION = IntegrationRecord(
+    name="zapier",
+    description="Zapier — cross-service workflow automation bridge",
+    base_url="https://zapier.com",
+    auth_method="api_key",
+    data_flow="Triggers and actions across connected services. Acts as a bridge "
+              "between services that lack direct API integration. Can read/write "
+              "data across any connected service in the Zap chain.",
+    vault_keys=["ZAPIER_API_KEY"],
+    threat_model=[
+        ThreatEntry("Zapier account compromise cascades to all connected services", "critical",
+                    "Zapier connects to multiple services — a single compromise exposes all. "
+                    "Use dedicated Zapier account; enable 2FA; limit connected services to essential."),
+        ThreatEntry("Zap chain data leakage across service boundaries", "high",
+                    "Data flowing through Zaps may cross trust boundaries unexpectedly. "
+                    "Audit all active Zaps quarterly; disable unused Zaps; no PHI/PII in Zap data."),
+        ThreatEntry("Third-party Zap app accesses data beyond intended scope", "high",
+                    "Only use Zapier-built or verified integrations; review OAuth scopes "
+                    "granted to each connection; revoke unnecessary permissions."),
+        ThreatEntry("Zapier outage breaks cross-service automation", "medium",
+                    "Critical workflows should not depend solely on Zapier; "
+                    "Guardian One agents provide fallback for essential operations."),
+        ThreatEntry("Webhook URL exposure enables unauthorized trigger injection", "medium",
+                    "Webhook URLs treated as secrets; not logged or stored in plaintext; "
+                    "IP filtering where supported."),
+    ],
+    failure_impact="Cross-service automations paused. Guardian One agents continue "
+                   "independently. Manual intervention needed for Zap-dependent workflows.",
+    rollback_procedure="1. Disable all Zaps at zapier.com. "
+                       "2. Revoke API key. "
+                       "3. Disconnect all service connections in Zapier. "
+                       "4. Review Zap execution history for unauthorized actions. "
+                       "5. Re-evaluate which automations are truly needed.",
+    owner_agent="archivist",
+)
+
+GOOGLE_DRIVE_INTEGRATION = IntegrationRecord(
+    name="google_drive",
+    description="Google Drive — file storage and document management",
+    base_url="https://www.googleapis.com/drive/v3",
+    auth_method="oauth2",
+    data_flow="Archivist may access files for backup/sovereignty tracking. "
+              "Read access to documents; write access limited to Guardian-managed folders.",
+    vault_keys=["GOOGLE_DRIVE_CREDENTIALS"],
+    threat_model=[
+        ThreatEntry("OAuth token theft grants access to all Drive files", "critical",
+                    "Token in vault; scope restricted to specific folders only; "
+                    "short-lived access tokens (1h); 2FA on Google account."),
+        ThreatEntry("Sensitive documents exfiltrated via compromised agent", "high",
+                    "Archivist has read-only access; no share/export permissions; "
+                    "content classification gate blocks PHI/PII from leaving system."),
+        ThreatEntry("Shared Drive links expose documents to unintended audience", "high",
+                    "Archivist audits sharing settings; flags publicly shared files; "
+                    "alerts on permission changes."),
+        ThreatEntry("Google account compromise exposes all cloud data", "critical",
+                    "2FA enforced; Google Advanced Protection recommended; "
+                    "OAuth scope restricted to drive.readonly."),
+        ThreatEntry("Sync conflicts corrupt or overwrite important files", "medium",
+                    "Guardian One is read-only for Drive; no write conflicts possible."),
+    ],
+    failure_impact="Drive file monitoring unavailable. No data loss — Drive continues "
+                   "independently. Archivist sovereignty checks paused.",
+    rollback_procedure="1. Revoke OAuth token at myaccount.google.com/permissions. "
+                       "2. Delete credentials from vault. "
+                       "3. Re-authorize with restricted readonly scope if needed.",
+    owner_agent="archivist",
+)
+
+# ---------------------------------------------------------------------------
+# Dangerous Claude Desktop Connectors — tracked for risk awareness
+# These are NOT Guardian One integrations but represent additional attack
+# surface through the Claude Desktop/MCP ecosystem that should be monitored.
+# ---------------------------------------------------------------------------
+
+DESKTOP_COMMANDER_CONNECTOR = IntegrationRecord(
+    name="desktop_commander_mcp",
+    description="Desktop Commander MCP — DANGEROUS: grants Claude shell execution on local machine",
+    base_url="local_mcp",
+    auth_method="api_key",
+    data_flow="Allows Claude to execute arbitrary shell commands, read/write files, "
+              "manage processes on the local machine. Full system access.",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("Arbitrary command execution on host machine", "critical",
+                    "DISCONNECT IF NOT ACTIVELY NEEDED. Any prompt injection or "
+                    "misuse gives full shell access. No sandboxing."),
+        ThreatEntry("File system access bypasses all Guardian One content gates", "critical",
+                    "Desktop Commander can read .env, vault files, credentials directly. "
+                    "Completely bypasses Vault encryption and access control."),
+        ThreatEntry("Process killing can disable security monitoring", "high",
+                    "Can kill Guardian One agents, VPN, firewall processes. "
+                    "No audit trail outside of Claude conversation history."),
+        ThreatEntry("Data exfiltration via shell commands (curl, scp, etc.)", "critical",
+                    "Shell access means any data on disk can be sent anywhere. "
+                    "ONLY enable during active supervised development sessions."),
+        ThreatEntry("Privilege escalation if user has sudo access", "critical",
+                    "If the user account has sudo, Desktop Commander effectively "
+                    "has root access to the entire machine."),
+    ],
+    failure_impact="No impact if disconnected — this is the recommended state.",
+    rollback_procedure="1. DISCONNECT immediately in Claude Desktop settings. "
+                       "2. Review recent Claude conversation history for unexpected commands. "
+                       "3. Audit file system for unauthorized changes. "
+                       "4. Check running processes for anything suspicious.",
+    owner_agent="archivist",
+    status="active",  # Should be flagged for review
+)
+
+FILESYSTEM_MCP_CONNECTOR = IntegrationRecord(
+    name="filesystem_mcp",
+    description="Filesystem MCP — grants Claude direct file read/write access",
+    base_url="local_mcp",
+    auth_method="api_key",
+    data_flow="Allows Claude to read and write files on the local filesystem. "
+              "Scope depends on MCP configuration (may be limited to specific directories).",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("Read access to sensitive files (.env, vault, SSH keys)", "critical",
+                    "Restrict MCP filesystem scope to project directory only. "
+                    "Never grant access to home directory root or /etc."),
+        ThreatEntry("Write access can modify code, config, or credentials", "high",
+                    "Limit to specific directories; use read-only mode where possible; "
+                    "git tracks all file changes for audit."),
+        ThreatEntry("Prompt injection could trigger unauthorized file operations", "high",
+                    "MCP permission prompts should be enabled; never auto-approve writes."),
+        ThreatEntry("Symlink following can escape directory restrictions", "medium",
+                    "Ensure MCP respects symlink boundaries; audit symlinks in project."),
+        ThreatEntry("Large file reads can exfiltrate data via conversation context", "medium",
+                    "Conversation history may contain file contents; "
+                    "never read binary files or credential stores."),
+    ],
+    failure_impact="File operations unavailable via Claude. Manual editing continues normally.",
+    rollback_procedure="1. Disconnect in Claude Desktop settings. "
+                       "2. Review recent file modifications via git diff. "
+                       "3. Restore any unauthorized changes from git history.",
+    owner_agent="archivist",
+    status="active",
+)
+
+AWS_MCP_CONNECTOR = IntegrationRecord(
+    name="aws_api_mcp",
+    description="AWS API MCP Server — grants Claude access to AWS services",
+    base_url="local_mcp",
+    auth_method="api_key",
+    data_flow="Allows Claude to make AWS API calls. Scope depends on the IAM "
+              "credentials configured — could range from read-only to full admin.",
+    vault_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+    threat_model=[
+        ThreatEntry("AWS credential exposure grants cloud resource control", "critical",
+                    "Use IAM roles with minimum required permissions; never use root credentials; "
+                    "enable CloudTrail logging; set billing alerts."),
+        ThreatEntry("Unintended resource creation incurs costs", "high",
+                    "Budget alerts configured; IAM policy restricts resource creation; "
+                    "MCP permission prompts enabled for write operations."),
+        ThreatEntry("S3 bucket access may expose sensitive data", "high",
+                    "IAM policy should restrict to specific buckets; "
+                    "bucket policies enforce encryption and access logging."),
+        ThreatEntry("Lambda/EC2 creation could be used for crypto mining", "high",
+                    "Service quotas set; IAM denies compute resource creation "
+                    "unless explicitly needed; billing alerts at $10/$50/$100."),
+        ThreatEntry("Credential rotation gap leaves stale access", "medium",
+                    "90-day key rotation; unused keys disabled after 30 days; "
+                    "IAM Access Analyzer monitors unused permissions."),
+    ],
+    failure_impact="AWS operations unavailable via Claude. Console/CLI access unaffected.",
+    rollback_procedure="1. Deactivate AWS access keys in IAM console. "
+                       "2. Remove credentials from local config. "
+                       "3. Review CloudTrail for unauthorized API calls. "
+                       "4. Check billing dashboard for unexpected charges.",
+    owner_agent="archivist",
+    status="active",
+)
+
+WINDOWS_MCP_CONNECTOR = IntegrationRecord(
+    name="windows_mcp",
+    description="Windows MCP — DANGEROUS: grants Claude OS-level operations on Windows",
+    base_url="local_mcp",
+    auth_method="api_key",
+    data_flow="Allows Claude to perform Windows-specific operations: registry edits, "
+              "service management, PowerShell execution.",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("PowerShell execution grants arbitrary code execution", "critical",
+                    "DISCONNECT IF NOT ACTIVELY NEEDED. Same risk profile as "
+                    "Desktop Commander but Windows-specific."),
+        ThreatEntry("Registry modification can disable security features", "critical",
+                    "Can disable Windows Defender, firewall, UAC. "
+                    "Only enable during supervised admin tasks."),
+        ThreatEntry("Service management can stop security monitoring", "high",
+                    "Can stop/start Windows services including antivirus, VPN, logging."),
+        ThreatEntry("Credential access via Windows Credential Manager", "critical",
+                    "PowerShell can query stored credentials, browser passwords, "
+                    "Wi-Fi passwords. Major data exfiltration risk."),
+        ThreatEntry("System modification persists beyond Claude session", "high",
+                    "Registry changes, scheduled tasks, and service modifications "
+                    "survive reboot. Harder to detect and roll back."),
+    ],
+    failure_impact="No impact if disconnected — this is the recommended state.",
+    rollback_procedure="1. DISCONNECT immediately in Claude Desktop settings. "
+                       "2. Run Windows security scan. "
+                       "3. Review Event Viewer for unauthorized changes. "
+                       "4. Check scheduled tasks for anything unexpected. "
+                       "5. Review registry changes (if System Restore is enabled).",
+    owner_agent="archivist",
+    status="active",
+)
+
+
 class IntegrationRegistry:
     """Catalog of all registered external service integrations."""
 
@@ -425,5 +669,71 @@ class IntegrationRegistry:
             NOTION_INTEGRATION,
             CLOUDFLARE_INTEGRATION,
             WEBFLOW_INTEGRATION,
+            GITHUB_INTEGRATION,
+            ZAPIER_INTEGRATION,
+            GOOGLE_DRIVE_INTEGRATION,
+            DESKTOP_COMMANDER_CONNECTOR,
+            FILESYSTEM_MCP_CONNECTOR,
+            AWS_MCP_CONNECTOR,
+            WINDOWS_MCP_CONNECTOR,
         ]:
             self.register(record)
+
+    def dangerous_connectors(self) -> list[IntegrationRecord]:
+        """Return connectors flagged as dangerous (should be disconnected when idle)."""
+        dangerous_names = {
+            "desktop_commander_mcp", "windows_mcp", "aws_api_mcp",
+        }
+        return [r for r in self._integrations.values() if r.name in dangerous_names]
+
+    def connector_audit(self) -> dict[str, Any]:
+        """Audit all registered integrations and connectors.
+
+        Returns a report showing:
+            - Critical risk connectors that should be disconnected
+            - Integrations missing from the registry
+            - Threat model coverage stats
+        """
+        all_records = list(self._integrations.values())
+        critical_threats = [
+            {"service": r.name, "threats": [t for t in r.threat_model if t.severity == "critical"]}
+            for r in all_records
+            if any(t.severity == "critical" for t in r.threat_model)
+        ]
+
+        dangerous = self.dangerous_connectors()
+        guardian_integrations = [r for r in all_records if not r.name.endswith("_mcp")]
+        mcp_connectors = [r for r in all_records if r.name.endswith("_mcp")]
+
+        # Known Claude connectors from the user's setup that SHOULD be tracked
+        known_connectors = {
+            "aws_marketplace", "biorxiv", "canva", "clinical_trials",
+            "cloudflare_dev", "cms_coverage", "common_room", "consensus",
+            "github", "gmail", "google_calendar", "google_drive",
+            "kiwi_com", "lumin", "n8n", "notion", "npi_registry",
+            "webflow", "zapier",
+            # Desktop
+            "aws_api_mcp", "claude_in_chrome", "desktop_commander_mcp",
+            "figma", "filesystem_mcp", "pdf_anthropic", "pdf_tools",
+            "spotify", "weather", "windows_mcp",
+        }
+        tracked = set(self._integrations.keys())
+        untracked = known_connectors - tracked
+
+        return {
+            "total_registered": len(all_records),
+            "guardian_integrations": len(guardian_integrations),
+            "mcp_connectors": len(mcp_connectors),
+            "dangerous_connectors": [r.name for r in dangerous],
+            "critical_threat_services": [
+                {"service": c["service"], "count": len(c["threats"])}
+                for c in critical_threats
+            ],
+            "total_threats_modeled": sum(len(r.threat_model) for r in all_records),
+            "untracked_connectors": sorted(untracked),
+            "recommendation": (
+                "DISCONNECT desktop_commander_mcp and windows_mcp when not in active "
+                "supervised development. These grant unrestricted system access."
+                if dangerous else "No dangerous connectors registered."
+            ),
+        }

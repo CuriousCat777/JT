@@ -147,6 +147,7 @@ class TestIntegrationWithTracker:
         valid_categories = {
             "Email Security", "Cloudflare Config", "Webflow Platform",
             "HTTP Security", "Infrastructure", "Brand Protection",
+            "Connector Security",
         }
         for item in data:
             assert item["category"] in valid_categories
