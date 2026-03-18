@@ -25,6 +25,9 @@ Usage:
     python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
     python main.py --website-sync       # Push website dashboards to Notion
     python main.py --notion-sync        # Full Notion workspace sync (agents, roadmap, health)
+    python main.py --security-review     # Run security remediation review for all domains
+    python main.py --security-review jtmdai.com  # Review a single domain
+    python main.py --security-sync       # Push remediation status to Notion
 """
 
 from __future__ import annotations
@@ -256,6 +259,10 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--security-review", nargs="?", const="all", default=None,
+                        help="Security remediation review (domain or 'all')")
+    parser.add_argument("--security-sync", action="store_true",
+                        help="Push remediation status to Notion")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -706,6 +713,58 @@ def main() -> None:
             services=services_data,
             deliverables=deliverables,
         ))
+
+    elif args.security_review is not None or args.security_sync:
+        from guardian_one.core.security_remediation import SecurityRemediationTracker
+
+        tracker = SecurityRemediationTracker()
+        domain = args.security_review if args.security_review else "all"
+
+        if domain == "all" or args.security_sync:
+            tracker.load_all_domains()
+        else:
+            tracker.load_domain_defaults(domain)
+
+        if args.security_sync:
+            from guardian_one.integrations.notion_remediation_sync import NotionRemediationSync
+            from guardian_one.integrations.notion_sync import NotionSync
+            import os
+
+            root_page_id = os.environ.get("NOTION_ROOT_PAGE_ID", "")
+            if not root_page_id:
+                print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+            else:
+                sync = NotionSync(
+                    gateway=guardian.gateway,
+                    vault=guardian.vault,
+                    audit=guardian.audit,
+                    root_page_id=root_page_id,
+                )
+                rem_sync = NotionRemediationSync(sync, guardian.audit)
+                result = rem_sync.push_remediation_dashboard(tracker)
+                status = "OK" if result.success else "FAILED"
+                print(f"  [{status}] Remediation dashboard — "
+                      f"{result.blocks_written} blocks written ({result.duration_ms:.0f}ms)")
+                if result.errors:
+                    for err in result.errors:
+                        print(f"    [ERROR] {err}")
+        else:
+            # CLI review
+            print()
+            print(tracker.summary_text())
+            print()
+
+            # Show overdue tasks prominently
+            overdue = tracker.overdue_tasks()
+            if overdue:
+                print(f"\n  OVERDUE TASKS ({len(overdue)}):")
+                for task in overdue:
+                    print(f"    [!!] {task.severity.value}: {task.title} (due {task.due_date})")
+
+            # Show agent responsibility breakdown
+            stats = tracker.summary_stats()
+            print(f"\n  Domains tracked: {', '.join(tracker.domains())}")
+            print(f"  Auto-verifiable: {len(tracker.auto_verifiable_tasks())}/{stats['total_tasks']} tasks")
 
     elif args.websites or args.website_build or args.website_deploy or args.website_sync:
         from guardian_one.agents.website_manager import WebsiteManager

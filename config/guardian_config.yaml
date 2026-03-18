@@ -50,6 +50,23 @@ security:
   max_failed_auth_attempts: 5
   audit_all_actions: true
 
+# Security remediation tracking
+# Mirrors the Notion "JTMDAI.com Security Remediation Tracker" database
+security_remediation:
+  enabled: true
+  auto_verify: true           # Run automated checks on verifiable tasks
+  notify_on_overdue: true     # Alert when tasks pass due date
+  tracked_domains:
+    - jtmdai.com
+    - drjeremytabernero.org
+  notion_tracker_id: "b990b46b336a446cbefe00541a5afb1a"
+  # Notion Agents that consume remediation data:
+  #   - Agency Operations Manager: monitors remediation progress
+  #   - Calendar Optimizer: schedules review windows
+  #   - Inbox Master: routes security alert emails
+  #   - CRM Agent: tracks vendor security contacts
+  #   - Inbox Organizer: categorizes security notifications
+
 agents:
   chronos:
     enabled: true
