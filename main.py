@@ -25,6 +25,8 @@ Usage:
     python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
     python main.py --website-sync       # Push website dashboards to Notion
     python main.py --notion-sync        # Full Notion workspace sync (agents, roadmap, health)
+    python main.py --devices             # Show all managed IoT/LAN devices
+    python main.py --device-audit        # Run device security audit
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
@@ -260,6 +262,10 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--devices", action="store_true",
+                        help="Show all managed IoT/LAN devices")
+    parser.add_argument("--device-audit", action="store_true",
+                        help="Run device security audit")
     parser.add_argument("--security-review", nargs="?", const="all", default=None,
                         help="Security remediation review (domain or 'all')")
     parser.add_argument("--security-sync", action="store_true",
@@ -304,7 +310,35 @@ def main() -> None:
         guardian.shutdown()
         return
 
-    if args.brief:
+    if args.devices or args.device_audit:
+        from guardian_one.agents.device_agent import DeviceAgent
+        from guardian_one.homelink.devices import DeviceRegistry
+        dev_config = AgentConfig(name="device_agent", enabled=True,
+                                 allowed_resources=["devices", "network"])
+        dev_registry = DeviceRegistry()
+        dev_agent = DeviceAgent(config=dev_config, audit=guardian.audit,
+                                device_registry=dev_registry)
+        dev_agent.initialize()
+
+        if args.device_audit:
+            report = dev_agent.run()
+            print(dev_agent.status_text())
+            print()
+            audit = dev_registry.security_audit()
+            if audit["issues"]:
+                print(f"  {audit['issue_count']} security issues found (risk {audit['risk_score']}/5)")
+            if report.recommendations:
+                print("\n  Recommendations:")
+                for rec in report.recommendations:
+                    print(f"    - {rec}")
+            if report.alerts:
+                print("\n  Alerts:")
+                for alert in report.alerts:
+                    print(f"    [!!] {alert}")
+        else:
+            print(dev_agent.status_text())
+
+    elif args.brief:
         print(guardian.monitor.weekly_brief_text())
     elif args.homelink:
         print(json.dumps(guardian.gateway.all_services_status(), indent=2))
