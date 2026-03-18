@@ -289,6 +289,67 @@ NOTION_INTEGRATION = IntegrationRecord(
     additional_agents=["notion_website_sync"],
 )
 
+CLOUDFLARE_INTEGRATION = IntegrationRecord(
+    name="cloudflare",
+    description="Cloudflare — DNS, SSL/TLS, WAF, Workers, Transform Rules for managed domains",
+    base_url="https://api.cloudflare.com/client/v4",
+    auth_method="api_key",
+    data_flow="WebArchitect monitors DNS records, SSL/TLS settings, security headers, "
+              "and WAF status.  Read-only for verification; configuration changes "
+              "made manually via Cloudflare dashboard.",
+    vault_keys=["CLOUDFLARE_API_TOKEN"],
+    threat_model=[
+        ThreatEntry("API token compromise grants DNS/WAF control", "critical",
+                    "Token scoped to read-only zones; stored in encrypted vault; 90-day rotation."),
+        ThreatEntry("Origin IP exposed via historical DNS records", "high",
+                    "All A/CNAME records proxied through Cloudflare; audit via SecurityTrails."),
+        ThreatEntry("DMARC/SPF misconfiguration allows email spoofing", "high",
+                    "Automated DNS TXT verification; p=reject enforced on all domains."),
+        ThreatEntry("Cloudflare Workers execute malicious code", "medium",
+                    "Workers managed via dashboard only; no programmatic deployment without audit."),
+        ThreatEntry("SSL/TLS downgrade attack via misconfigured mode", "high",
+                    "Full (Strict) mode enforced; automated SSL Labs grade verification."),
+    ],
+    failure_impact="DNS and CDN remain functional; verification scans fail gracefully. "
+                   "Security posture unknown until Cloudflare API reconnects.",
+    rollback_procedure="1. Revoke API token at dash.cloudflare.com. "
+                       "2. Remove token from vault. "
+                       "3. DNS continues to function without API access. "
+                       "4. Review audit log for unauthorized changes.",
+    owner_agent="web_architect",
+    additional_agents=["archivist"],
+)
+
+WEBFLOW_INTEGRATION = IntegrationRecord(
+    name="webflow",
+    description="Webflow — CMS platform hosting jtmdai.com",
+    base_url="https://api.webflow.com",
+    auth_method="api_key",
+    data_flow="WebsiteManager reads site metadata and CMS content for security auditing. "
+              "Builds and deploys managed through Webflow dashboard and Cloudflare Workers.",
+    vault_keys=["WEBFLOW_API_TOKEN"],
+    threat_model=[
+        ThreatEntry("CMS upload contains malicious files or metadata", "medium",
+                    "All uploaded files audited by Archivist; metadata stripped on deploy."),
+        ThreatEntry("Custom code embed introduces XSS vulnerability", "high",
+                    "Custom code embeds reviewed quarterly; CSP headers block inline scripts."),
+        ThreatEntry("Staging URL exposes pre-release content", "medium",
+                    "Staging URL password-protected; not indexed by search engines."),
+        ThreatEntry("API token compromise grants CMS write access", "high",
+                    "Token stored in vault; scoped to read-only where possible."),
+        ThreatEntry("Webflow platform outage takes down live site", "medium",
+                    "Cloudflare cache serves stale content; Workers provide fallback."),
+    ],
+    failure_impact="Site remains live via Cloudflare cache. CMS editing unavailable "
+                   "until Webflow recovers.",
+    rollback_procedure="1. Revoke API token in Webflow dashboard. "
+                       "2. Remove token from vault. "
+                       "3. Site continues serving cached content. "
+                       "4. Redeploy from local build if needed.",
+    owner_agent="website_manager",
+    additional_agents=["web_architect"],
+)
+
 NORDVPN_INTEGRATION = IntegrationRecord(
     name="nordvpn",
     description="NordVPN — VPN status monitoring and connection management",
@@ -362,5 +423,7 @@ class IntegrationRegistry:
             NORDVPN_INTEGRATION,
             N8N_INTEGRATION,
             NOTION_INTEGRATION,
+            CLOUDFLARE_INTEGRATION,
+            WEBFLOW_INTEGRATION,
         ]:
             self.register(record)

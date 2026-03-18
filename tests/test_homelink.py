@@ -194,6 +194,8 @@ def test_registry_load_defaults():
     assert "rocket_money" in reg.list_all()
     assert "google_calendar" in reg.list_all()
     assert "nordvpn" in reg.list_all()
+    assert "cloudflare" in reg.list_all()
+    assert "webflow" in reg.list_all()
 
 
 def test_registry_by_agent():

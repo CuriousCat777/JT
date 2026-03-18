@@ -442,8 +442,10 @@ def test_n8n_registry_by_agent():
     reg = IntegrationRegistry()
     reg.load_defaults()
     wa_integrations = reg.by_agent("web_architect")
-    assert len(wa_integrations) == 1
-    assert wa_integrations[0].name == "n8n_workflows"
+    assert len(wa_integrations) >= 1
+    wa_names = [i.name for i in wa_integrations]
+    assert "n8n_workflows" in wa_names
+    assert "cloudflare" in wa_names
 
 
 # ---------------------------------------------------------------------------
