@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from guardian_one.core.ai_engine import AIConfig, AIEngine, AIProvider
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig, GuardianConfig, load_config
@@ -41,12 +42,16 @@ class GuardianOne:
         self,
         config: GuardianConfig | None = None,
         vault_passphrase: str | None = None,
+        ai_config: AIConfig | None = None,
     ) -> None:
         self.config = config or load_config()
         self.audit = AuditLog(log_dir=Path(self.config.log_dir))
         self.mediator = Mediator(audit=self.audit)
         self.access = AccessController()
         self._agents: dict[str, BaseAgent] = {}
+
+        # AI Engine — the sovereign brain
+        self.ai_engine = AIEngine(ai_config or self._load_ai_config())
 
         # H.O.M.E. L.I.N.K. subsystems
         self.gateway = Gateway(audit=self.audit)
@@ -72,11 +77,55 @@ class GuardianOne:
         # Auto-load Notion token from .env into Vault if present and not yet stored
         self._seed_vault_from_env()
 
+        # Log AI engine status at boot
+        ai_status = self.ai_engine.status()
         self.audit.record(
             agent="guardian_one",
             action="system_boot",
             severity=Severity.INFO,
-            details={"owner": self.config.owner, "homelink": "active"},
+            details={
+                "owner": self.config.owner,
+                "homelink": "active",
+                "ai_engine": ai_status["active_provider"] or "offline",
+                "ai_ollama": ai_status["ollama"]["available"],
+                "ai_anthropic": ai_status["anthropic"]["available"],
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # AI configuration
+    # ------------------------------------------------------------------
+
+    def _load_ai_config(self) -> AIConfig:
+        """Load AI engine config from guardian_config.yaml or defaults."""
+        # Try to load from the raw YAML config
+        config_path = Path("config/guardian_config.yaml")
+        ai_raw: dict[str, Any] = {}
+        if config_path.exists():
+            import yaml
+            with open(config_path) as f:
+                raw = yaml.safe_load(f) or {}
+            ai_raw = raw.get("ai_engine", {})
+
+        provider_map = {"ollama": AIProvider.OLLAMA, "anthropic": AIProvider.ANTHROPIC}
+
+        return AIConfig(
+            primary_provider=provider_map.get(
+                ai_raw.get("primary_provider", "ollama"), AIProvider.OLLAMA
+            ),
+            fallback_provider=provider_map.get(
+                ai_raw.get("fallback_provider", "anthropic"), AIProvider.ANTHROPIC
+            ),
+            ollama_base_url=ai_raw.get("ollama_base_url", "http://localhost:11434"),
+            ollama_model=ai_raw.get("ollama_model", "llama3"),
+            anthropic_model=ai_raw.get(
+                "anthropic_model", "claude-sonnet-4-20250514"
+            ),
+            max_tokens=ai_raw.get("max_tokens", 2048),
+            temperature=ai_raw.get("temperature", 0.3),
+            timeout_seconds=ai_raw.get("timeout_seconds", 60),
+            enable_memory=ai_raw.get("enable_memory", True),
+            max_memory_messages=ai_raw.get("max_memory_messages", 50),
         )
 
     # ------------------------------------------------------------------
@@ -150,11 +199,15 @@ class GuardianOne:
         )
         self.access.register(policy)
 
+        # Inject AI engine into the agent
+        agent.set_ai_engine(self.ai_engine)
+
         self._agents[name] = agent
         self.audit.record(
             agent="guardian_one",
             action=f"agent_registered:{name}",
             severity=Severity.INFO,
+            details={"ai_enabled": agent.ai_enabled},
         )
 
         agent.initialize()
@@ -271,6 +324,17 @@ class GuardianOne:
             lines.append(f"  ** {rotation_due} credentials due for rotation **")
         lines.append("")
 
+        # AI Engine status
+        lines.append("--- AI Engine ---")
+        ai_info = self.ai_engine.status()
+        active = ai_info["active_provider"] or "OFFLINE"
+        lines.append(f"  Active provider: {active}")
+        lines.append(f"  Ollama: {'available' if ai_info['ollama']['available'] else 'not available'} ({ai_info['ollama']['model']})")
+        lines.append(f"  Anthropic: {'available' if ai_info['anthropic']['available'] else 'not available'}")
+        lines.append(f"  Total AI requests: {ai_info['total_requests']}")
+        lines.append(f"  Agents with memory: {', '.join(ai_info['agents_with_memory']) or 'none'}")
+        lines.append("")
+
         # Pending reviews
         pending = self.audit.pending_reviews()
         if pending:
@@ -280,6 +344,33 @@ class GuardianOne:
 
         lines.append("\n" + self.audit.summary(last_n=10))
         return "\n".join(lines)
+
+    def ai_status(self) -> dict[str, Any]:
+        """Get AI engine status."""
+        return self.ai_engine.status()
+
+    def think(
+        self,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Ask the AI engine a question as the Guardian coordinator.
+
+        This is the top-level AI interface for the system itself.
+        """
+        response = self.ai_engine.reason(
+            agent_name="guardian_one",
+            prompt=prompt,
+            system=(
+                "You are Guardian One, the sovereign AI coordinator for "
+                "Jeremy Paulo Salvino Tabernero's personal life management system. "
+                "You oversee all subordinate agents (CFO, Chronos, Archivist, etc.). "
+                "Provide high-level strategic reasoning, conflict resolution, "
+                "and daily summaries. Be direct, concise, and proactive."
+            ),
+            context=context,
+        )
+        return response.content
 
     def get_agent(self, name: str) -> BaseAgent | None:
         return self._agents.get(name)
