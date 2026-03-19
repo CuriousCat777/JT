@@ -284,6 +284,11 @@ def main() -> None:
                         help="Push remediation status to Notion")
     parser.add_argument("--connector-audit", action="store_true",
                         help="Audit Claude connector/MCP attack surface")
+    parser.add_argument("--ollama", action="store_true", help="Ollama AI engine status + models")
+    parser.add_argument("--ollama-benchmark", nargs="?", const="default", default=None,
+                        help="Benchmark an Ollama model (default: configured model)")
+    parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
+    parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -297,6 +302,68 @@ def main() -> None:
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
         run_devpanel(guardian, port=args.devpanel_port)
+        return
+
+    if args.ollama or args.ollama_benchmark or args.ollama_pull or args.ollama_delete:
+        from guardian_one.integrations.ollama_sync import OllamaSync
+
+        ollama = OllamaSync(audit=guardian.audit)
+
+        if args.ollama_pull:
+            model_name = args.ollama_pull
+            print(f"\n  Pulling model: {model_name}")
+            print(f"  This may take a while for large models...")
+            result = ollama.pull_model(model_name)
+            if result["success"]:
+                print(f"  [OK] {model_name} pulled successfully.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.ollama_delete:
+            model_name = args.ollama_delete
+            print(f"\n  Deleting model: {model_name}")
+            result = ollama.delete_model(model_name)
+            if result["success"]:
+                print(f"  [OK] {model_name} deleted.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.ollama_benchmark:
+            model_name = (
+                args.ollama_benchmark
+                if args.ollama_benchmark != "default"
+                else None
+            )
+            target = model_name or "configured default"
+            print(f"\n  Benchmarking: {target}")
+            result = ollama.benchmark(model_name)
+            if result.success:
+                print(f"  Model:      {result.model}")
+                print(f"  Tokens:     {result.tokens_generated}")
+                print(f"  Speed:      {result.tokens_per_second} tok/s")
+                print(f"  Total:      {result.total_duration_ms:.0f}ms")
+                print(f"  Load:       {result.load_duration_ms:.0f}ms")
+                print(f"  Inference:  {result.eval_duration_ms:.0f}ms")
+            else:
+                print(f"  [FAILED] {result.error}")
+
+        else:
+            # --ollama: show full status
+            print(ollama.status_text())
+
+            # Also show AI engine provider status
+            ai_status = guardian.ai_status()
+            active = ai_status["active_provider"] or "OFFLINE"
+            print(f"  AI Engine")
+            print(f"  " + "-" * 40)
+            print(f"  Active provider: {active}")
+            print(f"  Primary:  {ai_status['primary_provider']}")
+            print(f"  Fallback: {ai_status['fallback_provider'] or 'none'}")
+            print(f"  Requests: {ai_status['total_requests']}")
+            print(f"  Tokens:   {ai_status['total_tokens']}")
+            print()
+
+        guardian.shutdown()
         return
 
     if args.sandbox:

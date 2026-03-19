@@ -666,6 +666,43 @@ SMART_TV_INTEGRATION = IntegrationRecord(
 )
 
 
+OLLAMA_INTEGRATION = IntegrationRecord(
+    name="ollama",
+    description="Ollama — local sovereign LLM inference engine (primary AI backend)",
+    base_url="http://localhost:11434",
+    auth_method="api_key",
+    data_flow="All agent reasoning requests go through local Ollama. "
+              "Prompts and responses stay entirely on-device — zero data leaves the machine. "
+              "API key authenticates local requests (optional for localhost).",
+    vault_keys=["OLLAMA_API_KEY"],
+    threat_model=[
+        ThreatEntry("Exposed Ollama port allows unauthorized model access", "high",
+                    "Bind Ollama to localhost only (default); firewall blocks 11434 from LAN. "
+                    "API key required for non-localhost access."),
+        ThreatEntry("Prompt injection via compromised agent input", "medium",
+                    "System prompts are hardcoded per agent; user input sanitized; "
+                    "no eval/exec of model output."),
+        ThreatEntry("Model poisoning via malicious model pull", "medium",
+                    "Only pull models from official Ollama registry; verify model checksums; "
+                    "audit all pull operations."),
+        ThreatEntry("Disk exhaustion from large model downloads", "medium",
+                    "Monitor disk usage in health checks; alert when >80% full; "
+                    "document model sizes before pulling."),
+        ThreatEntry("Local model produces biased or incorrect financial advice", "medium",
+                    "All financial recommendations flagged for human review; "
+                    "CFO agent cross-validates with external data; "
+                    "Anthropic fallback available for critical decisions."),
+    ],
+    failure_impact="AI reasoning falls back to Anthropic Claude API (cloud). "
+                   "If both unavailable, agents run in deterministic mode without AI.",
+    rollback_procedure="1. Stop Ollama: ollama stop / systemctl stop ollama. "
+                       "2. Remove API key from vault. "
+                       "3. Switch primary_provider to 'anthropic' in config. "
+                       "4. Restart Guardian One.",
+    owner_agent="guardian_one",
+    additional_agents=["chronos", "cfo", "archivist", "gmail_agent", "web_architect", "doordash"],
+)
+
 GITHUB_INTEGRATION = IntegrationRecord(
     name="github",
     description="GitHub — source code repository, CI/CD, issue tracking for Guardian One",
@@ -947,6 +984,7 @@ class IntegrationRegistry:
     def load_defaults(self) -> None:
         """Register all known integrations."""
         for record in [
+            OLLAMA_INTEGRATION,
             DOORDASH_INTEGRATION,
             ROCKET_MONEY_INTEGRATION,
             EMPOWER_INTEGRATION,
