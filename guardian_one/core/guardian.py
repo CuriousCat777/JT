@@ -155,6 +155,7 @@ class GuardianOne:
         """
         env_to_vault = [
             ("NOTION_TOKEN", "notion", "write"),
+            ("OLLAMA_API_KEY", "ollama", "read"),
         ]
         for env_key, service, scope in env_to_vault:
             value = os.environ.get(env_key, "")

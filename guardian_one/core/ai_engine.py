@@ -74,10 +74,18 @@ class OllamaBackend:
         self._model = model
         self._timeout = timeout
         self._available: bool | None = None
+        self._api_key = os.environ.get("OLLAMA_API_KEY", "")
 
     @property
     def model(self) -> str:
         return self._model
+
+    def _headers(self) -> dict[str, str]:
+        """Build request headers with optional API key."""
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        return headers
 
     def is_available(self) -> bool:
         """Check if Ollama is running and the model is pulled."""
@@ -85,6 +93,7 @@ class OllamaBackend:
             import httpx
             resp = httpx.get(
                 f"{self._base_url}/api/tags",
+                headers=self._headers(),
                 timeout=5.0,
             )
             if resp.status_code == 200:
@@ -127,6 +136,7 @@ class OllamaBackend:
                         "temperature": temperature,
                     },
                 },
+                headers=self._headers(),
                 timeout=self._timeout,
             )
             resp.raise_for_status()
