@@ -1,6 +1,7 @@
 """Tests for SecurityRemediationTracker and Notion remediation sync."""
 
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -230,12 +231,10 @@ class TestSummaryStats:
     def test_overdue_tasks(self) -> None:
         tracker = SecurityRemediationTracker()
         tracker.load_defaults()
-        # All jtmdai tasks have due dates before 2026-03-22
-        # Since today is 2026-03-18, tasks due before today are overdue
         overdue = tracker.overdue_tasks()
-        # Tasks with due_date before 2026-03-18 are overdue
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         for task in overdue:
-            assert task.due_date < "2026-03-18"
+            assert task.due_date < today
             assert task.status != RemediationStatus.VERIFIED_COMPLETE
 
 
