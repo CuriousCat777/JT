@@ -12,6 +12,11 @@ Start a new Claude Code session and point it at the relevant handoff:
 Read sessions/guardian-core.md — then work on the Guardian coordinator
 Read sessions/cfo.md — then work on the CFO financial agent
 Read sessions/homelink.md — then work on smart home / device control / network security
+Read sessions/chronos.md — then work on calendar & scheduling
+Read sessions/archivist.md — then work on data sovereignty & privacy
+Read sessions/gmail.md — then work on email intelligence
+Read sessions/doordash.md — then work on meal delivery coordination
+Read sessions/web.md — then work on websites, n8n, security, Notion dashboards
 ```
 
 Or reference them in your prompt:
@@ -28,19 +33,11 @@ from HANDOFF_CFO_ROUTER.md."
 | **Guardian Core** | `sessions/guardian-core.md` | Central coordinator, agent lifecycle, AI engine, mediator, scheduler, CLI, H.O.M.E. L.I.N.K. |
 | **CFO** | `sessions/cfo.md` | Financial intelligence — accounts, transactions, bills, budgets, sync, Excel dashboard, planning |
 | **H.O.M.E. L.I.N.K.** | `sessions/homelink.md` | Self-hosted smart home AI — devices, rooms, automations, scenes, network security, Flipper Zero, device drivers |
-
-## Not Yet Created
-
-These agents have session handoffs pending:
-
-| Agent | File | What It Covers |
-|-------|------|----------------|
-| Chronos | `sessions/chronos.md` | Calendar, scheduling, sleep analysis, workflows |
-| Archivist | `sessions/archivist.md` | File management, data sovereignty, privacy tools |
-| Gmail | `sessions/gmail.md` | Email monitoring, CSV detection, financial email search |
-| DoorDash | `sessions/doordash.md` | Meal delivery, restaurant management, budget tracking |
-| WebArchitect | `sessions/web-architect.md` | Website security, n8n workflows, deployment |
-| WebsiteManager | `sessions/website-manager.md` | Per-site build/deploy, Notion dashboards |
+| **Chronos** | `sessions/chronos.md` | Calendar, Google Calendar sync, sleep analysis, routines, workflows, Epic FHIR |
+| **Archivist** | `sessions/archivist.md` | File management, data sovereignty, NordVPN, DeleteMe, retention policies |
+| **Gmail** | `sessions/gmail.md` | Email monitoring, Rocket Money CSV detection, financial email search |
+| **DoorDash** | `sessions/doordash.md` | Meal delivery, restaurant management, DoorDash Drive API, budget tracking |
+| **Web Properties** | `sessions/web.md` | WebArchitect + WebsiteManager + n8n + Notion dashboards |
 
 ## Related
 
