@@ -291,6 +291,8 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--ask", type=str, default=None, help="Ask Guardian a question")
+    parser.add_argument("--chat", action="store_true", help="Interactive chat with Guardian")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -1041,6 +1043,36 @@ def main() -> None:
         else:
             # --websites: show status
             print(mgr.summary())
+
+    elif args.ask:
+        from guardian_one.core.command_router import CommandRouter
+        router = CommandRouter(guardian)
+        result = router.handle(args.ask)
+        print(result.text)
+        if result.ai_summary:
+            print(f"\n  {result.ai_summary}")
+
+    elif args.chat:
+        from guardian_one.core.command_router import CommandRouter
+        router = CommandRouter(guardian)
+        print("  Guardian One — CFO Chat")
+        print("  Type 'quit' to exit, 'help' for commands.\n")
+        while True:
+            try:
+                user_input = input("  You > ").strip()
+                if not user_input:
+                    continue
+                if user_input.lower() in ("quit", "exit", "bye"):
+                    print("  Guardian signing off.")
+                    break
+                result = router.handle(user_input)
+                print(f"\n{result.text}")
+                if result.ai_summary:
+                    print(f"\n  {result.ai_summary}")
+                print()
+            except (KeyboardInterrupt, EOFError):
+                print("\n  Guardian signing off.")
+                break
 
     elif args.summary:
         print(guardian.daily_summary())
