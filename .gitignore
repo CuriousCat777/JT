@@ -55,3 +55,17 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Credentials & tokens (never commit)
+credentials.json
+token.json
+*.backup.json
+
+# Claude workspace
+.claude/
+
+# Data exports (may contain PII)
+data/*.xlsx
+data/*.csv
+data/*.png
+data/homelink-reference/

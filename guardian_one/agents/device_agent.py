@@ -44,6 +44,7 @@ from guardian_one.homelink.devices import (
     FlipperCapability,
     NetworkSegment,
 )
+from guardian_one.homelink.drivers import DriverFactory
 
 
 class DeviceAgent(BaseAgent):
@@ -55,10 +56,12 @@ class DeviceAgent(BaseAgent):
         audit: AuditLog,
         device_registry: DeviceRegistry | None = None,
         automation_engine: AutomationEngine | None = None,
+        driver_factory: DriverFactory | None = None,
     ) -> None:
         super().__init__(config, audit)
         self.device_registry = device_registry or DeviceRegistry()
         self.automation = automation_engine or AutomationEngine(audit=audit)
+        self.drivers = driver_factory or DriverFactory()
         self._scan_results: list[dict[str, Any]] = []
         self._alerts: list[str] = []
         self._last_scan: str = ""
@@ -241,44 +244,244 @@ class DeviceAgent(BaseAgent):
     def _execute_actions(
         self, actions: list[AutomationAction], source: str = ""
     ) -> list[dict[str, Any]]:
-        """Execute a list of automation actions and log results.
+        """Execute automation actions by dispatching to real device drivers.
 
-        In production, this dispatches to actual device APIs:
-        - Ryse SmartBridge API for blinds
-        - python-kasa for TP-Link plugs
-        - phue for Hue lights
-        - Govee LAN/cloud API for Govee
-        - ONVIF/RTSP for cameras
+        Dispatches to:
+        - python-kasa for TP-Link Kasa/Tapo plugs (DEVICE_ON/OFF)
+        - phue for Philips Hue lights (LIGHT_ON/OFF/DIM/COLOR)
+        - Govee LAN UDP for Govee lights (LIGHT_ON/OFF/DIM/COLOR)
 
-        Currently stubs the actual API calls but logs everything.
+        Actions targeting a room_id fan out to all matching devices in that room.
+        Actions for unsupported integrations (cameras, blinds, TV) are logged as
+        'stub' until those protocol drivers are implemented.
         """
         results: list[dict[str, Any]] = []
         now = datetime.now(timezone.utc).isoformat()
 
         for action in actions:
-            record = {
-                "action": action.action_type.value,
-                "device_id": action.target_device_id,
-                "room_id": action.target_room_id,
-                "parameters": action.parameters,
-                "source": source,
-                "timestamp": now,
-                "status": "executed",  # Would be "success"/"failed" with real API
-            }
-            results.append(record)
-            self._action_log.append(record)
-            self.log(
-                f"action_executed:{action.action_type.value}",
-                severity=Severity.INFO,
-                details={
-                    "device": action.target_device_id,
-                    "room": action.target_room_id,
-                    "params": action.parameters,
-                    "source": source,
-                },
-            )
+            targets = self._resolve_targets(action)
+
+            if not targets:
+                # No resolvable device — log as stub (cameras, blinds, etc.)
+                record = self._stub_action(action, source, now)
+                results.append(record)
+                continue
+
+            for device in targets:
+                record = self._dispatch_to_driver(action, device, source, now)
+                results.append(record)
+                self._action_log.append(record)
+                self.log(
+                    f"action_executed:{action.action_type.value}",
+                    severity=Severity.INFO if record["status"] == "success"
+                    else Severity.WARNING,
+                    details={
+                        "device": device.device_id,
+                        "integration": device.integration_name,
+                        "params": action.parameters,
+                        "source": source,
+                        "driver_result": record.get("driver_result", {}),
+                    },
+                )
 
         return results
+
+    def _resolve_targets(self, action: AutomationAction) -> list[DeviceRecord]:
+        """Resolve an action to the device(s) it should target."""
+        devices: list[DeviceRecord] = []
+
+        if action.target_device_id:
+            dev = self.device_registry.get(action.target_device_id)
+            if dev:
+                devices.append(dev)
+        elif action.target_room_id:
+            room_devices = self.device_registry.devices_in_room(
+                action.target_room_id
+            )
+            # Filter to devices relevant for this action type
+            for dev in room_devices:
+                if self._device_matches_action(dev, action.action_type):
+                    devices.append(dev)
+
+        return devices
+
+    @staticmethod
+    def _device_matches_action(
+        device: DeviceRecord, action_type: ActionType
+    ) -> bool:
+        """Check if a device is relevant for a given action type."""
+        light_actions = {
+            ActionType.LIGHT_ON, ActionType.LIGHT_OFF,
+            ActionType.LIGHT_DIM, ActionType.LIGHT_COLOR,
+        }
+        plug_actions = {ActionType.DEVICE_ON, ActionType.DEVICE_OFF}
+
+        if action_type in light_actions:
+            return device.category == DeviceCategory.SMART_LIGHT
+        if action_type in plug_actions:
+            return device.category in (
+                DeviceCategory.SMART_PLUG, DeviceCategory.SMART_TV,
+            )
+        if action_type in (ActionType.BLIND_OPEN, ActionType.BLIND_CLOSE,
+                           ActionType.BLIND_POSITION):
+            return device.category == DeviceCategory.SMART_BLIND
+        if action_type in (ActionType.CAMERA_ARM, ActionType.CAMERA_DISARM):
+            return device.category == DeviceCategory.SECURITY_CAMERA
+        return False
+
+    def _dispatch_to_driver(
+        self,
+        action: AutomationAction,
+        device: DeviceRecord,
+        source: str,
+        now: str,
+    ) -> dict[str, Any]:
+        """Dispatch a single action to the appropriate device driver."""
+        driver = self.drivers.for_device(device)
+        params = action.parameters
+
+        base = {
+            "action": action.action_type.value,
+            "device_id": device.device_id,
+            "room_id": action.target_room_id,
+            "integration": device.integration_name,
+            "parameters": params,
+            "source": source,
+            "timestamp": now,
+        }
+
+        if driver is None:
+            # No driver available — unsupported integration or missing IP
+            base["status"] = "skipped"
+            base["driver_result"] = {
+                "success": False,
+                "error": (
+                    f"No driver for integration={device.integration_name!r} "
+                    f"ip={device.ip_address!r}"
+                ),
+            }
+            self._action_log.append(base)
+            return base
+
+        result = self._call_driver(driver, action.action_type, params)
+        base["status"] = "success" if result.get("success") else "failed"
+        base["driver_result"] = result
+        return base
+
+    def _call_driver(
+        self,
+        driver,
+        action_type: ActionType,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Call the right method on a driver for the given action type."""
+        from guardian_one.homelink.drivers import (
+            KasaDriver, HueDriver, GoveeLanDriver, GoveeCloudDriver,
+        )
+
+        try:
+            # --- Kasa (smart plugs) ---
+            if isinstance(driver, KasaDriver):
+                if action_type == ActionType.DEVICE_ON:
+                    return driver.turn_on()
+                elif action_type == ActionType.DEVICE_OFF:
+                    return driver.turn_off()
+
+            # --- Hue (smart lights) ---
+            elif isinstance(driver, HueDriver):
+                light_id = params.get("light_id")
+                group_id = params.get("group_id")
+                brightness_pct = params.get("brightness", 100)
+                # Convert 0-100 percentage to Hue 1-254 scale
+                bri = max(1, int(brightness_pct / 100 * 254))
+
+                if action_type == ActionType.LIGHT_ON:
+                    return driver.turn_on(
+                        light_id=light_id, group_id=group_id,
+                        brightness=bri,
+                    )
+                elif action_type == ActionType.LIGHT_OFF:
+                    return driver.turn_off(
+                        light_id=light_id, group_id=group_id,
+                    )
+                elif action_type == ActionType.LIGHT_DIM:
+                    return driver.set_brightness(
+                        brightness_pct=brightness_pct,
+                        light_id=light_id, group_id=group_id,
+                    )
+                elif action_type == ActionType.LIGHT_COLOR:
+                    return driver.set_color(
+                        light_id=light_id, group_id=group_id,
+                        color_name=params.get("color", ""),
+                        hue=params.get("hue"),
+                        sat=params.get("sat", 254),
+                    )
+
+            # --- Govee LAN or Cloud (smart lights) ---
+            elif isinstance(driver, (GoveeLanDriver, GoveeCloudDriver)):
+                if action_type == ActionType.LIGHT_ON:
+                    result = driver.turn_on()
+                    if params.get("brightness"):
+                        driver.set_brightness(params["brightness"])
+                    return result
+                elif action_type == ActionType.LIGHT_OFF:
+                    return driver.turn_off()
+                elif action_type == ActionType.LIGHT_DIM:
+                    return driver.set_brightness(
+                        params.get("brightness", 50)
+                    )
+                elif action_type == ActionType.LIGHT_COLOR:
+                    color = params.get("color", "")
+                    if isinstance(color, str):
+                        color_map = {
+                            "warm": (255, 180, 100),
+                            "daylight": (255, 255, 255),
+                            "red": (255, 0, 0),
+                            "green": (0, 255, 0),
+                            "blue": (0, 0, 255),
+                        }
+                        rgb = color_map.get(color.lower(), (255, 255, 255))
+                        return driver.set_color(*rgb)
+                    return driver.set_color(
+                        r=params.get("r", 255),
+                        g=params.get("g", 255),
+                        b=params.get("b", 255),
+                    )
+
+            return {"success": False, "action": action_type.value,
+                    "error": f"Unhandled action {action_type.value} "
+                             f"for driver {type(driver).__name__}"}
+
+        except Exception as exc:
+            return {"success": False, "action": action_type.value,
+                    "error": str(exc)}
+
+    def _stub_action(
+        self, action: AutomationAction, source: str, now: str
+    ) -> dict[str, Any]:
+        """Log an action for a device/room with no resolvable driver targets."""
+        record = {
+            "action": action.action_type.value,
+            "device_id": action.target_device_id,
+            "room_id": action.target_room_id,
+            "parameters": action.parameters,
+            "source": source,
+            "timestamp": now,
+            "status": "stub",
+        }
+        self._action_log.append(record)
+        self.log(
+            f"action_stub:{action.action_type.value}",
+            severity=Severity.INFO,
+            details={
+                "device": action.target_device_id,
+                "room": action.target_room_id,
+                "params": action.parameters,
+                "source": source,
+                "reason": "No driver targets resolved",
+            },
+        )
+        return record
 
     def action_history(self, limit: int = 50) -> list[dict[str, Any]]:
         return list(reversed(self._action_log[-limit:]))

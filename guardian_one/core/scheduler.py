@@ -58,6 +58,11 @@ class Scheduler:
             interval = agent.config.schedule_interval_minutes
             schedule.every(interval).minutes.do(self._run_agent_job, name)
 
+        # Daily CFO financial sync — pulls latest from Plaid/Empower
+        schedule.every().day.at("06:00").do(self._run_cfo_sync)
+        # Also run a mid-day check
+        schedule.every().day.at("18:00").do(self._run_cfo_sync)
+
     def _run_agent_job(self, name: str) -> None:
         """Execute a single agent's run cycle (called by scheduler)."""
         with self._lock:
@@ -69,6 +74,49 @@ class Scheduler:
                 _print_report_brief(name, report)
             except Exception as exc:
                 print(f"\n  [{name}] Error: {exc}")
+
+    def _run_cfo_sync(self) -> None:
+        """Daily CFO financial sync — pulls latest from all connected providers."""
+        with self._lock:
+            if "cfo" in self._paused:
+                return
+            try:
+                from guardian_one.agents.cfo import CFO
+                cfo = self.guardian.get_agent("cfo")
+                if not cfo or not isinstance(cfo, CFO):
+                    return
+
+                ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+                print(f"\n  [cfo-sync] Daily financial sync starting ({ts})...")
+
+                results = cfo.sync_all()
+                nw = results.get("net_worth", 0)
+                accts = results.get("account_count", 0)
+                txns = results.get("transaction_count", 0)
+
+                # Plaid summary
+                plaid = results.get("plaid", {})
+                if plaid.get("connected"):
+                    print(f"  [cfo-sync] Plaid: +{plaid.get('accounts_added', 0)} accts, "
+                          f"+{plaid.get('transactions_added', 0)} txns "
+                          f"from {plaid.get('institutions', 0)} bank(s)")
+
+                # Empower summary
+                emp = results.get("empower", {})
+                if emp.get("connected"):
+                    print(f"  [cfo-sync] Empower: +{emp.get('accounts_added', 0)} accts, "
+                          f"+{emp.get('transactions_added', 0)} txns")
+
+                print(f"  [cfo-sync] Net worth: ${nw:,.2f} | {accts} accounts | {txns} transactions")
+
+                # Budget alerts
+                alerts = results.get("budget_alerts", [])
+                for alert in alerts:
+                    print(f"  [cfo-sync] [!] {alert}")
+
+                self._last_run["cfo-sync"] = datetime.now(timezone.utc).isoformat()
+            except Exception as exc:
+                print(f"\n  [cfo-sync] Error: {exc}")
 
     # ------------------------------------------------------------------
     # Background thread
@@ -180,6 +228,10 @@ class Scheduler:
                 print(f"  {target} interval changed to {minutes} min.")
             else:
                 print(f"  Unknown agent: {target}")
+
+        elif cmd == "sync":
+            print("  Running CFO financial sync now...")
+            self._run_cfo_sync()
 
         else:
             print(f"  Unknown command: {raw.strip()}")

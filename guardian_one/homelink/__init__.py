@@ -5,8 +5,10 @@ this module.  It enforces zero-trust, encrypted-by-default, and
 observability-first principles.
 
 Components:
-    vault       — Encrypted secret storage (API keys, tokens)
-    gateway     — Central API gateway with TLS enforcement & rate limiting
-    registry    — Integration catalog with threat/failure models
-    monitor     — Latency tracking, anomaly detection, weekly brief
+    vault        — Encrypted secret storage (API keys, tokens)
+    gateway      — Central API gateway with TLS enforcement & rate limiting
+    registry     — Integration catalog with threat/failure models
+    monitor      — Latency tracking, anomaly detection, weekly brief
+    lan_security — DNS blocking, VLAN policy, telemetry audit
+    email_commands — Email-based device control (HOMELINK: prefix)
 """

@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H.O.M.E. L.I.N.K. — Intelligence Dashboard</title>
+<style>
+:root {
+  --bg: #0a0e14;
+  --bg-card: #131920;
+  --bg-card-hover: #1a2230;
+  --border: #1e2a3a;
+  --text: #e6edf3;
+  --text-dim: #6e7a8a;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #f85149;
+  --orange: #db6d28;
+  --purple: #bc8cff;
+  --cyan: #39d2c0;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+
+/* Header */
+.header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); }
+.header h1 { font-size: 16px; font-weight: 700; letter-spacing: 2px; }
+.header h1 span { color: var(--accent); }
+.header-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+.header-right { display: flex; gap: 10px; align-items: center; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.net-badge { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: rgba(63,185,80,0.08); color: var(--green); border: 1px solid rgba(63,185,80,0.2); font-family: var(--mono); }
+.back-link { color: var(--text-dim); text-decoration: none; font-size: 12px; }
+.back-link:hover { color: var(--accent); }
+
+/* Layout */
+.container { max-width: 1600px; margin: 0 auto; padding: 16px 20px; }
+.grid-top { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-main { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px; }
+.grid-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* Cards */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-dim); margin-bottom: 12px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+.card-title .badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
+.badge-green { background: rgba(63,185,80,0.12); color: var(--green); }
+.badge-red { background: rgba(248,81,73,0.12); color: var(--red); }
+.badge-yellow { background: rgba(210,153,34,0.12); color: var(--yellow); }
+.badge-cyan { background: rgba(57,210,192,0.12); color: var(--cyan); }
+
+/* Big stats */
+.stat-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat { text-align: center; flex: 1; min-width: 60px; }
+.stat .val { font-size: 28px; font-weight: 800; font-family: var(--mono); line-height: 1; }
+.stat .lbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.val-green { color: var(--green); }
+.val-red { color: var(--red); }
+.val-yellow { color: var(--yellow); }
+.val-cyan { color: var(--cyan); }
+.val-purple { color: var(--purple); }
+.val-accent { color: var(--accent); }
+
+/* Energy bars */
+.energy-bar { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(30,42,58,0.5); }
+.energy-bar:last-child { border-bottom: none; }
+.energy-name { font-size: 12px; width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.energy-meter { flex: 1; height: 6px; background: rgba(30,42,58,0.8); border-radius: 3px; overflow: hidden; }
+.energy-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.energy-watts { font-size: 12px; font-family: var(--mono); width: 70px; text-align: right; color: var(--cyan); }
+.energy-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.on { background: var(--green); }
+.off { background: var(--text-dim); opacity: 0.3; }
+.unreachable { background: var(--red); }
+
+/* Light grid */
+.light-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.light-chip { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 11px; display: flex; align-items: center; gap: 6px; cursor: default; transition: all 0.15s; }
+.light-chip.is-on { border-color: rgba(210,153,34,0.4); background: rgba(210,153,34,0.06); }
+.light-chip.is-off { opacity: 0.5; }
+.light-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.light-chip .dot.on { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.light-chip .dot.off { background: var(--text-dim); }
+.light-chip .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.light-chip .watts { font-family: var(--mono); color: var(--text-dim); font-size: 10px; margin-left: auto; }
+
+/* Drone card */
+.drone-assessment { text-align: center; padding: 12px 0; }
+.drone-verdict { font-size: 20px; font-weight: 800; letter-spacing: 2px; margin-bottom: 8px; }
+.drone-verdict.fly { color: var(--green); }
+.drone-verdict.nofly { color: var(--red); }
+.weather-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.wx-stat { text-align: center; }
+.wx-stat .val { font-size: 18px; font-weight: 700; font-family: var(--mono); }
+.wx-stat .lbl { font-size: 9px; color: var(--text-dim); text-transform: uppercase; }
+.drone-issues { margin-top: 10px; }
+.drone-issue { font-size: 11px; color: var(--red); padding: 2px 0; }
+
+/* Noise / Volume control */
+.silence-btn { width: 100%; padding: 14px; border-radius: 10px; border: 2px solid var(--red); background: rgba(248,81,73,0.08); color: var(--red); cursor: pointer; font-size: 16px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; transition: all 0.15s; margin-bottom: 12px; }
+.silence-btn:hover { background: var(--red); color: #fff; transform: scale(1.02); }
+.silence-btn:active { transform: scale(0.98); }
+.audio-device { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(30,42,58,0.5); }
+.audio-device:last-child { border-bottom: none; }
+.audio-icon { font-size: 18px; width: 28px; text-align: center; }
+.audio-name { flex: 1; font-size: 12px; }
+.audio-type { font-size: 10px; color: var(--text-dim); padding: 2px 6px; border-radius: 4px; background: rgba(30,42,58,0.8); }
+.vol-slider { width: 80px; height: 6px; -webkit-appearance: none; background: var(--border); border-radius: 3px; outline: none; }
+.vol-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--red); cursor: pointer; }
+.mute-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--red); background: transparent; color: var(--red); cursor: pointer; font-size: 10px; font-weight: 700; }
+.mute-btn:hover { background: var(--red); color: #fff; }
+.kill-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--orange); background: transparent; color: var(--orange); cursor: pointer; font-size: 10px; font-weight: 700; }
+.kill-btn:hover { background: var(--orange); color: #fff; }
+
+/* Ring monitor */
+.ring-section { margin-top: 12px; }
+.ring-event { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(30,42,58,0.5); font-size: 12px; }
+.ring-event:last-child { border-bottom: none; }
+.ring-type { font-weight: 700; text-transform: uppercase; font-size: 10px; width: 60px; }
+.ring-type.motion { color: var(--yellow); }
+.ring-type.ding { color: var(--red); }
+.ring-time { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
+.ring-loc { color: var(--accent); font-size: 11px; }
+.priority-tag { font-size: 9px; padding: 1px 6px; border-radius: 4px; background: rgba(248,81,73,0.15); color: var(--red); font-weight: 700; }
+
+/* Quick actions */
+.action-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.act-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
+.act-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-card-hover); }
+.act-btn.wake { border-color: rgba(210,153,34,0.3); color: var(--yellow); }
+.act-btn.arrive { border-color: rgba(63,185,80,0.3); color: var(--green); }
+.act-btn.leave { border-color: rgba(248,81,73,0.3); color: var(--red); }
+.act-btn.sleep { border-color: rgba(188,140,255,0.3); color: var(--purple); }
+
+/* Scene row */
+.scene-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.scene-chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; transition: all 0.15s; }
+.scene-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Rooms compact */
+.room-list { max-height: 400px; overflow-y: auto; }
+.room-item { padding: 10px 0; border-bottom: 1px solid rgba(30,42,58,0.5); }
+.room-item:last-child { border-bottom: none; }
+.room-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.room-name { font-size: 13px; font-weight: 600; }
+.room-meta { font-size: 10px; color: var(--text-dim); }
+.room-devices { display: flex; flex-wrap: wrap; gap: 4px; }
+.dev-tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(30,42,58,0.8); color: var(--text-dim); }
+.dev-tag.has-ip { color: var(--green); background: rgba(63,185,80,0.08); }
+.dev-tag.cloud { color: var(--red); background: rgba(248,81,73,0.06); }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 600; z-index: 1000; transition: all 0.3s; opacity: 0; transform: translateY(10px); pointer-events: none; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: rgba(63,185,80,0.9); color: #000; }
+.toast.error { background: rgba(248,81,73,0.9); color: #fff; }
+.toast.info { background: rgba(88,166,255,0.9); color: #000; }
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .grid-top { grid-template-columns: 1fr 1fr; }
+  .grid-main { grid-template-columns: 1fr; }
+  .grid-bottom { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .grid-top { grid-template-columns: 1fr; }
+  .weather-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1><span>H.O.M.E.</span> L.I.N.K.</h1>
+    <div class="header-sub">Intelligence Dashboard</div>
+  </div>
+  <div class="header-right">
+    <span class="live-dot"></span>
+    <span class="net-badge" id="netBadge">sharknavigator</span>
+    <a href="/" class="back-link">Guardian One</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Quick Actions -->
+  <div class="action-bar">
+    <button class="act-btn wake" onclick="fireEvent('wake')">Wake</button>
+    <button class="act-btn arrive" onclick="fireEvent('arrive')">Arrive Home</button>
+    <button class="act-btn leave" onclick="fireEvent('leave')">Leave Home</button>
+    <button class="act-btn sleep" onclick="fireEvent('sleep')">Goodnight</button>
+    <span style="flex:1"></span>
+    <div class="scene-row" id="sceneRow"></div>
+  </div>
+
+  <!-- Top Row: Power | Lights | Drone -->
+  <div class="grid-top">
+
+    <!-- POWER MONITORING -->
+    <div class="card" id="powerCard">
+      <div class="card-title">Power Monitoring <span class="badge badge-cyan" id="powerBadge">--W</span></div>
+      <div class="stat-row" style="margin-bottom:14px;">
+        <div class="stat"><div class="val val-cyan" id="totalWatts">--</div><div class="lbl">Total Watts</div></div>
+        <div class="stat"><div class="val val-green" id="plugsOn">--</div><div class="lbl">Plugs On</div></div>
+        <div class="stat"><div class="val" id="plugsOff">--</div><div class="lbl">Plugs Off</div></div>
+      </div>
+      <div id="energyBars">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:10px;">Loading energy data...</div>
+      </div>
+    </div>
+
+    <!-- LIGHT STATUS -->
+    <div class="card" id="lightCard">
+      <div class="card-title">Light Status <span class="badge badge-yellow" id="lightBadge">--</span></div>
+      <div class="stat-row" style="margin-bottom:14px;">
+        <div class="stat"><div class="val val-yellow" id="lightsOnCount">--</div><div class="lbl">Lights On</div></div>
+        <div class="stat"><div class="val" id="lightsOffCount">--</div><div class="lbl">Off</div></div>
+        <div class="stat"><div class="val val-accent" id="lightTotal">--</div><div class="lbl">Total</div></div>
+      </div>
+      <div class="light-grid" id="lightGrid">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:10px;grid-column:1/-1;">Loading lights...</div>
+      </div>
+    </div>
+
+    <!-- DRONE / WEATHER -->
+    <div class="card" id="droneCard">
+      <div class="card-title">DJI Flight Check <span class="badge" id="droneBadge">--</span></div>
+      <div class="drone-assessment" id="droneAssessment">
+        <div style="color:var(--text-dim);font-size:12px;">Loading weather...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Noise Control -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-title">Noise Control <span class="badge badge-red" id="noiseBadge">--</span></div>
+    <button class="silence-btn" onclick="silenceAll()">SILENCE ALL</button>
+    <div id="audioDevices">
+      <div style="color:var(--text-dim);font-size:12px;text-align:center;">Loading audio devices...</div>
+    </div>
+  </div>
+
+  <!-- Main Row: Rooms | Ring / Security -->
+  <div class="grid-main">
+
+    <!-- ROOMS & DEVICES -->
+    <div class="card">
+      <div class="card-title">Rooms &amp; Devices <span class="badge badge-green" id="deviceBadge">--</span></div>
+      <div class="room-list" id="roomList">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">Loading rooms...</div>
+      </div>
+    </div>
+
+    <!-- SECURITY COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Ring Monitor -->
+      <div class="card">
+        <div class="card-title">Ring Monitor <span class="badge badge-red" id="ringBadge">--</span></div>
+        <div class="stat-row" style="margin-bottom:10px;">
+          <div class="stat"><div class="val val-red" id="ringManteca">--</div><div class="lbl">Manteca</div></div>
+          <div class="stat"><div class="val val-accent" id="ringDuluth">--</div><div class="lbl">Duluth</div></div>
+          <div class="stat"><div class="val" id="ringTotal">--</div><div class="lbl">Total Events</div></div>
+        </div>
+        <div id="ringEvents">
+          <div style="color:var(--text-dim);font-size:11px;text-align:center;">Ring monitor not started</div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px;">
+          <button class="act-btn" onclick="ringStart()" style="font-size:11px;padding:5px 12px;">Start Monitor</button>
+          <button class="act-btn" onclick="ringCheck()" style="font-size:11px;padding:5px 12px;">Check Now</button>
+        </div>
+      </div>
+
+      <!-- Email Commands -->
+      <div class="card">
+        <div class="card-title">Email Commands <span class="badge badge-cyan" id="emailBadge">READY</span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">Send to <span style="color:var(--accent);">jeremytabernero@gmail.com</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button class="act-btn" onclick="scanEmailCommands()" style="font-size:11px;padding:5px 12px;border-color:rgba(57,210,192,0.3);color:var(--cyan);">Scan Inbox</button>
+          <button class="act-btn" onclick="testEmailCommand()" style="font-size:11px;padding:5px 12px;">Test Command</button>
+        </div>
+        <div id="emailCmdList" style="max-height:180px;overflow-y:auto;"></div>
+        <div id="emailCmdResults" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Automation Schedule -->
+      <div class="card">
+        <div class="card-title">Automation Schedule <span class="badge badge-cyan">DAILY</span></div>
+        <div id="scheduleList">
+          <div style="color:var(--text-dim);font-size:12px;text-align:center;">Loading schedule...</div>
+        </div>
+      </div>
+
+      <!-- Security Summary -->
+      <div class="card">
+        <div class="card-title">Security Posture <span class="badge" id="riskBadge">--</span></div>
+        <div class="stat-row">
+          <div class="stat"><div class="val" id="riskScore">--</div><div class="lbl">Risk</div></div>
+          <div class="stat"><div class="val val-green" id="localCount">--</div><div class="lbl">Local</div></div>
+          <div class="stat"><div class="val val-red" id="cloudCount">--</div><div class="lbl">Cloud</div></div>
+          <div class="stat"><div class="val val-yellow" id="issueCount">--</div><div class="lbl">Issues</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── Helpers ── */
+function toast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  setTimeout(function() { el.classList.remove('show'); }, 3000);
+}
+function apiFetch(path, opts) {
+  return fetch(path, opts || {}).then(function(r) { return r.json(); }).catch(function(e) {
+    toast('Network error: ' + e.message, 'error');
+    return null;
+  });
+}
+
+/* ── Load everything in parallel ── */
+function loadAll() {
+  apiFetch('/api/homelink/devices').then(function(devices) {
+    if (!devices) return;
+    document.getElementById('netBadge').textContent = 'sharknavigator \u2014 ' + devices.length + ' devices';
+    document.getElementById('deviceBadge').textContent = devices.length + ' devices';
+    var local = devices.filter(function(d) { return d.local_api_only; }).length;
+    var cloud = devices.length - local;
+    document.getElementById('localCount').textContent = local;
+    document.getElementById('cloudCount').textContent = cloud;
+  });
+
+  apiFetch('/api/homelink/rooms').then(function(rooms) {
+    if (rooms) renderRooms(rooms);
+  });
+
+  apiFetch('/api/homelink/scenes').then(function(scenes) {
+    if (scenes) renderScenes(scenes);
+  });
+
+  apiFetch('/api/homelink/security-audit').then(function(audit) {
+    if (!audit) return;
+    var risk = audit.risk_score || 0;
+    document.getElementById('riskScore').textContent = risk + '/5';
+    document.getElementById('riskScore').className = 'val ' + (risk <= 2 ? 'val-green' : risk <= 3 ? 'val-yellow' : 'val-red');
+    document.getElementById('riskBadge').textContent = 'RISK ' + risk + '/5';
+    document.getElementById('riskBadge').className = 'badge ' + (risk <= 2 ? 'badge-green' : risk <= 3 ? 'badge-yellow' : 'badge-red');
+    document.getElementById('issueCount').textContent = audit.issue_count || 0;
+  });
+
+  loadEnergy();
+  loadWeather();
+  loadRing();
+  loadNoise();
+  loadSchedule();
+}
+
+/* ── Energy ── */
+function loadEnergy() {
+  apiFetch('/api/homelink/energy').then(function(data) {
+    if (!data) return;
+    var totalW = data.total_watts || 0;
+    document.getElementById('totalWatts').textContent = totalW.toFixed(1);
+    document.getElementById('powerBadge').textContent = totalW.toFixed(0) + 'W';
+
+    var onCount = 0, offCount = 0;
+    var container = document.getElementById('energyBars');
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    var maxW = 0;
+    data.plugs.forEach(function(p) { if (p.watts > maxW) maxW = p.watts; });
+    if (maxW < 10) maxW = 100;
+
+    data.plugs.forEach(function(p) {
+      if (p.status === 'on') onCount++;
+      else offCount++;
+
+      var row = document.createElement('div');
+      row.className = 'energy-bar';
+
+      var dot = document.createElement('div');
+      dot.className = 'energy-status ' + (p.status || 'off');
+      row.appendChild(dot);
+
+      var name = document.createElement('div');
+      name.className = 'energy-name';
+      name.textContent = p.name;
+      name.title = p.location + (p.ip_address ? ' \u2014 ' + p.ip_address : ' \u2014 no IP');
+      row.appendChild(name);
+
+      var meter = document.createElement('div');
+      meter.className = 'energy-meter';
+      var fill = document.createElement('div');
+      fill.className = 'energy-fill';
+      var pct = Math.min((p.watts / maxW) * 100, 100);
+      fill.style.width = pct + '%';
+      fill.style.background = p.watts > 50 ? 'var(--red)' : p.watts > 10 ? 'var(--yellow)' : 'var(--cyan)';
+      meter.appendChild(fill);
+      row.appendChild(meter);
+
+      var watts = document.createElement('div');
+      watts.className = 'energy-watts';
+      watts.textContent = p.watts > 0 ? p.watts.toFixed(1) + 'W' : (p.status === 'on' ? 'ON' : '--');
+      row.appendChild(watts);
+
+      container.appendChild(row);
+    });
+
+    document.getElementById('plugsOn').textContent = onCount;
+    document.getElementById('plugsOff').textContent = offCount;
+
+    /* Lights */
+    var lightsOn = 0, lightsOff = 0;
+    var lightGrid = document.getElementById('lightGrid');
+    while (lightGrid.firstChild) lightGrid.removeChild(lightGrid.firstChild);
+
+    var allLights = (data.lights_on || []).concat(data.lights_off || []);
+    document.getElementById('lightTotal').textContent = allLights.length;
+
+    allLights.forEach(function(l) {
+      var isOn = l.status === 'on';
+      if (isOn) lightsOn++; else lightsOff++;
+
+      var chip = document.createElement('div');
+      chip.className = 'light-chip ' + (isOn ? 'is-on' : 'is-off');
+
+      var dot = document.createElement('div');
+      dot.className = 'dot ' + (isOn ? 'on' : 'off');
+      chip.appendChild(dot);
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'name';
+      nameEl.textContent = l.name;
+      nameEl.title = l.location + ' \u2014 ' + l.integration;
+      chip.appendChild(nameEl);
+
+      lightGrid.appendChild(chip);
+    });
+
+    document.getElementById('lightsOnCount').textContent = lightsOn;
+    document.getElementById('lightsOffCount').textContent = lightsOff;
+    document.getElementById('lightBadge').textContent = lightsOn + ' on';
+    document.getElementById('lightBadge').className = 'badge ' + (lightsOn > 10 ? 'badge-yellow' : 'badge-green');
+  });
+}
+
+/* ── Weather / Drone ── */
+function loadWeather() {
+  apiFetch('/api/homelink/weather').then(function(wx) {
+    if (!wx) return;
+    var area = document.getElementById('droneAssessment');
+    while (area.firstChild) area.removeChild(area.firstChild);
+
+    var verdict = document.createElement('div');
+    verdict.className = 'drone-verdict ' + (wx.drone_flight_ok ? 'fly' : 'nofly');
+    verdict.textContent = wx.assessment;
+    area.appendChild(verdict);
+
+    var grid = document.createElement('div');
+    grid.className = 'weather-grid';
+    var stats = [
+      { v: wx.temperature_f + '\u00b0F', l: 'TEMP' },
+      { v: wx.wind_mph + ' mph', l: 'WIND' },
+      { v: wx.wind_gusts_mph + ' mph', l: 'GUSTS' },
+      { v: wx.cloud_cover_pct + '%', l: 'CLOUDS' },
+      { v: (wx.visibility_m / 1000).toFixed(1) + ' km', l: 'VISIBILITY' },
+      { v: wx.precipitation_mm + ' mm', l: 'PRECIP' },
+    ];
+    stats.forEach(function(s) {
+      var st = document.createElement('div');
+      st.className = 'wx-stat';
+      var val = document.createElement('div');
+      val.className = 'val';
+      val.textContent = s.v;
+      st.appendChild(val);
+      var lbl = document.createElement('div');
+      lbl.className = 'lbl';
+      lbl.textContent = s.l;
+      st.appendChild(lbl);
+      grid.appendChild(st);
+    });
+    area.appendChild(grid);
+
+    if (wx.drone_issues && wx.drone_issues.length) {
+      var issues = document.createElement('div');
+      issues.className = 'drone-issues';
+      wx.drone_issues.forEach(function(i) {
+        var line = document.createElement('div');
+        line.className = 'drone-issue';
+        line.textContent = '\u26a0 ' + i;
+        issues.appendChild(line);
+      });
+      area.appendChild(issues);
+    }
+
+    var db = document.getElementById('droneBadge');
+    db.textContent = wx.drone_flight_ok ? 'FLY OK' : 'NO FLY';
+    db.className = 'badge ' + (wx.drone_flight_ok ? 'badge-green' : 'badge-red');
+  });
+}
+
+/* ── Ring ── */
+function loadRing() {
+  apiFetch('/api/homelink/ring/status').then(function(r) {
+    if (!r) return;
+    document.getElementById('ringTotal').textContent = r.total_events_seen || 0;
+    document.getElementById('ringBadge').textContent = r.polling ? 'LIVE' : 'OFF';
+    document.getElementById('ringBadge').className = 'badge ' + (r.polling ? 'badge-green' : 'badge-red');
+
+    if (r.recent_events && r.recent_events.length) {
+      renderRingEvents(r.recent_events);
+      var manteca = r.recent_events.filter(function(e) { return e.location === 'manteca'; }).length;
+      var duluth = r.recent_events.filter(function(e) { return e.location !== 'manteca'; }).length;
+      document.getElementById('ringManteca').textContent = manteca;
+      document.getElementById('ringDuluth').textContent = duluth;
+    }
+  });
+}
+
+function renderRingEvents(events) {
+  var el = document.getElementById('ringEvents');
+  while (el.firstChild) el.removeChild(el.firstChild);
+  events.slice(-6).reverse().forEach(function(e) {
+    var row = document.createElement('div');
+    row.className = 'ring-event';
+
+    var type = document.createElement('span');
+    type.className = 'ring-type ' + (e.event_type || '');
+    type.textContent = e.event_type || 'event';
+    row.appendChild(type);
+
+    var name = document.createElement('span');
+    name.textContent = e.device_name;
+    name.style.flex = '1';
+    name.style.fontSize = '12px';
+    row.appendChild(name);
+
+    if (e.priority) {
+      var tag = document.createElement('span');
+      tag.className = 'priority-tag';
+      tag.textContent = 'PRIORITY';
+      row.appendChild(tag);
+    }
+
+    var loc = document.createElement('span');
+    loc.className = 'ring-loc';
+    loc.textContent = e.location;
+    row.appendChild(loc);
+
+    var time = document.createElement('span');
+    time.className = 'ring-time';
+    time.textContent = e.timestamp ? e.timestamp.substring(11, 16) : '';
+    row.appendChild(time);
+
+    el.appendChild(row);
+  });
+}
+
+function ringStart() {
+  toast('Starting Ring monitor...', 'info');
+  apiFetch('/api/homelink/ring/start', { method: 'POST' }).then(function(r) {
+    if (r) { toast('Ring monitor active \u2014 polling every 60s', 'success'); loadRing(); }
+  });
+}
+
+function ringCheck() {
+  toast('Checking Ring events...', 'info');
+  apiFetch('/api/homelink/ring/check', { method: 'POST' }).then(function(r) {
+    if (r) {
+      var n = (r.new_events || []).length;
+      toast(n + ' new event' + (n !== 1 ? 's' : ''), n > 0 ? 'success' : 'info');
+      loadRing();
+    }
+  });
+}
+
+/* ── Rooms ── */
+function renderRooms(rooms) {
+  var el = document.getElementById('roomList');
+  while (el.firstChild) el.removeChild(el.firstChild);
+
+  apiFetch('/api/homelink/devices').then(function(devices) {
+    if (!devices) return;
+    var dmap = {};
+    devices.forEach(function(d) { dmap[d.device_id] = d; });
+
+    rooms.forEach(function(room) {
+      var item = document.createElement('div');
+      item.className = 'room-item';
+
+      var head = document.createElement('div');
+      head.className = 'room-head';
+      var name = document.createElement('span');
+      name.className = 'room-name';
+      name.textContent = room.name;
+      head.appendChild(name);
+      var meta = document.createElement('span');
+      meta.className = 'room-meta';
+      var rDevices = (room.device_ids || []).map(function(id) { return dmap[id]; }).filter(Boolean);
+      var withIp = rDevices.filter(function(d) { return d.ip_address; }).length;
+      meta.textContent = rDevices.length + ' devices \u2014 ' + withIp + ' reachable';
+      head.appendChild(meta);
+      item.appendChild(head);
+
+      var tags = document.createElement('div');
+      tags.className = 'room-devices';
+      rDevices.forEach(function(d) {
+        var tag = document.createElement('span');
+        tag.className = 'dev-tag' + (d.ip_address ? ' has-ip' : '') + (!d.local_api_only ? ' cloud' : '');
+        tag.textContent = d.name;
+        tag.title = d.manufacturer + ' ' + d.model + (d.ip_address ? ' \u2014 ' + d.ip_address : '') + (d.local_api_only ? '' : ' (CLOUD)');
+        tags.appendChild(tag);
+      });
+      item.appendChild(tags);
+
+      el.appendChild(item);
+    });
+  });
+}
+
+/* ── Scenes ── */
+function renderScenes(scenes) {
+  var row = document.getElementById('sceneRow');
+  while (row.firstChild) row.removeChild(row.firstChild);
+  scenes.forEach(function(s) {
+    var chip = document.createElement('button');
+    chip.className = 'scene-chip';
+    chip.textContent = s.name;
+    chip.title = s.description;
+    chip.addEventListener('click', function() { activateScene(s.scene_id); });
+    row.appendChild(chip);
+  });
+}
+
+/* ── Actions ── */
+function fireEvent(event) {
+  toast('Firing ' + event + '...', 'info');
+  apiFetch('/api/homelink/events/' + encodeURIComponent(event), { method: 'POST' }).then(function(r) {
+    if (r) toast(event.toUpperCase() + ': ' + r.actions_executed + ' actions', 'success');
+  });
+}
+
+function activateScene(id) {
+  toast('Activating scene...', 'info');
+  apiFetch('/api/homelink/scenes/' + encodeURIComponent(id) + '/activate', { method: 'POST' }).then(function(r) {
+    if (r) toast('Scene active \u2014 ' + r.actions_executed + ' actions', 'success');
+  });
+}
+
+/* ── Noise Control ── */
+function loadNoise() {
+  apiFetch('/api/homelink/noise').then(function(data) {
+    if (!data) return;
+    var el = document.getElementById('audioDevices');
+    while (el.firstChild) el.removeChild(el.firstChild);
+    document.getElementById('noiseBadge').textContent = data.count + ' sources';
+
+    data.audio_devices.forEach(function(d) {
+      var row = document.createElement('div');
+      row.className = 'audio-device';
+
+      var icon = document.createElement('span');
+      icon.className = 'audio-icon';
+      icon.textContent = d.type === 'tv' ? '\u{1F4FA}' : d.type === 'echo' ? '\u{1F50A}' : '\u{1F3B5}';
+      row.appendChild(icon);
+
+      var name = document.createElement('span');
+      name.className = 'audio-name';
+      name.textContent = d.name;
+      row.appendChild(name);
+
+      var typeBadge = document.createElement('span');
+      typeBadge.className = 'audio-type';
+      typeBadge.textContent = d.type.toUpperCase();
+      row.appendChild(typeBadge);
+
+      if (d.has_volume) {
+        var slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'vol-slider';
+        slider.min = '0';
+        slider.max = '100';
+        slider.value = '20';
+        slider.title = 'Volume';
+        slider.addEventListener('change', function() {
+          setVolume(d.device_id, this.value);
+        });
+        row.appendChild(slider);
+      }
+
+      if (d.has_mute) {
+        var muteBtn = document.createElement('button');
+        muteBtn.className = 'mute-btn';
+        muteBtn.textContent = 'MUTE';
+        muteBtn.addEventListener('click', function() { muteDevice(d.device_id); });
+        row.appendChild(muteBtn);
+      }
+
+      if (d.can_kill_power && d.ip) {
+        var killBtn = document.createElement('button');
+        killBtn.className = 'kill-btn';
+        killBtn.textContent = 'KILL';
+        killBtn.title = 'Cut power via smart plug';
+        killBtn.addEventListener('click', function() { deviceOff(d.device_id); });
+        row.appendChild(killBtn);
+      }
+
+      el.appendChild(row);
+    });
+  });
+}
+
+function silenceAll() {
+  toast('SILENCING ALL DEVICES...', 'error');
+  apiFetch('/api/homelink/silence-all', { method: 'POST' }).then(function(r) {
+    if (r && r.silenced) toast('ALL SILENCED \u2014 ' + r.devices_affected + ' devices', 'success');
+    else toast('Silence failed', 'error');
+  });
+}
+
+function setVolume(id, level) {
+  apiFetch('/api/homelink/volume/' + encodeURIComponent(id), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ volume: parseInt(level, 10) }),
+  }).then(function(r) {
+    if (r && r.success) toast(id + ' volume: ' + level, 'success');
+    else toast('Volume failed: ' + (r && r.error ? r.error : 'unknown'), 'error');
+  });
+}
+
+function muteDevice(id) {
+  toast('Muting ' + id + '...', 'info');
+  apiFetch('/api/homelink/mute/' + encodeURIComponent(id), { method: 'POST' }).then(function(r) {
+    if (r && r.success) toast(id + ' MUTED', 'success');
+    else toast('Mute failed', 'error');
+  });
+}
+
+function deviceOff(id) {
+  toast('Killing power: ' + id + '...', 'info');
+  apiFetch('/api/homelink/devices/' + encodeURIComponent(id) + '/off', { method: 'POST' }).then(function(r) {
+    if (r && r.success) toast(id + ' OFF', 'success');
+    else toast('Failed: ' + (r && r.error ? r.error : 'unknown'), 'error');
+  });
+}
+
+/* ── Automation Schedule ── */
+function loadSchedule() {
+  apiFetch('/api/homelink/schedule').then(function(data) {
+    if (!data) return;
+    var el = document.getElementById('scheduleList');
+    if (!el) return;
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    data.automations.forEach(function(a) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(30,42,58,0.5);font-size:12px;';
+
+      var timeEl = document.createElement('span');
+      timeEl.style.cssText = 'font-family:var(--mono);color:var(--cyan);width:55px;font-weight:700;';
+      timeEl.textContent = a.time;
+      row.appendChild(timeEl);
+
+      var device = document.createElement('span');
+      device.style.cssText = 'flex:1;';
+      device.textContent = a.description;
+      row.appendChild(device);
+
+      var days = document.createElement('span');
+      days.style.cssText = 'font-size:10px;color:var(--text-dim);';
+      days.textContent = a.days || 'daily';
+      row.appendChild(days);
+
+      var status = document.createElement('span');
+      status.style.cssText = 'font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;' +
+        (a.enabled ? 'background:rgba(63,185,80,0.1);color:var(--green);' : 'background:rgba(248,81,73,0.1);color:var(--red);');
+      status.textContent = a.enabled ? 'ON' : 'OFF';
+      row.appendChild(status);
+
+      el.appendChild(row);
+    });
+  });
+}
+
+/* ── Email Commands ── */
+function loadEmailCommands() {
+  apiFetch('/api/homelink/email-commands').then(function(data) {
+    if (!data) return;
+    var el = document.getElementById('emailCmdList');
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    data.commands.forEach(function(c) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(30,42,58,0.3);font-size:11px;';
+
+      var cmd = document.createElement('span');
+      cmd.style.cssText = 'font-family:var(--mono);color:var(--cyan);min-width:180px;cursor:pointer;';
+      cmd.textContent = c.command;
+      cmd.title = 'Click to test this command';
+      cmd.addEventListener('click', function() {
+        runEmailCommand(c.command);
+      });
+      row.appendChild(cmd);
+
+      var desc = document.createElement('span');
+      desc.style.cssText = 'color:var(--text-dim);flex:1;';
+      desc.textContent = c.description;
+      row.appendChild(desc);
+
+      el.appendChild(row);
+    });
+  });
+}
+
+function scanEmailCommands() {
+  toast('Scanning inbox for HOMELINK commands...', 'info');
+  apiFetch('/api/homelink/email-commands/scan', { method: 'POST' }).then(function(r) {
+    if (!r) return;
+    if (r.error) { toast(r.error, 'error'); return; }
+    var n = r.executed || 0;
+    toast('Scanned ' + r.scanned + ' emails, executed ' + n + ' commands', n > 0 ? 'success' : 'info');
+
+    if (r.results && r.results.length) {
+      var el = document.getElementById('emailCmdResults');
+      while (el.firstChild) el.removeChild(el.firstChild);
+      r.results.forEach(function(res) {
+        var row = document.createElement('div');
+        row.style.cssText = 'font-size:11px;padding:3px 0;color:' + (res.success ? 'var(--green)' : 'var(--red)') + ';';
+        row.textContent = (res.success ? '\u2713 ' : '\u2717 ') + res.message;
+        el.appendChild(row);
+      });
+    }
+  });
+}
+
+function testEmailCommand() {
+  var subject = prompt('Enter email command subject line:\n\nExamples:\n  HOMELINK: silence all\n  HOMELINK: lights off\n  HOMELINK: vacuum start\n  HOMELINK: tv mute');
+  if (!subject) return;
+  runEmailCommand(subject);
+}
+
+function runEmailCommand(subject) {
+  toast('Executing: ' + subject, 'info');
+  apiFetch('/api/homelink/email-commands/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subject: subject,
+      sender: 'jeremytabernero@gmail.com',
+      message_id: 'test-' + Date.now(),
+    }),
+  }).then(function(r) {
+    if (!r) return;
+    if (r.error) { toast(r.error, 'error'); return; }
+    toast(r.message, r.success ? 'success' : 'error');
+
+    var el = document.getElementById('emailCmdResults');
+    while (el.firstChild) el.removeChild(el.firstChild);
+    var row = document.createElement('div');
+    row.style.cssText = 'font-size:11px;padding:3px 0;color:' + (r.success ? 'var(--green)' : 'var(--red)') + ';';
+    row.textContent = (r.success ? '\u2713 ' : '\u2717 ') + r.action + ' \u2192 ' + r.target + ': ' + r.message;
+    el.appendChild(row);
+  });
+}
+
+/* ── Init ── */
+loadAll();
+loadEmailCommands();
+/* Refresh energy + weather every 30s */
+setInterval(loadEnergy, 30000);
+setInterval(loadWeather, 120000);
+setInterval(loadRing, 60000);
+</script>
+</body>
+</html>

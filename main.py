@@ -35,15 +35,23 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --cfo                  # Interactive CFO financial assistant (conversational)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Fix Windows console encoding — allow Unicode output without crashing
+if sys.stdout.encoding and sys.stdout.encoding.lower().startswith("cp"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -252,6 +260,7 @@ def main() -> None:
     parser.add_argument("--homelink", action="store_true", help="H.O.M.E. L.I.N.K. service status")
     parser.add_argument("--gmail", action="store_true", help="Gmail inbox + Rocket Money CSV check")
     parser.add_argument("--csv", type=str, help="Parse a local Rocket Money CSV file")
+    parser.add_argument("--xlsx", type=str, help="Import a Rocket Money XLSX transaction export")
     parser.add_argument("--sandbox", action="store_true", help="Deploy first 2 agents in sandbox + start eval loop")
     parser.add_argument("--eval-interval", type=int, default=86400, help="Evaluation cycle interval in seconds (default: 86400 = 24h)")
     parser.add_argument("--notify", action="store_true", help="Run daily review and send notifications")
@@ -284,6 +293,16 @@ def main() -> None:
                         help="Push remediation status to Notion")
     parser.add_argument("--connector-audit", action="store_true",
                         help="Audit Claude connector/MCP attack surface")
+    parser.add_argument("--cfo", action="store_true",
+                        help="Interactive CFO financial assistant (conversational)")
+    parser.add_argument("--cfo-clean", action="store_true",
+                        help="Clean ledger: strip sandbox data, RM goals, zero-balance dupes")
+    parser.add_argument("--cfo-clean-dry", action="store_true",
+                        help="Preview ledger cleanup without modifying anything")
+    parser.add_argument("--cfo-connect", action="store_true",
+                        help="Connect real bank accounts via Plaid (development mode)")
+    parser.add_argument("--cfo-connect-port", type=int, default=8234,
+                        help="Port for Plaid Link server (default: 8234)")
     parser.add_argument("--ollama", action="store_true", help="Ollama AI engine status + models")
     parser.add_argument("--ollama-benchmark", nargs="?", const="default", default=None,
                         help="Benchmark an Ollama model (default: configured model)")
@@ -298,6 +317,125 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    if args.cfo:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            from guardian_one.core.cfo_router import run_cfo_repl
+            run_cfo_repl(cfo)
+        else:
+            print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.cfo_clean or args.cfo_clean_dry:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            dry = args.cfo_clean_dry
+            mode = "DRY RUN (no changes)" if dry else "LIVE — modifying ledger"
+            print(f"\n  CFO Ledger Cleanup — {mode}")
+            print("  " + "=" * 50)
+
+            # Back up before live cleanup
+            if not dry:
+                import shutil
+                backup = Path(config.data_dir) / "cfo_ledger.backup.json"
+                src = Path(config.data_dir) / "cfo_ledger.json"
+                if src.exists():
+                    shutil.copy2(src, backup)
+                    print(f"  Backup saved: {backup}")
+
+            result = cfo.clean_ledger(dry_run=dry)
+
+            if result["accounts_removed"]:
+                print(f"\n  Accounts to remove ({len(result['accounts_removed'])}):")
+                for a in result["accounts_removed"]:
+                    print(f"    - {a}")
+            if result["transactions_removed"]:
+                print(f"\n  Transactions to remove ({len(result['transactions_removed'])}):")
+                shown = result["transactions_removed"][:20]
+                for t in shown:
+                    print(f"    - {t}")
+                if len(result["transactions_removed"]) > 20:
+                    print(f"    ... and {len(result['transactions_removed']) - 20} more")
+
+            print(f"\n  Accounts:     {result['accounts_before']} -> {result['accounts_after']}")
+            print(f"  Transactions: {result['transactions_before']} -> {result['transactions_after']}")
+
+            if dry:
+                print(f"\n  This was a dry run. Run --cfo-clean to apply.")
+            else:
+                # Show updated net worth
+                nw = cfo.net_worth()
+                print(f"\n  Updated net worth: ${nw:,.2f}")
+                print(f"  Ledger saved.")
+        else:
+            print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.cfo_connect:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            from guardian_one.integrations.plaid_connect import run_plaid_link_server
+            import os
+
+            # Check and enforce development mode
+            current_env = os.environ.get("PLAID_ENV", "sandbox")
+            if current_env == "sandbox":
+                print("\n  ================================================")
+                print("  SWITCHING PLAID TO DEVELOPMENT MODE")
+                print("  ================================================")
+                print("  Your Plaid is currently in 'sandbox' (test data).")
+                print("  Switching to 'development' for real bank access.")
+                print()
+                print("  If you haven't already:")
+                print("  1. Go to https://dashboard.plaid.com")
+                print("  2. Toggle your app to 'Development' mode")
+                print("  3. Copy the Development secret (different from sandbox)")
+                print("  4. Update PLAID_SECRET in .env with the development key")
+                print()
+                print("  Development mode is FREE for up to 100 bank connections.")
+                print("  ================================================\n")
+
+                # Update the env var for this session
+                os.environ["PLAID_ENV"] = "development"
+
+                # Also update the provider instance
+                cfo.plaid._env = "development"
+                cfo.plaid._base_url = "https://development.plaid.com"
+
+            # Re-authenticate with new env
+            if not cfo.plaid.has_credentials:
+                print("  Set PLAID_CLIENT_ID and PLAID_SECRET in .env first.")
+                print("  Get them free at https://dashboard.plaid.com/signup")
+                guardian.shutdown()
+                return
+
+            auth_ok = cfo.plaid.authenticate()
+            if not auth_ok:
+                print(f"  Plaid auth failed: {cfo.plaid.last_error}")
+                print()
+                print("  Common fixes:")
+                print("  - Make sure PLAID_SECRET is the Development key (not sandbox)")
+                print("  - Toggle your Plaid app to Development at dashboard.plaid.com")
+                guardian.shutdown()
+                return
+
+            print(f"  Plaid authenticated (env: {cfo.plaid._env})")
+            result = run_plaid_link_server(cfo.plaid, port=args.cfo_connect_port)
+
+            if result.get("success") and result.get("connected", 0) > 0:
+                # Run an immediate sync to pull real data
+                print("\n  Running initial sync...")
+                sync = cfo.sync_plaid()
+                print(f"  Pulled {sync.get('accounts_added', 0)} accounts, "
+                      f"{sync.get('transactions_added', 0)} transactions")
+                print(f"  Net worth: ${cfo.net_worth():,.2f}")
+        else:
+            print("CFO agent not available.")
+        guardian.shutdown()
+        return
 
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
@@ -500,6 +638,20 @@ def main() -> None:
             print(json.dumps(summary, indent=2, default=str))
         else:
             print("Gmail agent not available.")
+    elif args.xlsx:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            print(f"\n  Importing: {args.xlsx}")
+            result = cfo.sync_from_xlsx(args.xlsx)
+            print(f"  Transactions in file: {result['transactions_in_file']}")
+            print(f"  New transactions added: {result['transactions_added']}")
+            print(f"  Accounts added: {result['accounts_added']}")
+            print(f"  Accounts updated: {result['accounts_updated']}")
+            print(f"\n  Totals: {result['total_accounts']} accounts, {result['total_transactions']} transactions")
+            print(f"  Net worth: ${cfo.net_worth():,.2f}")
+            print(f"  Ledger saved.")
+        else:
+            print("CFO agent not available.")
     elif args.notify or args.notify_test:
         from guardian_one.utils.notifications import build_notification_stack, Urgency
 

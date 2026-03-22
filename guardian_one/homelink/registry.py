@@ -666,6 +666,84 @@ SMART_TV_INTEGRATION = IntegrationRecord(
 )
 
 
+NETWORK_INFRA_INTEGRATION = IntegrationRecord(
+    name="network_infrastructure",
+    description="Home network infrastructure — Spectrum SAX2V1S router, ES2251 modem, TP-Link switch",
+    base_url="local_lan",
+    auth_method="api_key",
+    data_flow="Router admin panel for config. All IoT traffic routes through this gateway. "
+              "DNS queries go to Spectrum DNS (no local control — Pi-hole needed). "
+              "Modem in default mode (consider bridge mode for NAT control).",
+    vault_keys=["ROUTER_ADMIN_PASSWORD"],
+    threat_model=[
+        ThreatEntry("Spectrum DNS provides zero telemetry blocking capability", "high",
+                    "Deploy Pi-hole (Raspberry Pi) or NextDNS as upstream DNS resolver. "
+                    "This is the #1 action item for IoT privacy — without it, all "
+                    "smart devices phone home freely."),
+        ThreatEntry("No VLAN support on Spectrum SAX2V1S limits IoT isolation", "high",
+                    "Spectrum gateway does not support VLANs. Options: "
+                    "1) Replace with Ubiquiti Dream Machine / pfSense / OPNsense. "
+                    "2) Use Spectrum gateway as AP-only, dedicated router for VLAN. "
+                    "3) MAC-based filtering as stopgap (weak but better than nothing)."),
+        ThreatEntry("Remote management may be enabled by Spectrum by default", "high",
+                    "Check router admin for remote management settings. Disable if enabled. "
+                    "Spectrum retains ability to push firmware updates — consider replacing."),
+        ThreatEntry("ISP-provided router receives uncontrolled firmware updates", "medium",
+                    "Spectrum can push firmware to SAX2V1S at any time. Updates could "
+                    "re-enable UPnP or change security settings. Monitor after each update."),
+        ThreatEntry("TP-Link unmanaged switch has no traffic monitoring or segmentation", "medium",
+                    "Upgrade to managed switch (e.g., TP-Link TL-SG108E) for "
+                    "port mirroring, VLAN tagging, and traffic monitoring."),
+    ],
+    failure_impact="Total network outage. All IoT devices, Ring security, and internet access lost. "
+                   "Flipper Zero and BLE devices continue functioning.",
+    rollback_procedure="1. Factory reset router via physical reset button. "
+                       "2. Reconfigure WiFi SSID/password. "
+                       "3. Re-disable UPnP. "
+                       "4. Verify Security Shield is ON. "
+                       "5. Reconnect all IoT devices.",
+    owner_agent="device_agent",
+)
+
+RING_ALARM_INTEGRATION = IntegrationRecord(
+    name="ring_alarm",
+    description="Ring Alarm — cloud-only security system (Amazon). "
+                "Doorbells, contact sensors, motion detectors, alarm base station.",
+    base_url="cloud_only",
+    auth_method="oauth2",
+    data_flow="ALL Ring data routes through Amazon cloud — video streams, sensor "
+              "events, alarm state changes. Zero local API. Ring app communicates "
+              "via Amazon servers even on the same LAN. Base station uses Z-Wave "
+              "for sensor mesh, then uploads everything to cloud.",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("All video and sensor data stored on Amazon servers", "critical",
+                    "Ring has no local storage or local API. Every doorbell frame and "
+                    "sensor event goes through Amazon. Mitigation: plan migration to "
+                    "Frigate NVR + RTSP cameras for local-only security."),
+        ThreatEntry("Amazon employees and law enforcement can access video without warrant", "critical",
+                    "Ring has shared video with law enforcement. Mitigation: enable "
+                    "end-to-end encryption in Ring app (Settings > Video Encryption). "
+                    "Long-term: replace with self-hosted solution."),
+        ThreatEntry("Ring account compromise exposes all cameras and alarm system", "high",
+                    "Enable 2FA on Amazon/Ring account. Use unique strong password. "
+                    "Monitor Ring app for unauthorized shared users."),
+        ThreatEntry("Z-Wave sensor signals may be interceptable within range", "medium",
+                    "Ring uses Z-Wave S2 encryption for sensor communication. "
+                    "Verify via Flipper Zero Z-Wave audit that S2 is active."),
+        ThreatEntry("Ring cloud outage disables entire security system", "high",
+                    "Amazon outages have historically disabled Ring doorbells and alarms. "
+                    "No local fallback exists. Supplementary local cameras recommended."),
+    ],
+    failure_impact="Total security system failure. All doorbells, sensors, and alarm "
+                   "monitoring go offline during Amazon/Ring cloud outage. No local fallback.",
+    rollback_procedure="1. Ring cannot be 'rolled back' — it's cloud-only. "
+                       "2. If compromised: change Amazon password, revoke shared users, "
+                       "   enable E2E encryption, review Authorized Client Devices. "
+                       "3. Long-term: deploy Frigate NVR + RTSP cameras for local security.",
+    owner_agent="device_agent",
+)
+
 OLLAMA_INTEGRATION = IntegrationRecord(
     name="ollama",
     description="Ollama — local sovereign LLM inference engine (primary AI backend)",
@@ -1007,6 +1085,8 @@ class IntegrationRegistry:
             RYSE_SMARTSHADE_INTEGRATION,
             FLIPPER_ZERO_INTEGRATION,
             SMART_TV_INTEGRATION,
+            NETWORK_INFRA_INTEGRATION,
+            RING_ALARM_INTEGRATION,
             DESKTOP_COMMANDER_CONNECTOR,
             FILESYSTEM_MCP_CONNECTOR,
             AWS_MCP_CONNECTOR,

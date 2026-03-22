@@ -334,6 +334,108 @@ class CFO(BaseAgent):
         if persist:
             self.save_ledger()
 
+    def clean_ledger(
+        self,
+        strip_sandbox: bool = True,
+        strip_rm_goals: bool = True,
+        strip_zero_dupes: bool = True,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Remove sandbox data, Rocket Money goal buckets, and zero-balance duplicates.
+
+        Returns a report of what was (or would be) removed.
+        """
+        removed_accounts: list[str] = []
+        removed_transactions: list[str] = []
+
+        # Known sandbox institutions (Plaid test data)
+        sandbox_institutions = {"First Platypus Bank", "Platypus Bank"}
+
+        # Known Rocket Money goal bucket names
+        rm_goal_keywords = {"fund", "pay off", "save for"}
+
+        accounts_before = len(self._accounts)
+        txns_before = len(self._transactions)
+
+        # --- Strip sandbox accounts ---
+        if strip_sandbox:
+            sandbox_names = [
+                name for name, acct in self._accounts.items()
+                if acct.institution in sandbox_institutions
+            ]
+            for name in sandbox_names:
+                removed_accounts.append(f"[sandbox] {name} ({self._accounts[name].institution})")
+                if not dry_run:
+                    del self._accounts[name]
+
+            # Strip transactions referencing sandbox accounts
+            sandbox_account_names = {n.split(" (")[0] for n in sandbox_names}  # match partial
+            sandbox_txns = [
+                tx for tx in self._transactions
+                if any(s in tx.account for s in sandbox_institutions)
+                or any(s in tx.account for s in sandbox_account_names)
+                or any(s in tx.description for s in sandbox_institutions)
+            ]
+            for tx in sandbox_txns:
+                removed_transactions.append(f"[sandbox] {tx.date} {tx.description} ${tx.amount:.2f}")
+            if not dry_run:
+                self._transactions = [tx for tx in self._transactions if tx not in sandbox_txns]
+
+        # --- Strip Rocket Money goal buckets (zero-balance pseudo-accounts) ---
+        if strip_rm_goals:
+            rm_names = [
+                name for name, acct in self._accounts.items()
+                if acct.institution == "Rocket Money"
+                and acct.balance == 0
+                and any(kw in name.lower() for kw in rm_goal_keywords)
+            ]
+            for name in rm_names:
+                removed_accounts.append(f"[rm_goal] {name}")
+                if not dry_run:
+                    del self._accounts[name]
+
+        # --- Strip zero-balance duplicates ---
+        # If two accounts share the same institution and one has a balance
+        # while the other is $0 with a similar name, remove the zero one.
+        if strip_zero_dupes:
+            by_inst: dict[str, list[str]] = {}
+            for name, acct in self._accounts.items():
+                by_inst.setdefault(acct.institution, []).append(name)
+
+            for inst, names in by_inst.items():
+                if len(names) < 2:
+                    continue
+                has_balance = [n for n in names if self._accounts[n].balance != 0]
+                zeroes = [n for n in names if self._accounts[n].balance == 0]
+                for z in zeroes:
+                    # If there's a non-zero account at the same institution, the zero
+                    # is likely a stale duplicate
+                    if has_balance and z not in [r.split("] ", 1)[-1] for r in removed_accounts]:
+                        removed_accounts.append(f"[zero_dupe] {z} ({inst})")
+                        if not dry_run:
+                            del self._accounts[z]
+
+        if not dry_run:
+            self.save_ledger()
+            self.log("ledger_cleaned", details={
+                "accounts_removed": len(removed_accounts),
+                "transactions_removed": len(removed_transactions),
+                "accounts_before": accounts_before,
+                "accounts_after": len(self._accounts),
+                "transactions_before": txns_before,
+                "transactions_after": len(self._transactions),
+            })
+
+        return {
+            "dry_run": dry_run,
+            "accounts_removed": removed_accounts,
+            "transactions_removed": removed_transactions,
+            "accounts_before": accounts_before,
+            "accounts_after": accounts_before - len(removed_accounts) if dry_run else len(self._accounts),
+            "transactions_before": txns_before,
+            "transactions_after": txns_before - len(removed_transactions) if dry_run else len(self._transactions),
+        }
+
     # ------------------------------------------------------------------
     # Account management
     # ------------------------------------------------------------------
@@ -1034,6 +1136,144 @@ class CFO(BaseAgent):
         csv_result = self._rocket_money.sync_from_csv(csv_path)
         self.log("rocket_money_csv_loaded", details=csv_result)
         return self.sync_rocket_money()
+
+    def sync_from_xlsx(self, xlsx_path: str | Path) -> dict[str, Any]:
+        """Import a Rocket Money XLSX transaction export into the ledger.
+
+        Expected columns (Rocket Money export format):
+            Date, Original Date, Account Type, Account Name, Account Number,
+            Institution Name, Name, Custom Name, Amount, Description,
+            Category, Note, Ignored From, Tax Deductible, Transaction Tags
+
+        Merges accounts and transactions, deduplicates, and persists.
+        """
+        from openpyxl import load_workbook
+        from guardian_one.integrations.financial_sync import map_rocket_money_category
+
+        wb = load_workbook(str(xlsx_path), read_only=True)
+        ws = wb.active
+
+        # Use iter_rows for efficient streaming (read_only mode)
+        rows_iter = ws.iter_rows(values_only=True)
+        headers = list(next(rows_iter))
+        col = {h: i for i, h in enumerate(headers)}
+
+        # Track accounts seen (to derive balances from transaction flow)
+        account_info: dict[str, dict[str, Any]] = {}
+        new_transactions: list[tuple[str, str, float, str, str]] = []  # date, desc, amt, cat, acct
+
+        acct_type_map = {
+            "cash": "checking", "credit card": "credit_card",
+            "loan": "loan", "savings": "savings",
+            "investment": "investment", "retirement": "retirement",
+        }
+
+        for row in rows_iter:
+            date_val = row[col.get("Date", 0)]
+            acct_type_raw = str(row[col.get("Account Type", 2)] or "cash").lower()
+            acct_name = str(row[col.get("Account Name", 3)] or "Unknown")
+            institution = str(row[col.get("Institution Name", 5)] or "Unknown")
+            name = str(row[col.get("Name", 6)] or row[col.get("Custom Name", 7)] or "")
+            amount = row[col.get("Amount", 8)]
+            description = str(row[col.get("Description", 9)] or name)
+            category_raw = str(row[col.get("Category", 10)] or "Other")
+
+            if date_val is None or amount is None:
+                continue
+
+            # Format date
+            if hasattr(date_val, "strftime"):
+                date_str = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_val)[:10]
+
+            amount = float(amount)
+
+            # Track account metadata
+            if acct_name not in account_info:
+                account_info[acct_name] = {
+                    "institution": institution,
+                    "type": acct_type_map.get(acct_type_raw, "checking"),
+                }
+
+            # Map category
+            cfo_cat = map_rocket_money_category(category_raw)
+
+            # Rocket Money: positive = outflow (spent), negative = inflow (income)
+            # CFO convention: positive = inflow, negative = outflow
+            cfo_amount = -amount
+
+            new_transactions.append((date_str, description[:200], cfo_amount, cfo_cat, acct_name))
+
+        wb.close()
+
+        # Deduplicate against existing transactions
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+
+        tx_added = 0
+        for date_str, desc, amt, cat, acct in new_transactions:
+            key = (date_str, desc, amt)
+            if key not in existing_keys:
+                try:
+                    tx_cat = TransactionCategory(cat)
+                except ValueError:
+                    tx_cat = TransactionCategory.OTHER
+                self._transactions.append(Transaction(
+                    date=date_str,
+                    description=desc,
+                    amount=amt,
+                    category=tx_cat,
+                    account=acct,
+                    metadata={"source": "rocket_money_xlsx"},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        # Update/add accounts
+        accounts_added = 0
+        accounts_updated = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for acct_name, info in account_info.items():
+            # Skip Rocket Money goal buckets
+            if info["institution"] == "Rocket Money":
+                continue
+            existing = self._accounts.get(acct_name)
+            if existing:
+                existing.last_synced = now_iso
+                accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(info["type"])
+                except ValueError:
+                    acct_type = AccountType.CHECKING
+                self._accounts[acct_name] = Account(
+                    name=acct_name,
+                    account_type=acct_type,
+                    balance=0.0,  # Will be computed from transactions
+                    institution=info["institution"],
+                    last_synced=now_iso,
+                )
+                accounts_added += 1
+
+        self._last_sync = now_iso
+
+        # Persist
+        self.save_ledger()
+
+        result = {
+            "source": "xlsx",
+            "file": str(xlsx_path),
+            "transactions_in_file": len(new_transactions),
+            "transactions_added": tx_added,
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "total_accounts": len(self._accounts),
+            "total_transactions": len(self._transactions),
+        }
+        self.log("xlsx_import", details=result)
+        return result
 
     # ------------------------------------------------------------------
     # Empower sync

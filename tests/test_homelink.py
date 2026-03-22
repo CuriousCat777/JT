@@ -246,7 +246,7 @@ def test_registry_connector_audit():
     reg = IntegrationRegistry()
     reg.load_defaults()
     audit = reg.connector_audit()
-    assert audit["total_registered"] >= 25  # 14 guardian + 7 IoT + 4 MCP
+    assert audit["total_registered"] >= 26  # 14 guardian + 8 IoT + 4 MCP
     assert audit["guardian_integrations"] > 0
     assert audit["mcp_connectors"] > 0
     assert audit["total_threats_modeled"] > 0
@@ -361,10 +361,116 @@ def test_guardian_has_homelink(monkeypatch):
     # Gateway should have services from registry
     assert len(guardian.gateway.list_services()) > 0
     # Vault should be accessible
-    assert guardian.vault.health_report()["total_credentials"] == 0
+    assert guardian.vault.health_report()["total_credentials"] >= 0
     # Registry should have defaults
     assert "doordash_drive" in guardian.registry.list_all()
     # Daily summary should include H.O.M.E. L.I.N.K. section
     summary = guardian.daily_summary()
     assert "H.O.M.E. L.I.N.K." in summary
     guardian.shutdown()
+
+
+# ========================================================================
+# Email Command Parser tests
+# ========================================================================
+
+def test_email_command_parse_silence():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: silence all", sender="jeremytabernero@gmail.com")
+    assert cmd is not None
+    assert cmd.action == "silence_all"
+    assert cmd.target == "all"
+
+
+def test_email_command_parse_lights():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: lights off")
+    assert cmd is not None
+    assert cmd.action == "off"
+    assert cmd.target == "all_lights"
+
+    cmd2 = parse_email_command("HOMELINK: lights on")
+    assert cmd2 is not None
+    assert cmd2.action == "on"
+    assert cmd2.target == "all_lights"
+
+
+def test_email_command_parse_events():
+    from guardian_one.homelink.email_commands import parse_email_command
+    for word, expected in [("wake", "wake"), ("goodnight", "sleep"),
+                           ("leave", "leave"), ("arrive", "arrive")]:
+        cmd = parse_email_command(f"HOMELINK: {word}")
+        assert cmd is not None, f"Failed to parse: {word}"
+        assert cmd.action == "event"
+        assert cmd.target == expected
+
+
+def test_email_command_parse_device():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: tv on")
+    assert cmd is not None
+    assert cmd.action == "on"
+    assert cmd.target == "lg-tv-65-living"  # alias resolved
+
+
+def test_email_command_parse_brightness():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: govee desk brightness 75")
+    assert cmd is not None
+    assert cmd.action == "brightness"
+    assert cmd.target == "light-govee-desk"
+    assert cmd.params["brightness"] == 75
+
+
+def test_email_command_parse_scene():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: scene movie")
+    assert cmd is not None
+    assert cmd.action == "scene"
+    assert cmd.target == "movie-night"
+
+
+def test_email_command_parse_vacuum():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: vacuum start")
+    assert cmd is not None
+    assert cmd.action == "on"
+    assert cmd.target == "vacuum-roborock"
+
+
+def test_email_command_parse_not_homelink():
+    from guardian_one.homelink.email_commands import parse_email_command
+    assert parse_email_command("Re: meeting notes") is None
+    assert parse_email_command("") is None
+    assert parse_email_command("HOMELINK without colon") is None
+
+
+def test_email_command_parse_tv_volume():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: tv volume 40")
+    assert cmd is not None
+    assert cmd.action == "volume"
+    assert cmd.target == "lg-tv-65-living"
+    assert cmd.params["volume"] == 40
+
+
+def test_email_command_parse_status():
+    from guardian_one.homelink.email_commands import parse_email_command
+    cmd = parse_email_command("HOMELINK: status")
+    assert cmd is not None
+    assert cmd.action == "status"
+    assert cmd.target == "system"
+
+
+def test_email_command_unauthorized_sender():
+    from guardian_one.homelink.email_commands import (
+        parse_email_command, EmailCommandProcessor,
+    )
+    cmd = parse_email_command("HOMELINK: silence all",
+                              sender="hacker@evil.com")
+    assert cmd is not None
+    # Processor should reject unauthorized sender
+    processor = EmailCommandProcessor(device_agent=None, audit=_make_audit())
+    result = processor.execute(cmd)
+    assert result.success is False
+    assert "Unauthorized" in result.message

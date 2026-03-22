@@ -410,166 +410,443 @@ class DeviceRegistry:
 # ---------------------------------------------------------------------------
 
 def _jeremys_devices() -> list[DeviceRecord]:
-    """Jeremy's actual device inventory.
+    """Jeremy's actual device inventory — Duluth, MN residence.
 
+    Cataloged from Alexa app device list and hardware inspection.
     All devices start as UNKNOWN status until the DeviceAgent
-    performs its first network scan and updates them.
+    performs its first LAN scan and updates them.
+
+    SELF-SERVICE POLICY:
+      - Kasa plugs: local LAN API via python-kasa (block *.tplinkcloud.com)
+      - Govee lights: local UDP port 4003 (enable LAN Control in Govee app)
+      - Hue lights: local REST via Hue Bridge (block *.meethue.com)
+      - Ryse blinds: local via SmartBridge SB-B101 REST API
+      - Ring: CLOUD-ONLY (Amazon) — cannot be self-serviced, flagged as risk
+      - Echo Dots: CLOUD-ONLY (Amazon) — flagged as exposure vector
+      - LG TV: local WebOS SSAP (block *.lgtvcommon.com, *.lgappstv.com)
     """
-    return [
-        # --- Security cameras ---
-        DeviceRecord(
-            device_id="cam-01",
-            name="Security Camera 1",
-            category=DeviceCategory.SECURITY_CAMERA,
-            manufacturer="Unknown",
-            protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API],
+    devices: list[DeviceRecord] = []
+
+    # =================================================================
+    # TP-Link Kasa Smart Plugs (9 plugs — all local via python-kasa)
+    # =================================================================
+    _kasa_base = dict(
+        category=DeviceCategory.SMART_PLUG,
+        manufacturer="TP-Link",
+        model="Smart Plug Mini (KP125)",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=True,
+        integration_name="tplink_kasa",
+        tags=["smart_home", "energy", "local_only"],
+    )
+    kasa_plugs = [
+        ("plug-tplink-01", "Smart Plug Mini 1", "living_room"),
+        ("plug-kasa-mb-bedside", "MB Right Bedside Corner", "master_bedroom"),
+        ("plug-kasa-console", "Console", "living_room"),
+        ("plug-kasa-island", "Island", "kitchen"),
+        ("plug-kasa-office-desk", "Office Desk Light", "office"),
+        ("plug-kasa-closet-top", "Closet MB Top", "master_bedroom"),
+        ("plug-kasa-closet-bottom", "Closet MB Bottom", "master_bedroom"),
+        ("plug-kasa-mini-02", "Smart Plug Mini 2", "living_room"),
+        ("plug-kasa-fairy-office", "Fairy-lights Office", "office"),
+    ]
+    for did, name, loc in kasa_plugs:
+        devices.append(DeviceRecord(
+            device_id=did, name=name, location=loc, **_kasa_base))
+
+    # =================================================================
+    # Govee Smart Lights (18 devices — local LAN UDP on port 4003)
+    # =================================================================
+    _govee_base = dict(
+        category=DeviceCategory.SMART_LIGHT,
+        manufacturer="Govee",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.BLE, DeviceProtocol.LAN_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        integration_name="govee",
+        vault_credential_key="GOVEE_API_KEY",
+        tags=["smart_home", "lighting", "rgb", "local_only"],
+    )
+    govee_lights = [
+        # Living room
+        ("light-govee-lr-main", "Living Room", "Govee RGBIC Strip", "living_room"),
+        ("light-govee-lr-small", "Living Room Small", "Govee RGBIC Strip", "living_room"),
+        ("light-govee-lr-shelf", "LR Shelf Backlight", "Govee LED Strip", "living_room"),
+        ("light-govee-music-sync", "Music Sync", "Govee Music Sync Box", "living_room"),
+        # TV backlight
+        ("light-govee-tv-backlight", "65in NaNo LG TV Backlight",
+         "Govee DreamView/Strip", "living_room"),
+        ("light-govee-dreamview", "Scenic DreamView1", "Govee DreamView T1", "living_room"),
+        # Special lamps
+        ("light-govee-q5-max", "Q5 Max+", "Govee Q5 Max+ Floor Lamp", "living_room"),
+        ("light-govee-mushroom", "Mushroom", "Govee Mushroom Lamp", "living_room"),
+        ("light-govee-duoroller", "Q5 DuoRoller+", "Govee Q5 DuoRoller+", "living_room"),
+        ("light-govee-relaxed", "Relaxed", "Govee Ambient Light", "living_room"),
+        # Bedroom
+        ("light-govee-01", "Bedroom", "Govee Bulb/Strip", "master_bedroom"),
+        ("light-govee-mb-0100", "MB 0100", "Govee RGBIC Strip", "master_bedroom"),
+        ("light-govee-mb-0004", "MB0004", "Govee Bulb", "master_bedroom"),
+        # Bathrooms
+        ("light-govee-guest-bath", "Guest Bathroom", "Govee Bulb", "guest_bathroom"),
+        ("light-govee-guest-bath-2", "Guest Bath", "Govee Bulb", "guest_bathroom"),
+        ("light-govee-master-bath", "MasterBathroom", "Govee Bulb", "master_bathroom"),
+        # Other
+        ("light-govee-studio", "Studio", "Govee Bulb/Strip", "office"),
+        ("light-govee-balcony", "Big Balcony", "Govee Outdoor Strip", "balcony"),
+        ("light-govee-kitchen", "Kitchen", "Govee Bulb", "kitchen"),
+    ]
+    for did, name, model, loc in govee_lights:
+        devices.append(DeviceRecord(
+            device_id=did, name=name, model=model, location=loc,
+            **_govee_base))
+
+    # =================================================================
+    # Philips Hue (Bridge + 3 bulbs — local REST API via phue)
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="light-hue-bridge",
+        name="Philips Hue Bridge",
+        category=DeviceCategory.SMART_LIGHT,
+        manufacturer="Philips",
+        model="BSB002",
+        protocols=[DeviceProtocol.ZIGBEE, DeviceProtocol.LAN_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=True,
+        encryption_enabled=True,
+        integration_name="philips_hue",
+        vault_credential_key="HUE_BRIDGE_API_KEY",
+        ip_address="192.168.1.147",
+        location="master_bedroom",
+        notes="Bridge ID ecb5fafffeafca80, MAC ec:b5:fa:af:ca:80, "
+              "firmware 1975170000. DHCP on gateway 192.168.1.1. "
+              "Controls all Hue bulbs via Zigbee mesh. Local REST API on port 443. "
+              "Block *.meethue.com at DNS for local-only. API key in Vault.",
+        tags=["smart_home", "lighting", "zigbee", "local_only"],
+    ))
+    _hue_base = dict(
+        category=DeviceCategory.SMART_LIGHT,
+        manufacturer="Philips",
+        protocols=[DeviceProtocol.ZIGBEE],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=True,
+        integration_name="philips_hue",
+        tags=["smart_home", "lighting", "zigbee", "local_only"],
+    )
+    hue_bulbs = [
+        ("light-hue-kitchen-1", "Kitchen Lamp 1", "Hue White Ambiance", "kitchen"),
+        ("light-hue-spot-01", "Spotlight Bulb01", "Hue Spot GU10", "living_room"),
+        ("light-hue-spot-02", "Spotlight Bulb02", "Hue Spot GU10", "living_room"),
+    ]
+    for did, name, model, loc in hue_bulbs:
+        devices.append(DeviceRecord(
+            device_id=did, name=name, model=model, location=loc, **_hue_base))
+
+    # =================================================================
+    # Ring Security System — CLOUD-ONLY (Amazon) — EXPOSURE RISK
+    # =================================================================
+    # Ring Alarm Base Station
+    devices.append(DeviceRecord(
+        device_id="ring-base-station",
+        name="Ring Alarm Base Station",
+        category=DeviceCategory.NETWORK_INFRA,
+        manufacturer="Ring (Amazon)",
+        model="Ring Alarm Base Station",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.ZWAVE, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        ip_address="192.168.1.22",
+        notes="SECURITY WARNING: Ring is 100% Amazon cloud-dependent. All video, "
+              "sensor data, and control routes through Amazon servers. Cannot be "
+              "self-serviced. MAC 30:68:93:ad:26:41. Recommend supplementing with "
+              "local NVR (Frigate) + RTSP cameras for self-sovereign security.",
+        tags=["security", "cloud_dependent", "exposure_risk"],
+    ))
+    # Ring Doorbells
+    devices.append(DeviceRecord(
+        device_id="cam-01",
+        name="Duluth Jeremy 304 Ring",
+        category=DeviceCategory.SECURITY_CAMERA,
+        manufacturer="Ring (Amazon)",
+        model="Ring Video Doorbell",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        location="front_door",
+        notes="Ring doorbell at unit 304. Cloud-only video. "
+              "Long-term: replace with Amcrest/Reolink RTSP doorbell + Frigate NVR.",
+        tags=["security", "cloud_dependent", "exposure_risk"],
+    ))
+    devices.append(DeviceRecord(
+        device_id="ring-doorbell-duluth-2",
+        name="Duluth Jeremy Ring",
+        category=DeviceCategory.SECURITY_CAMERA,
+        manufacturer="Ring (Amazon)",
+        model="Ring Video Doorbell",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        tags=["security", "cloud_dependent"],
+    ))
+    devices.append(DeviceRecord(
+        device_id="ring-doorbell-manteca",
+        name="Manteca Ring",
+        category=DeviceCategory.SECURITY_CAMERA,
+        manufacturer="Ring (Amazon)",
+        model="Ring Video Doorbell",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        location="manteca",
+        notes="Ring doorbell at parents' Manteca property. Cloud-dependent. "
+              "PRIORITY MONITORING: Full event logging enabled — motion, doorbell, "
+              "and dings logged to audit trail with alerts to Jeremy. "
+              "Neighborhood safety concern (stabbings, car theft reported 2026-03).",
+        tags=["security", "cloud_dependent", "manteca", "priority_monitor", "family"],
+    ))
+    # Ring Sensors
+    ring_sensors = [
+        ("ring-contact-34552", "Contact Sensor 34552", DeviceCategory.SENSOR,
+         "Ring Contact Sensor"),
+        ("ring-contact-33664", "Contact Sensor 33664 (Disabled)", DeviceCategory.SENSOR,
+         "Ring Contact Sensor"),
+        ("motion-01", "Motion Detector 34817", DeviceCategory.MOTION_DETECTOR,
+         "Ring Motion Detector"),
+        ("ring-sensor-front-door", "Front Door", DeviceCategory.SENSOR,
+         "Ring Contact Sensor"),
+        ("ring-sensor-br-guest", "BR Guest", DeviceCategory.SENSOR,
+         "Ring Contact Sensor"),
+        ("ring-sensor-hallway", "Hallway", DeviceCategory.MOTION_DETECTOR,
+         "Ring Motion Detector"),
+    ]
+    for did, name, cat, model in ring_sensors:
+        devices.append(DeviceRecord(
+            device_id=did, name=name, category=cat,
+            manufacturer="Ring (Amazon)", model=model,
+            protocols=[DeviceProtocol.ZWAVE, DeviceProtocol.CLOUD_API],
             network_segment=NetworkSegment.IOT_VLAN,
             local_api_only=False,
-            notes="Verify manufacturer and model. Move to local NVR if cloud-dependent. "
-                  "Enable RTSP over TLS if supported.",
-            tags=["security", "surveillance"],
-        ),
+            tags=["security", "cloud_dependent"],
+        ))
 
-        # --- Motion detectors ---
-        DeviceRecord(
-            device_id="motion-01",
-            name="Motion Detector 1",
-            category=DeviceCategory.MOTION_DETECTOR,
-            manufacturer="Unknown",
-            protocols=[DeviceProtocol.WIFI],
-            network_segment=NetworkSegment.IOT_VLAN,
-            notes="Verify protocol (Zigbee/Z-Wave/WiFi). Pair with security cameras for alerts.",
-            tags=["security", "automation"],
-        ),
+    # =================================================================
+    # LG NanoCell TV — local WebOS SSAP + block telemetry
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="tv-main",
+        name="65in LG NanoCell TV",
+        category=DeviceCategory.SMART_TV,
+        manufacturer="LG",
+        model="65 NanoCell",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API, DeviceProtocol.IR],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        ip_address="192.168.1.64",
+        location="living_room",
+        notes="LG WebOS TV with local SSAP control. MUST block telemetry: "
+              "*.lgtvcommon.com, *.lgappstv.com, *.lgsmartad.com, ngfts.lge.com. "
+              "Disable ACR in Settings > General > Live Plus. Disable UPnP. "
+              "Flipper IR backup for power/input/volume.",
+        tags=["entertainment", "iot", "telemetry_risk"],
+    ))
 
-        # --- Smart TV ---
-        DeviceRecord(
-            device_id="tv-main",
-            name="Smart TV",
-            category=DeviceCategory.SMART_TV,
-            manufacturer="Unknown",
-            protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API],
-            network_segment=NetworkSegment.IOT_VLAN,
-            notes="Disable ACR (Automatic Content Recognition). Block telemetry domains "
-                  "at router/Pi-hole level. Disable UPnP. Use HDMI input from a "
-                  "trusted device when possible.",
-            tags=["entertainment", "iot"],
-        ),
+    # =================================================================
+    # Ryse SmartBridge + SmartShade — local BLE/WiFi
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="ryse-smartbridge",
+        name="Ryse SmartBridge",
+        category=DeviceCategory.NETWORK_INFRA,
+        manufacturer="Ryse",
+        model="SB-B101",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.BLE, DeviceProtocol.LAN_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=True,
+        ip_address="192.168.1.175",
+        location="living_room",
+        notes="Ryse SmartBridge SB-B101 (date code 2448 / week 48 2024). "
+              "Bridges BLE SmartShade motors to WiFi LAN. Has local REST API. "
+              "Block cloud to keep local-only.",
+        tags=["smart_home", "blinds", "bridge", "local_only"],
+    ))
+    devices.append(DeviceRecord(
+        device_id="blind-ryse-01",
+        name="Ryse SmartShade Motor",
+        category=DeviceCategory.SMART_BLIND,
+        manufacturer="Ryse",
+        model="SmartShade",
+        protocols=[DeviceProtocol.BLE, DeviceProtocol.WIFI],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=True,
+        integration_name="ryse_smartshade",
+        vault_credential_key="RYSE_API_KEY",
+        location="living_room",
+        notes="Motorizes existing blinds. Controlled via SmartBridge SB-B101 LAN API. "
+              "Supports open/close/position (0-100%). Chronos schedules sunrise/sunset.",
+        tags=["smart_home", "blinds", "automation", "chronos", "local_only"],
+    ))
 
-        # --- Smart plugs (TP-Link) ---
-        DeviceRecord(
-            device_id="plug-tplink-01",
-            name="TP-Link Smart Plug 1",
-            category=DeviceCategory.SMART_PLUG,
-            manufacturer="TP-Link",
-            protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API],
-            network_segment=NetworkSegment.IOT_VLAN,
-            local_api_only=True,
-            integration_name="tplink_kasa",
-            notes="TP-Link Kasa/Tapo plugs support local API via python-kasa library. "
-                  "Block cloud access at router for local-only mode.",
-            tags=["smart_home", "energy"],
-        ),
+    # =================================================================
+    # Roborock Robot Vacuum — local + cloud API via python-roborock
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="vacuum-roborock",
+        name="Roborock Vacuum",
+        category=DeviceCategory.OTHER,
+        manufacturer="Roborock",
+        model="Roborock",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        integration_name="roborock",
+        vault_credential_key="ROBOROCK_TOKEN",
+        location="living_room",
+        notes="Robot vacuum with local control via python-roborock library (port 58867). "
+              "Needs device auth token from Roborock app login flow. "
+              "Local API preferred (faster, private). Cloud fallback available. "
+              "Schedule: full clean MWF at 9:00 AM. "
+              "Controls: start, stop, pause, dock, spot clean, set fan speed.",
+        tags=["smart_home", "vacuum", "automation", "chronos"],
+    ))
 
-        # --- Smart lights (Philips Hue) ---
-        DeviceRecord(
-            device_id="light-hue-bridge",
-            name="Philips Hue Bridge",
-            category=DeviceCategory.SMART_LIGHT,
-            manufacturer="Philips",
-            model="Hue Bridge",
-            protocols=[DeviceProtocol.ZIGBEE, DeviceProtocol.LAN_API],
-            network_segment=NetworkSegment.IOT_VLAN,
-            local_api_only=True,
-            encryption_enabled=True,
-            integration_name="philips_hue",
-            notes="Hue Bridge controls all Hue bulbs via Zigbee. Local API on port 443. "
-                  "API key stored in Vault. Block cloud access for local-only mode. "
-                  "Bridge is the only Hue device that needs WiFi/LAN.",
-            vault_credential_key="HUE_BRIDGE_API_KEY",
-            tags=["smart_home", "lighting"],
-        ),
+    # =================================================================
+    # Amazon Echo Dots — CLOUD-ONLY — exposure vectors
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="echo-dot-01",
+        name="Jeremy's Echo Dot",
+        category=DeviceCategory.MEDIA_PLAYER,
+        manufacturer="Amazon",
+        model="Echo Dot",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.BLE, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        ip_address="192.168.1.112",
+        location="living_room",
+        notes="EXPOSURE RISK: Always-listening device. All audio processed on Amazon "
+              "cloud. Cannot be self-serviced. Consider: disable mic when not in use, "
+              "review Alexa Privacy Settings, delete voice recordings regularly. "
+              "Long-term: replace with local voice assistant (Home Assistant + Whisper).",
+        tags=["voice_assistant", "cloud_dependent", "exposure_risk", "always_listening"],
+    ))
+    devices.append(DeviceRecord(
+        device_id="echo-dot-02",
+        name="Jeremy's 2nd Echo Dot",
+        category=DeviceCategory.MEDIA_PLAYER,
+        manufacturer="Amazon",
+        model="Echo Dot",
+        protocols=[DeviceProtocol.WIFI, DeviceProtocol.BLE, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.IOT_VLAN,
+        local_api_only=False,
+        ip_address="192.168.1.152",
+        notes="Second Echo Dot. MAC 40:d9:5a:2d:a6:96. Same exposure risks as primary.",
+        tags=["voice_assistant", "cloud_dependent", "exposure_risk", "always_listening"],
+    ))
 
-        # --- Smart lights (Govee) ---
-        DeviceRecord(
-            device_id="light-govee-01",
-            name="Govee Light Strip/Bulb",
-            category=DeviceCategory.SMART_LIGHT,
-            manufacturer="Govee",
-            protocols=[DeviceProtocol.WIFI, DeviceProtocol.BLE, DeviceProtocol.LAN_API],
-            network_segment=NetworkSegment.IOT_VLAN,
-            integration_name="govee",
-            notes="Govee devices support local LAN API (UDP broadcast) on newer models. "
-                  "Older models require cloud API. Check model for local control support. "
-                  "BLE control available via govee-bt-client.",
-            vault_credential_key="GOVEE_API_KEY",
-            tags=["smart_home", "lighting", "rgb"],
-        ),
+    # =================================================================
+    # Network Infrastructure
+    # =================================================================
+    # Spectrum Cable Modem (DOCSIS)
+    devices.append(DeviceRecord(
+        device_id="modem-spectrum",
+        name="ModemJT1 (Spectrum ES2251)",
+        category=DeviceCategory.NETWORK_INFRA,
+        manufacturer="Askey/Spectrum",
+        model="ES2251",
+        protocols=[DeviceProtocol.WIFI],
+        network_segment=NetworkSegment.TRUSTED_LAN,
+        default_password_changed=True,
+        location="network_closet",
+        notes="DOCSIS cable modem, Spectrum-provided. ISP: Charter/Spectrum. "
+              "Internet Gig plan — speeds up to 1000 Mbps. "
+              "Bridge mode recommended to let router handle NAT/firewall.",
+        tags=["network", "infrastructure", "isp"],
+    ))
+    # Spectrum WiFi 6 Router (NOT WiFi 6E — corrected from prior session)
+    devices.append(DeviceRecord(
+        device_id="router-spectrum",
+        name="Spectrum WiFi 6 Router (SAX2V1S)",
+        category=DeviceCategory.NETWORK_INFRA,
+        manufacturer="Askey/Spectrum",
+        model="SAX2V1S",
+        protocols=[DeviceProtocol.WIFI],
+        network_segment=NetworkSegment.TRUSTED_LAN,
+        default_password_changed=True,
+        upnp_disabled=True,
+        ip_address="192.168.1.1",
+        location="network_closet",
+        notes="Spectrum WiFi 6 gateway (Askey SAX2V1S). SSID: sharknavigator. "
+              "Internet Gig (1000 Mbps). 27 devices connected as of 2026-03-19. "
+              "CONFIRMED: UPnP OFF, Security Shield ON (0 threats last 7 days). "
+              "PROBLEM: Uses Spectrum DNS — zero control over telemetry blocking. "
+              "ACTION ITEMS: "
+              "1) Deploy Pi-hole or NextDNS for DNS-level IoT blocking. "
+              "2) Create IoT VLAN (Spectrum gateway may not support — may need "
+              "   a dedicated router like Ubiquiti Dream Machine). "
+              "3) Block telemetry domains: *.tplinkcloud.com, *.meethue.com, "
+              "   *.lgtvcommon.com, *.lgappstv.com, *.lgsmartad.com, ngfts.lge.com. "
+              "4) Disable WPS. 5) Set strong admin password. "
+              "NOTE: Spectrum supports 2.4 GHz IoT device setup — most smart "
+              "devices (Kasa, Govee, Ryse) need 2.4 GHz band.",
+        tags=["network", "infrastructure", "critical"],
+    ))
+    # TP-Link network switch (seen in hardware photos)
+    devices.append(DeviceRecord(
+        device_id="switch-tplink",
+        name="TP-Link Network Switch",
+        category=DeviceCategory.NETWORK_INFRA,
+        manufacturer="TP-Link",
+        model="Unmanaged Switch",
+        protocols=[DeviceProtocol.WIFI],
+        network_segment=NetworkSegment.TRUSTED_LAN,
+        location="network_closet",
+        notes="TP-Link unmanaged switch for wired connections. "
+              "Upgrade to managed switch if VLAN segmentation needed.",
+        tags=["network", "infrastructure"],
+    ))
 
-        # --- Connected vehicle ---
-        DeviceRecord(
-            device_id="vehicle-01",
-            name="Connected Vehicle",
-            category=DeviceCategory.VEHICLE,
-            manufacturer="Unknown",
-            protocols=[DeviceProtocol.OBD2, DeviceProtocol.CLOUD_API],
-            network_segment=NetworkSegment.NOT_NETWORKED,
-            notes="Vehicle telematics: GPS, diagnostics, remote start/lock. "
-                  "OBD-II dongle for local diagnostics (ELM327 compatible). "
-                  "Manufacturer app/API for remote features. "
-                  "CRITICAL: Disable remote access when vehicle is unattended for extended periods. "
-                  "Review manufacturer API for data sharing/selling practices.",
-            tags=["vehicle", "telematics"],
-        ),
+    # =================================================================
+    # Connected Vehicle
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="vehicle-01",
+        name="Connected Vehicle",
+        category=DeviceCategory.VEHICLE,
+        manufacturer="Unknown",
+        protocols=[DeviceProtocol.OBD2, DeviceProtocol.CLOUD_API],
+        network_segment=NetworkSegment.NOT_NETWORKED,
+        notes="OBD-II for local diagnostics. Manufacturer cloud for remote features. "
+              "Disable remote access when unattended for extended periods.",
+        tags=["vehicle", "telematics"],
+    ))
 
-        # --- Smart blinds (Ryse SmartShades) ---
-        DeviceRecord(
-            device_id="blind-ryse-01",
-            name="Ryse SmartShade Motor 1",
-            category=DeviceCategory.SMART_BLIND,
-            manufacturer="Ryse",
-            model="SmartShade",
-            protocols=[DeviceProtocol.BLE, DeviceProtocol.WIFI, DeviceProtocol.CLOUD_API],
-            network_segment=NetworkSegment.IOT_VLAN,
-            integration_name="ryse_smartshade",
-            notes="Ryse SmartShade motorizes existing blinds. BLE for local control, "
-                  "WiFi via SmartBridge for remote/automation. Supports open/close/position. "
-                  "Schedule via Chronos: open at sunrise, close at sunset. "
-                  "Controllable via Flipper Zero IR if IR receiver present. "
-                  "Guardian One can send commands through SmartBridge local API or cloud.",
-            vault_credential_key="RYSE_API_KEY",
-            location="living_room",
-            tags=["smart_home", "blinds", "automation", "chronos"],
-        ),
+    # =================================================================
+    # Flipper Zero — security research tool
+    # =================================================================
+    devices.append(DeviceRecord(
+        device_id="flipper-zero",
+        name="Flipper Zero",
+        category=DeviceCategory.SECURITY_TOOL,
+        manufacturer="Flipper Devices",
+        model="Flipper Zero",
+        protocols=[
+            DeviceProtocol.RF_SUB_GHZ, DeviceProtocol.NFC,
+            DeviceProtocol.IR, DeviceProtocol.BLE, DeviceProtocol.USB,
+        ],
+        network_segment=NetworkSegment.NOT_NETWORKED,
+        local_api_only=True,
+        firmware=FirmwareInfo(auto_update=False),
+        location="office",
+        notes="Security research multi-tool. USB-connected to workstation. "
+              "Use for IR learning (TV, blinds), BLE audits, sub-GHz analysis. "
+              "LEGAL: Only test devices you own.",
+        tags=["security", "pentest", "research", "local_only"],
+    ))
 
-        # --- Flipper Zero ---
-        DeviceRecord(
-            device_id="flipper-zero",
-            name="Flipper Zero",
-            category=DeviceCategory.SECURITY_TOOL,
-            manufacturer="Flipper Devices",
-            model="Flipper Zero",
-            protocols=[
-                DeviceProtocol.RF_SUB_GHZ, DeviceProtocol.NFC,
-                DeviceProtocol.IR, DeviceProtocol.BLE,
-                DeviceProtocol.USB,
-            ],
-            network_segment=NetworkSegment.NOT_NETWORKED,
-            local_api_only=True,
-            notes="Multi-tool for security research: sub-GHz, NFC, RFID, IR, GPIO. "
-                  "USB connection only — no WiFi (unless WiFi dev board attached). "
-                  "Use for: testing IoT device security, cloning access badges (authorized only), "
-                  "IR remote learning, sub-GHz signal analysis. "
-                  "KEEP FIRMWARE UPDATED via qFlipper or Flipper mobile app. "
-                  "LEGAL: Only use on devices you own or have written authorization to test.",
-            firmware=FirmwareInfo(auto_update=False),
-            tags=["security", "pentest", "research"],
-        ),
-    ]
+    return devices
 
 
 # ---------------------------------------------------------------------------
-# Jeremy's room layout
+# Jeremy's room layout — Duluth, MN residence
 # ---------------------------------------------------------------------------
 
 def _jeremys_rooms() -> list[Room]:
@@ -580,47 +857,122 @@ def _jeremys_rooms() -> list[Room]:
             name="Living Room",
             room_type=RoomType.LIVING_ROOM,
             device_ids=[
-                "tv-main", "light-govee-01", "plug-tplink-01",
-                "blind-ryse-01", "motion-01",
+                "tv-main", "plug-tplink-01", "plug-kasa-console", "plug-kasa-mini-02",
+                "blind-ryse-01", "ryse-smartbridge",
+                "light-govee-lr-main", "light-govee-lr-small", "light-govee-lr-shelf",
+                "light-govee-music-sync", "light-govee-tv-backlight",
+                "light-govee-dreamview", "light-govee-q5-max", "light-govee-mushroom",
+                "light-govee-duoroller", "light-govee-relaxed",
+                "light-hue-spot-01", "light-hue-spot-02",
+                "echo-dot-01",
             ],
             auto_lights=True,
             auto_blinds=True,
-            occupancy_sensor_id="motion-01",
+            notes="Main hub — Govee RGB ecosystem + Hue spots + Kasa plugs + Ryse blinds.",
         ),
         Room(
             room_id="bedroom-master",
             name="Master Bedroom",
             room_type=RoomType.BEDROOM,
-            device_ids=["light-hue-bridge"],
+            device_ids=[
+                "plug-kasa-mb-bedside", "plug-kasa-closet-top", "plug-kasa-closet-bottom",
+                "light-govee-01", "light-govee-mb-0100", "light-govee-mb-0004",
+                "light-hue-bridge",
+            ],
             auto_lights=True,
             auto_blinds=True,
-            notes="Hue bridge here controls all Hue bulbs house-wide via Zigbee.",
+            notes="Hue Bridge physically here — controls all Hue bulbs house-wide via Zigbee. "
+                  "Govee strips for ambient. Kasa plugs for bedside + closet.",
+        ),
+        Room(
+            room_id="kitchen",
+            name="Kitchen",
+            room_type=RoomType.KITCHEN,
+            device_ids=[
+                "plug-kasa-island", "light-hue-kitchen-1", "light-govee-kitchen",
+            ],
+            auto_lights=True,
+            auto_blinds=False,
+            notes="Hue for task lighting, Govee for ambient, Kasa plug on island.",
         ),
         Room(
             room_id="office",
-            name="Office",
+            name="Office / Studio",
             room_type=RoomType.OFFICE,
-            device_ids=["flipper-zero"],
+            device_ids=[
+                "plug-kasa-office-desk", "plug-kasa-fairy-office",
+                "light-govee-studio", "flipper-zero",
+            ],
             auto_lights=True,
             auto_blinds=False,
-            notes="Primary workspace. Flipper Zero USB-connected to workstation.",
+            notes="Workspace. Flipper Zero USB-connected. Desk light + fairy lights "
+                  "via Kasa plugs. Govee Studio for ambient.",
         ),
         Room(
-            room_id="exterior-front",
-            name="Front Exterior",
+            room_id="guest-bathroom",
+            name="Guest Bathroom",
+            room_type=RoomType.BATHROOM,
+            device_ids=[
+                "light-govee-guest-bath", "light-govee-guest-bath-2",
+            ],
+            auto_lights=True,
+            auto_blinds=False,
+        ),
+        Room(
+            room_id="master-bathroom",
+            name="Master Bathroom",
+            room_type=RoomType.BATHROOM,
+            device_ids=["light-govee-master-bath"],
+            auto_lights=True,
+            auto_blinds=False,
+        ),
+        Room(
+            room_id="hallway",
+            name="Hallway",
+            room_type=RoomType.HALLWAY,
+            device_ids=["ring-sensor-hallway"],
+            auto_lights=False,
+            auto_blinds=False,
+            occupancy_sensor_id="ring-sensor-hallway",
+        ),
+        Room(
+            room_id="balcony",
+            name="Big Balcony",
             room_type=RoomType.EXTERIOR,
-            device_ids=["cam-01"],
-            auto_lights=False,
+            device_ids=["light-govee-balcony"],
+            auto_lights=True,
             auto_blinds=False,
-            notes="Front-facing security camera. Motion detection for alerts.",
+            notes="Govee outdoor strip for ambient balcony lighting.",
         ),
         Room(
-            room_id="garage",
-            name="Garage",
-            room_type=RoomType.GARAGE,
-            device_ids=["vehicle-01"],
+            room_id="guest-bedroom",
+            name="Guest Bedroom",
+            room_type=RoomType.BEDROOM,
+            device_ids=["ring-sensor-br-guest"],
             auto_lights=False,
             auto_blinds=False,
+        ),
+        Room(
+            room_id="front-entry",
+            name="Front Entry",
+            room_type=RoomType.ENTRY,
+            device_ids=[
+                "cam-01", "ring-sensor-front-door",
+                "ring-contact-34552", "motion-01",
+            ],
+            auto_lights=False,
+            auto_blinds=False,
+            occupancy_sensor_id="motion-01",
+            notes="Ring doorbell + contact/motion sensors. Entry security zone.",
+        ),
+        Room(
+            room_id="network-closet",
+            name="Network Closet",
+            room_type=RoomType.OTHER,
+            device_ids=["modem-spectrum", "router-spectrum", "switch-tplink", "ring-base-station"],
+            auto_lights=False,
+            auto_blinds=False,
+            notes="Network infrastructure and Ring Alarm base station.",
         ),
     ]
 
@@ -632,60 +984,80 @@ def _jeremys_rooms() -> list[Room]:
 def _jeremys_flipper_profiles() -> list[FlipperProfile]:
     """Defines how the Flipper Zero can interact with each device.
 
-    These profiles tell the DeviceAgent which devices can be controlled,
-    audited, or tested via the Flipper Zero.
+    Profiles for authorized security testing and backup control.
     """
     return [
         FlipperProfile(
             device_id="tv-main",
             capabilities=[
-                FlipperCapability.IR_CAPTURE,
-                FlipperCapability.IR_TRANSMIT,
+                FlipperCapability.IR_CAPTURE, FlipperCapability.IR_TRANSMIT,
             ],
-            ir_remote_file="infrared/tv_main.ir",
-            notes="Learn TV power, volume, input, mute via IR. "
-                  "Flipper can serve as universal remote backup.",
+            ir_remote_file="infrared/lg_nanocell_65.ir",
+            notes="LG NanoCell IR: power, volume, input, mute, smart home button. "
+                  "Capture all codes as backup for when LAN API is unreachable.",
         ),
         FlipperProfile(
             device_id="blind-ryse-01",
             capabilities=[
                 FlipperCapability.BLE_SCAN,
-                FlipperCapability.IR_CAPTURE,
-                FlipperCapability.IR_TRANSMIT,
+                FlipperCapability.IR_CAPTURE, FlipperCapability.IR_TRANSMIT,
             ],
-            notes="BLE scan to verify Ryse SmartShade is broadcasting. "
-                  "If Ryse has IR receiver, capture/replay open/close commands.",
+            notes="BLE scan to verify SmartShade is broadcasting. "
+                  "If Ryse has IR receiver, capture open/close codes as backup.",
         ),
         FlipperProfile(
             device_id="plug-tplink-01",
             capabilities=[FlipperCapability.BLE_SCAN],
-            notes="BLE scan to detect if plug is broadcasting. "
-                  "TP-Link Kasa plugs don't use sub-GHz or IR — LAN API only.",
+            notes="BLE scan to verify plug presence. Kasa plugs are LAN-only control.",
         ),
         FlipperProfile(
             device_id="light-govee-01",
             capabilities=[
                 FlipperCapability.BLE_SCAN,
-                FlipperCapability.IR_CAPTURE,
-                FlipperCapability.IR_TRANSMIT,
+                FlipperCapability.IR_CAPTURE, FlipperCapability.IR_TRANSMIT,
             ],
             notes="Govee devices often include IR remote. Capture with Flipper "
-                  "for backup control. BLE scan to verify device presence.",
+                  "for backup control. BLE scan to verify presence.",
+        ),
+        FlipperProfile(
+            device_id="light-govee-lr-main",
+            capabilities=[
+                FlipperCapability.BLE_SCAN,
+                FlipperCapability.IR_CAPTURE, FlipperCapability.IR_TRANSMIT,
+            ],
+            notes="Main living room Govee strip. BLE + IR backup.",
         ),
         FlipperProfile(
             device_id="cam-01",
             capabilities=[FlipperCapability.BLE_SCAN],
-            notes="BLE scan to detect camera presence. "
-                  "Test: does camera expose any unprotected BLE services?",
+            notes="SECURITY AUDIT: Scan Ring doorbell BLE services for exposure. "
+                  "Check for unprotected BLE characteristics.",
         ),
         FlipperProfile(
             device_id="motion-01",
             capabilities=[
-                FlipperCapability.SUB_GHZ_CAPTURE,
-                FlipperCapability.BLE_SCAN,
+                FlipperCapability.SUB_GHZ_CAPTURE, FlipperCapability.BLE_SCAN,
             ],
-            notes="If motion detector uses 433MHz sub-GHz, capture signals "
-                  "to verify encryption. BLE scan if WiFi/BLE model. "
-                  "SECURITY AUDIT: verify signals are encrypted, not replayable.",
+            notes="Ring motion detector — Z-Wave protocol. Capture Z-Wave signals "
+                  "to verify encryption (S2 framework). AUDIT: ensure not replayable.",
+        ),
+        FlipperProfile(
+            device_id="ring-base-station",
+            capabilities=[
+                FlipperCapability.BLE_SCAN, FlipperCapability.SUB_GHZ_CAPTURE,
+            ],
+            notes="SECURITY AUDIT: Scan Ring Alarm base station Z-Wave and BLE. "
+                  "Verify Z-Wave S2 encryption. Check for unauthenticated endpoints.",
+        ),
+        FlipperProfile(
+            device_id="echo-dot-01",
+            capabilities=[FlipperCapability.BLE_SCAN],
+            notes="BLE scan Echo Dot for exposed services. "
+                  "Audit what BLE characteristics are advertised.",
+        ),
+        FlipperProfile(
+            device_id="ryse-smartbridge",
+            capabilities=[FlipperCapability.BLE_SCAN],
+            notes="Scan SmartBridge SB-B101 BLE for open services and auth posture.",
         ),
     ]
