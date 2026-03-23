@@ -333,7 +333,7 @@ def test_monitor_weekly_brief_text():
 
         text = monitor.weekly_brief_text()
         assert "H.O.M.E. L.I.N.K." in text
-        assert "Weekly Security" in text
+        assert "Weekly Status" in text
         assert "VAULT STATUS" in text
 
 
