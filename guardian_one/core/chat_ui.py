@@ -520,7 +520,16 @@ def guardian_chat(guardian: GuardianOne) -> None:
                     result = cfo_router.handle(raw)
 
                 if result.intent.name != "help" or result.intent.confidence > 0.8:
-                    _handle_cfo(console, guardian, raw, cfo_router)
+                    # Reuse the result we already have instead of calling handle() again
+                    console.print(_response_panel(result.text, title="CFO", style="green"))
+                    if result.ai_summary:
+                        console.print(Panel(
+                            result.ai_summary,
+                            title="[bold]AI Analysis[/bold]",
+                            title_align="left",
+                            border_style="dim cyan",
+                            padding=(0, 2),
+                        ))
                 else:
                     console.print(
                         f"[g.muted]  I don't understand [bold]'{raw}'[/bold]. "

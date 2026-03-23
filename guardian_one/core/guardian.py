@@ -97,35 +97,21 @@ class GuardianOne:
     # ------------------------------------------------------------------
 
     def _load_ai_config(self) -> AIConfig:
-        """Load AI engine config from guardian_config.yaml or defaults."""
-        # Try to load from the raw YAML config
-        config_path = Path("config/guardian_config.yaml")
-        ai_raw: dict[str, Any] = {}
-        if config_path.exists():
-            import yaml
-            with open(config_path) as f:
-                raw = yaml.safe_load(f) or {}
-            ai_raw = raw.get("ai_engine", {})
-
+        """Build AIConfig from the already-loaded GuardianConfig (no re-parsing)."""
         provider_map = {"ollama": AIProvider.OLLAMA, "anthropic": AIProvider.ANTHROPIC}
+        cfg = self.config.ai_engine
 
         return AIConfig(
-            primary_provider=provider_map.get(
-                ai_raw.get("primary_provider", "ollama"), AIProvider.OLLAMA
-            ),
-            fallback_provider=provider_map.get(
-                ai_raw.get("fallback_provider", "anthropic"), AIProvider.ANTHROPIC
-            ),
-            ollama_base_url=ai_raw.get("ollama_base_url", "http://localhost:11434"),
-            ollama_model=ai_raw.get("ollama_model", "llama3"),
-            anthropic_model=ai_raw.get(
-                "anthropic_model", "claude-sonnet-4-20250514"
-            ),
-            max_tokens=ai_raw.get("max_tokens", 2048),
-            temperature=ai_raw.get("temperature", 0.3),
-            timeout_seconds=ai_raw.get("timeout_seconds", 60),
-            enable_memory=ai_raw.get("enable_memory", True),
-            max_memory_messages=ai_raw.get("max_memory_messages", 50),
+            primary_provider=provider_map.get(cfg.primary_provider, AIProvider.OLLAMA),
+            fallback_provider=provider_map.get(cfg.fallback_provider, AIProvider.ANTHROPIC),
+            ollama_base_url=cfg.ollama_base_url,
+            ollama_model=cfg.ollama_model,
+            anthropic_model=cfg.anthropic_model,
+            max_tokens=cfg.max_tokens,
+            temperature=cfg.temperature,
+            timeout_seconds=cfg.timeout_seconds,
+            enable_memory=cfg.enable_memory,
+            max_memory_messages=cfg.max_memory_messages,
         )
 
     # ------------------------------------------------------------------

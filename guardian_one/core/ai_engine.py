@@ -74,6 +74,8 @@ class OllamaBackend:
         self._model = model
         self._timeout = timeout
         self._available: bool | None = None
+        self._available_checked_at: float = 0.0
+        self._availability_ttl: float = 30.0  # Cache availability for 30s
         self._api_key = os.environ.get("OLLAMA_API_KEY", "")
 
     @property
@@ -88,7 +90,13 @@ class OllamaBackend:
         return headers
 
     def is_available(self) -> bool:
-        """Check if Ollama is running and the model is pulled."""
+        """Check if Ollama is running and the model is pulled (cached for 30s)."""
+        import time as _time
+
+        now = _time.monotonic()
+        if self._available is not None and (now - self._available_checked_at) < self._availability_ttl:
+            return self._available
+
         try:
             import httpx
             resp = httpx.get(
@@ -100,10 +108,12 @@ class OllamaBackend:
                 data = resp.json()
                 models = [m.get("name", "").split(":")[0] for m in data.get("models", [])]
                 self._available = self._model.split(":")[0] in models
+                self._available_checked_at = now
                 return self._available
         except Exception:
             pass
         self._available = False
+        self._available_checked_at = now
         return False
 
     def generate(
@@ -171,6 +181,7 @@ class AnthropicBackend:
         self._model = model
         self._timeout = timeout
         self._api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        self._client: Any = None  # Lazy-initialized, reused across calls
 
     @property
     def model(self) -> str:
@@ -199,12 +210,13 @@ class AnthropicBackend:
         start = time.monotonic()
 
         try:
-            import anthropic
-
-            client = anthropic.Anthropic(
-                api_key=self._api_key,
-                timeout=self._timeout,
-            )
+            if self._client is None:
+                import anthropic
+                self._client = anthropic.Anthropic(
+                    api_key=self._api_key,
+                    timeout=self._timeout,
+                )
+            client = self._client
 
             # Separate system message from conversation
             system_text = ""
