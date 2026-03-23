@@ -602,11 +602,11 @@ class TestCalendarSync:
 
 class TestChronosCalendarSync:
     def test_chronos_initializes_calendar_sync(self):
-        """Chronos should try to init CalendarSync (will be offline without creds)."""
+        """Chronos tries Google then Zapier — None when neither has credentials."""
         agent = Chronos(AgentConfig(name="chronos"), _make_audit())
         agent.initialize()
-        assert agent._calendar_sync is not None
-        assert agent._calendar_sync.is_connected is False
+        # Without Google OAuth or Zapier webhook credentials, calendar_sync is None
+        assert agent._calendar_sync is None
 
     def test_calendar_status_offline(self):
         agent = Chronos(AgentConfig(name="chronos"), _make_audit())

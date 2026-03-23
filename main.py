@@ -20,6 +20,8 @@ Usage:
     python main.py --calendar-week  # Show this week's schedule
     python main.py --calendar-sync  # Sync Google Calendar → Chronos + push bills to calendar
     python main.py --calendar-auth  # Authorize Google Calendar (opens browser for OAuth)
+    python main.py --zapier-calendar      # Show Zapier calendar bridge status
+    python main.py --zapier-calendar-test # Test Zapier webhook with a sample event
     python main.py --websites           # Show status of all managed websites
     python main.py --website-build DOMAIN  # Build a site (or 'all')
     python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
@@ -42,7 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -292,6 +294,8 @@ def main() -> None:
     parser.add_argument("--calendar-week", action="store_true", help="Show this week's schedule")
     parser.add_argument("--calendar-sync", action="store_true", help="Sync Google Calendar + push bills to calendar")
     parser.add_argument("--calendar-auth", action="store_true", help="Authorize Google Calendar (OAuth flow)")
+    parser.add_argument("--zapier-calendar", action="store_true", help="Show Zapier calendar bridge status")
+    parser.add_argument("--zapier-calendar-test", action="store_true", help="Test Zapier calendar webhook with a sample event")
     parser.add_argument("--websites", action="store_true", help="Show status of all managed websites")
     parser.add_argument("--website-build", type=str, default=None, help="Build a website by domain (or 'all')")
     parser.add_argument("--website-deploy", type=str, default=None, help="Deploy a website by domain (or 'all')")
@@ -564,6 +568,48 @@ def main() -> None:
                     print(f"\n  {mgr.held_count} notification(s) held for quiet hours (will send after 7 AM).")
             else:
                 print("  CFO agent not available.")
+    elif args.zapier_calendar or args.zapier_calendar_test:
+        from guardian_one.integrations.zapier_sync import ZapierCalendarProvider
+        zapier = ZapierCalendarProvider()
+        if args.zapier_calendar_test:
+            # Create a test event via Zapier
+            zapier.authenticate()
+            if not zapier._authenticated:
+                print(f"\n  Zapier calendar not configured.")
+                print(f"  Set ZAPIER_WEBHOOK_CALENDAR_IN in .env to your Zapier Catch Hook URL.")
+            else:
+                from guardian_one.integrations.calendar_sync import CalendarEntry
+                test_event = CalendarEntry(
+                    title="Guardian One Test Event",
+                    start=datetime.now(timezone.utc),
+                    end=datetime.now(timezone.utc) + timedelta(hours=1),
+                    description="Test event from Guardian One Zapier integration.",
+                    source="guardian_test",
+                )
+                event_id = zapier.create_event(test_event)
+                if event_id:
+                    print(f"\n  Test event created: {event_id}")
+                    print(f"  Check your Google Calendar (via Zapier) for 'Guardian One Test Event'.")
+                else:
+                    print(f"\n  Failed to create test event: {zapier.last_error}")
+        else:
+            # Show Zapier calendar status
+            status = zapier.status()
+            stats = zapier.cache_stats()
+            print(f"\n  ZAPIER CALENDAR BRIDGE")
+            print(f"  " + "-" * 40)
+            print(f"  Webhook (out → GCal):  {'configured' if status['has_webhook_in'] else 'not set'}")
+            print(f"  Webhook (in ← GCal):   {'configured' if status['has_webhook_out'] else 'not set'}")
+            print(f"  Cache file:            {status['cache_path']}")
+            print(f"  Cached events:         {stats['total']} ({stats['upcoming']} upcoming, {stats['past']} past)")
+            if status['last_error']:
+                print(f"  Last error:            {status['last_error']}")
+            print()
+            if not status['has_webhook_in'] and not status['has_webhook_out']:
+                print("  To set up Zapier calendar bridge:")
+                print("  1. Create a Zap: Google Calendar → Webhooks by Zapier")
+                print("  2. Set ZAPIER_WEBHOOK_CALENDAR_IN in .env (for pushing events to GCal)")
+                print("  3. Optionally set ZAPIER_WEBHOOK_CALENDAR_OUT (for receiving events from GCal)")
     elif args.calendar_auth:
         chronos = guardian.get_agent("chronos")
         if chronos and isinstance(chronos, Chronos):
@@ -592,13 +638,21 @@ def main() -> None:
         if chronos and isinstance(chronos, Chronos):
             # Show calendar status
             status = chronos.calendar_status()
+            provider = status.get("active_provider", status.get("provider", "none"))
             connected = status.get("authenticated", False)
-            print(f"\n  Google Calendar: {'connected' if connected else 'offline'}")
-            if not connected:
+            if provider == "zapier_calendar":
+                print(f"\n  Calendar: connected via Zapier")
+                cached = status.get("cached_events", 0)
+                print(f"  ({cached} cached events)")
+            elif connected:
+                print(f"\n  Calendar: connected via Google Calendar")
+            else:
+                print(f"\n  Calendar: offline")
                 err = status.get("last_error", "")
                 if err:
                     print(f"  ({err})")
-                print("  Run --calendar-auth to connect your Google Calendar.\n")
+                print("  Run --calendar-auth to connect Google Calendar,")
+                print("  or set ZAPIER_WEBHOOK_CALENDAR_IN in .env for Zapier bridge.\n")
 
             if args.calendar_week:
                 events = chronos.week_schedule()
@@ -638,10 +692,12 @@ def main() -> None:
         if chronos and isinstance(chronos, Chronos):
             status = chronos.calendar_status()
             if not status.get("authenticated", False):
-                print("\n  Google Calendar not connected.")
-                print("  Run --calendar-auth first to authorize.")
+                print("\n  Calendar not connected.")
+                print("  Option 1: Run --calendar-auth for direct Google Calendar OAuth.")
+                print("  Option 2: Set ZAPIER_WEBHOOK_CALENDAR_IN in .env for Zapier bridge.")
             else:
-                print("\n  Syncing Google Calendar...")
+                provider = status.get("active_provider", "google_calendar")
+                print(f"\n  Syncing calendar via {provider}...")
                 # 1. Pull events from Google Calendar → Chronos
                 sync_result = chronos.sync_google_calendar()
                 print(f"  Pulled {sync_result['events_pulled']} events "

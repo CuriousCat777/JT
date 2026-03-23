@@ -52,6 +52,13 @@ services:
   zapier:
     enabled: true              # Workflow automation bridge
     use_case: "cross-service triggers and automation"
+    calendar_bridge:
+      enabled: true            # Use Zapier as fallback when Google Calendar OAuth unavailable
+      # Set these in .env:
+      #   ZAPIER_WEBHOOK_CALENDAR_IN  — Catch Hook URL (Guardian → Zapier → GCal)
+      #   ZAPIER_WEBHOOK_CALENDAR_OUT — (optional) Zapier → Guardian cache
+      #   ZAPIER_CALENDAR_CACHE       — Local cache path (default: data/zapier_calendar_cache.json)
+      cache_path: "data/zapier_calendar_cache.json"
   cloud:
     provider: "cloud_vps"      # Cloud VPS for hosting
     hosting:
@@ -125,6 +132,7 @@ agents:
     schedule_interval_minutes: 15
     allowed_resources:
       - calendar
+      - zapier_calendar
       - sleep_data
       - routines
       - workflows

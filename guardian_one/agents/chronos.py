@@ -24,6 +24,7 @@ from guardian_one.integrations.calendar_sync import (
     CalendarSync,
     GoogleCalendarProvider,
 )
+from guardian_one.integrations.zapier_sync import ZapierCalendarProvider
 
 
 @dataclass
@@ -78,23 +79,50 @@ class Chronos(BaseAgent):
         self.log("initialized", details={"routines": len(self._routines)})
 
     def _init_calendar_sync(self) -> None:
-        """Try to set up Google Calendar sync (silent if not configured)."""
+        """Try to set up calendar sync — Google Calendar first, Zapier fallback."""
+        # 1. Try Google Calendar direct OAuth
         try:
             self._calendar_sync = CalendarSync()
             connected = self._calendar_sync.connect()
             if connected:
                 self.log("calendar_connected", details={"provider": "google_calendar"})
-            else:
-                self.log("calendar_offline", details={
-                    "reason": self._calendar_sync.provider.last_error,
-                })
+                return
         except Exception as exc:
             self.log("calendar_init_error", details={"error": str(exc)})
-            self._calendar_sync = None
+
+        # 2. Fall back to Zapier webhook bridge
+        try:
+            zapier_provider = ZapierCalendarProvider()
+            if zapier_provider.has_credentials:
+                self._calendar_sync = CalendarSync(provider=zapier_provider)
+                connected = self._calendar_sync.connect()
+                if connected:
+                    self.log("calendar_connected", details={"provider": "zapier_calendar"})
+                    return
+                else:
+                    self.log("zapier_calendar_offline", details={
+                        "reason": zapier_provider.last_error,
+                    })
+        except Exception as exc:
+            self.log("zapier_calendar_init_error", details={"error": str(exc)})
+
+        # 3. Neither worked
+        if self._calendar_sync and not self._calendar_sync.is_connected:
+            self.log("calendar_offline", details={
+                "reason": "Neither Google Calendar nor Zapier available",
+            })
+        self._calendar_sync = None
 
     @property
     def calendar_sync(self) -> CalendarSync | None:
         return self._calendar_sync
+
+    @property
+    def calendar_provider_name(self) -> str:
+        """Return the name of the active calendar provider."""
+        if self._calendar_sync and self._calendar_sync.is_connected:
+            return self._calendar_sync.provider.provider_name
+        return "none"
 
     def _setup_default_routines(self) -> None:
         """Pre-configure Jeremy's known routines."""
@@ -285,11 +313,12 @@ class Chronos(BaseAgent):
         ]
 
     def calendar_status(self) -> dict[str, Any]:
-        """Return the status of the Google Calendar connection."""
+        """Return the status of the calendar connection (Google or Zapier)."""
         if not self._calendar_sync:
-            return {"connected": False, "reason": "Calendar sync not initialized"}
+            return {"connected": False, "reason": "Calendar sync not initialized", "provider": "none"}
         status = self._calendar_sync.status()
         status["last_sync"] = self._last_sync.isoformat() if self._last_sync else None
+        status["active_provider"] = self.calendar_provider_name
         return status
 
     # ------------------------------------------------------------------
@@ -402,6 +431,7 @@ class Chronos(BaseAgent):
                 "calendar_connected": bool(
                     self._calendar_sync and self._calendar_sync.is_connected
                 ),
+                "calendar_provider": self.calendar_provider_name,
             },
         )
 
