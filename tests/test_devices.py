@@ -198,7 +198,7 @@ class TestDeviceRegistry:
         profiles = reg.all_flipper_profiles()
         assert len(profiles) >= 6
         profile_ids = [p.device_id for p in profiles]
-        assert "tv-main" in profile_ids
+        assert "tv-samsung-main" in profile_ids
         assert "blind-ryse-01" in profile_ids
 
 

@@ -633,35 +633,69 @@ FLIPPER_ZERO_INTEGRATION = IntegrationRecord(
 
 SMART_TV_INTEGRATION = IntegrationRecord(
     name="smart_tv",
-    description="Smart TV — LAN API control with telemetry blocking",
+    description="Samsung Smart TV (Tizen OS) — embedded Linux computer, high security risk. "
+                "Runs full OS with WiFi, BLE, microphone, SmartThings hub. "
+                "Treat as untrusted computer, not a display.",
     base_url="local_lan",
     auth_method="api_key",
-    data_flow="DeviceAgent communicates with TV via LAN API (Samsung SmartThings / LG ThinQ / Roku). "
-              "ACR (Automatic Content Recognition) disabled. Telemetry domains blocked at router.",
-    vault_keys=["TV_API_TOKEN"],
+    data_flow="DeviceAgent communicates with Samsung TV via local SmartThings LAN API. "
+              "TV runs Tizen OS (Linux-based) with its own app store, browser, and services. "
+              "ACR MUST be disabled. All Samsung telemetry domains blocked at router/Pi-hole. "
+              "SmartThings hub functionality disabled unless explicitly needed. "
+              "NEVER route sensitive data through or near the TV network segment.",
+    vault_keys=["SAMSUNG_TV_API_TOKEN"],
     threat_model=[
-        ThreatEntry("ACR tracks viewing habits and sells data to advertisers", "high",
-                    "DISABLE ACR in TV settings immediately. Block TV telemetry domains "
-                    "at router/Pi-hole: samsungacr.com, lgtvsdp.com, etc."),
-        ThreatEntry("TV microphone/camera enables surveillance", "high",
-                    "Disable voice assistant; cover camera if present; "
-                    "block TV internet access except for streaming apps."),
-        ThreatEntry("Smart TV firmware vulnerability", "medium",
-                    "Keep firmware updated; subscribe to CVE alerts for TV model; "
-                    "isolate on IoT VLAN."),
-        ThreatEntry("Streaming app credentials stored on TV", "medium",
-                    "Use unique passwords for streaming accounts; enable 2FA; "
-                    "factory reset TV before selling/disposing."),
-        ThreatEntry("UPnP/DLNA on TV exposes media server to network", "medium",
-                    "Disable UPnP on TV and router; IoT VLAN isolation prevents "
-                    "access to trusted LAN media."),
+        # --- CRITICAL: Samsung Tizen OS is a full computer ---
+        ThreatEntry(
+            "Tizen OS is a full Linux computer with known CVE history", "critical",
+            "Samsung TVs run Tizen — a full embedded Linux OS with browser, app store, "
+            "and network services. Tizen has a history of critical CVEs "
+            "(40+ vulnerabilities found by security researchers). "
+            "MITIGATE: Isolate on IoT VLAN with NO access to trusted LAN. "
+            "Block all outbound internet except whitelisted streaming IPs. "
+            "Monitor for unusual network traffic from TV IP."),
+        ThreatEntry(
+            "ACR (Automatic Content Recognition) harvests viewing data for ad targeting", "critical",
+            "Samsung ACR captures screenshots of content every few seconds and sends to "
+            "samsungacr.com for ad profiling. DISABLE immediately: "
+            "Settings → General → Privacy → Viewing Information Services → OFF. "
+            "ALSO block at DNS: samsungacr.com, log-config.samsungacr.com, "
+            "config.samsungads.com, ad.samsungadhub.com, samsungads.com."),
+        # --- HIGH ---
+        ThreatEntry(
+            "Built-in microphone enables always-on listening / voice data collection", "high",
+            "Samsung TVs with Bixby/voice control have always-listening microphones. "
+            "Voice data is processed by Samsung servers and third-party speech services. "
+            "DISABLE: Settings → General → Voice → disable all voice features. "
+            "Samsung privacy policy explicitly states voice data may be transmitted to third parties. "
+            "Physical mic mute button preferred if available on remote."),
+        ThreatEntry(
+            "SmartThings hub built into TV creates IoT bridge to trusted network", "high",
+            "Many Samsung TVs include a SmartThings hub (Zigbee/Z-Wave/BLE/Thread). "
+            "If active, the TV becomes a gateway between IoT devices and Samsung cloud. "
+            "This could bridge the IoT VLAN to Samsung servers, bypassing network isolation. "
+            "DISABLE SmartThings hub in settings unless explicitly needed by Guardian One. "
+            "If needed, ensure TV SmartThings does NOT control any security devices."),
+        ThreatEntry(
+            "Samsung account login on TV exposes credentials and personal data", "high",
+            "Logging into a Samsung account on the TV links it to Samsung's data ecosystem. "
+            "TV shares device data, viewing habits, app usage, and installed apps with Samsung. "
+            "Do NOT log into personal Samsung, Google, or other accounts on the TV. "
+            "Use a dedicated throwaway email for TV setup if account is required. "
+            "Streaming apps: use separate credentials from primary accounts."),
     ],
-    failure_impact="TV functions normally for broadcast/HDMI. Smart features unavailable. "
-                   "Use streaming device (Roku/Fire Stick) as backup.",
-    rollback_procedure="1. Factory reset TV via settings menu. "
-                       "2. Re-disable ACR and voice features. "
-                       "3. Re-block telemetry domains at router. "
-                       "4. Re-isolate on IoT VLAN.",
+    failure_impact="TV functions normally for HDMI input from trusted devices. "
+                   "Native smart features (streaming apps, voice) unavailable. "
+                   "RECOMMENDED: Use external streaming device (Roku/Apple TV/Fire Stick) "
+                   "connected via HDMI for all streaming — bypasses Tizen OS entirely.",
+    rollback_procedure="1. Factory reset TV: Settings → General → Reset. "
+                       "2. During setup wizard: skip Samsung account login, skip WiFi if possible. "
+                       "3. If WiFi needed: connect to IoT VLAN only. "
+                       "4. Immediately disable ACR, voice, SmartThings hub. "
+                       "5. Block all Samsung telemetry domains at router/Pi-hole. "
+                       "6. Disable UPnP on TV. "
+                       "7. Run Flipper Zero BLE scan to verify no open GATT services. "
+                       "8. Document TV MAC address for IoT VLAN enforcement.",
     owner_agent="device_agent",
 )
 

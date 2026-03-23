@@ -305,6 +305,24 @@ class DeviceRegistry:
                     "severity": "high",
                     "issue": "Camera stream not encrypted — enable HTTPS/RTMPS",
                 })
+            # Samsung TV specific: Tizen OS is a full computer, flag as high risk
+            if (d.category == DeviceCategory.SMART_TV
+                    and d.manufacturer.lower() == "samsung"):
+                if not d.local_api_only:
+                    issues.append({
+                        "device": d.device_id,
+                        "severity": "critical",
+                        "issue": "Samsung TV runs Tizen OS (embedded Linux computer) — "
+                                 "block outbound internet except whitelisted streaming IPs. "
+                                 "Disable ACR, voice, and SmartThings hub.",
+                    })
+                if d.network_segment != NetworkSegment.IOT_VLAN:
+                    issues.append({
+                        "device": d.device_id,
+                        "severity": "critical",
+                        "issue": "Samsung TV MUST be on IoT VLAN — never trusted LAN. "
+                                 "Tizen OS has 40+ known CVEs.",
+                    })
 
         critical = sum(1 for i in issues if i["severity"] == "critical")
         high = sum(1 for i in issues if i["severity"] == "high")
@@ -442,18 +460,60 @@ def _jeremys_devices() -> list[DeviceRecord]:
             tags=["security", "automation"],
         ),
 
-        # --- Smart TV ---
+        # --- Smart TV (Samsung The Frame — Tizen OS, treat as embedded computer) ---
         DeviceRecord(
-            device_id="tv-main",
-            name="Smart TV",
+            device_id="tv-samsung-main",
+            name="Samsung The Frame 65\" QLED 4K",
             category=DeviceCategory.SMART_TV,
-            manufacturer="Unknown",
-            protocols=[DeviceProtocol.WIFI, DeviceProtocol.LAN_API],
+            manufacturer="Samsung",
+            model="QN65LS03FADXZA",  # 65" The Frame LS03FAD QLED 4K
+            protocols=[
+                DeviceProtocol.WIFI, DeviceProtocol.LAN_API,
+                DeviceProtocol.BLE, DeviceProtocol.IR,
+            ],
             network_segment=NetworkSegment.IOT_VLAN,
-            notes="Disable ACR (Automatic Content Recognition). Block telemetry domains "
-                  "at router/Pi-hole level. Disable UPnP. Use HDMI input from a "
-                  "trusted device when possible.",
-            tags=["entertainment", "iot"],
+            local_api_only=False,  # Samsung phones home aggressively
+            upnp_disabled=True,
+            default_password_changed=True,
+            vault_credential_key="SAMSUNG_TV_API_TOKEN",
+            integration_name="smart_tv",
+            location="living_room",
+            notes="DEVICE: Samsung The Frame 65\" (QN65LS03FADXZA), S/N: 0JVG3CDY800403A\n"
+                  "WARRANTY: Parts 12mo, Labor 12mo — registered with Samsung.\n\n"
+                  "SECURITY ALERT: Samsung The Frame runs Tizen OS — a full embedded Linux "
+                  "computer with WiFi, Bluetooth, microphone, and SmartThings hub built in. "
+                  "This is NOT just a display. Treat as an untrusted computer on the network.\n\n"
+                  "THE FRAME SPECIFIC RISKS:\n"
+                  "  - Art Mode connects to Samsung Art Store servers persistently\n"
+                  "  - Art Store subscription service ($5.99/mo) phones home constantly\n"
+                  "  - Motion/light sensors detect room occupancy (used for Art Mode)\n"
+                  "  - One Connect box houses the full Tizen computer + all ports\n"
+                  "  - Matte display anti-reflection coating = premium target for resale\n\n"
+                  "MANDATORY HARDENING:\n"
+                  "  1. Disable ACR (Automatic Content Recognition) in Settings → Privacy\n"
+                  "  2. Disable voice assistant / microphone in Settings → General → Voice\n"
+                  "  3. Disable SmartThings hub if not needed (reduces attack surface)\n"
+                  "  4. Block telemetry domains at router/Pi-hole:\n"
+                  "     - samsungacr.com, samsungcloudsolution.com, samsungcloudsolution.net\n"
+                  "     - config.samsungads.com, ad.samsungadhub.com, samsungads.com\n"
+                  "     - gpm.samsungqbe.com, log-config.samsungacr.com\n"
+                  "     - otn.samsungcloudcdn.com, osb-apps.samsungqbe.com\n"
+                  "     - notice.samsungcloudsolution.com\n"
+                  "  5. Disable UPnP on both TV and router\n"
+                  "  6. Isolate on IoT VLAN — NEVER put on trusted LAN\n"
+                  "  7. Disable auto-firmware update; review changelogs before updating\n"
+                  "  8. Prefer HDMI input from trusted device (Roku/Apple TV) over native apps\n"
+                  "  9. Do NOT log into personal accounts (Google, Samsung) on TV directly\n"
+                  " 10. Use Flipper Zero IR as backup remote to avoid Samsung remote telemetry\n"
+                  " 11. Art Mode: disable if not using; if using, block Art Store telemetry\n"
+                  " 12. One Connect box contains the computer — secure physical access",
+            firmware=FirmwareInfo(
+                auto_update=False,
+                last_checked="",
+                update_url="https://www.samsung.com/us/support/model/QN65LS03FADXZA/",
+            ),
+            tags=["entertainment", "iot", "security_risk", "tizen_os",
+                  "embedded_computer", "the_frame", "art_mode"],
         ),
 
         # --- Smart plugs (TP-Link) ---
@@ -580,7 +640,7 @@ def _jeremys_rooms() -> list[Room]:
             name="Living Room",
             room_type=RoomType.LIVING_ROOM,
             device_ids=[
-                "tv-main", "light-govee-01", "plug-tplink-01",
+                "tv-samsung-main", "light-govee-01", "plug-tplink-01",
                 "blind-ryse-01", "motion-01",
             ],
             auto_lights=True,
@@ -637,14 +697,17 @@ def _jeremys_flipper_profiles() -> list[FlipperProfile]:
     """
     return [
         FlipperProfile(
-            device_id="tv-main",
+            device_id="tv-samsung-main",
             capabilities=[
                 FlipperCapability.IR_CAPTURE,
                 FlipperCapability.IR_TRANSMIT,
+                FlipperCapability.BLE_SCAN,
             ],
-            ir_remote_file="infrared/tv_main.ir",
-            notes="Learn TV power, volume, input, mute via IR. "
-                  "Flipper can serve as universal remote backup.",
+            ir_remote_file="infrared/tv_samsung_main.ir",
+            notes="Samsung TV IR: power, volume, input, mute, source select. "
+                  "Flipper serves as primary remote backup (avoids Samsung remote telemetry). "
+                  "BLE scan: audit SmartThings hub BLE advertisements and detect "
+                  "unauthorized BLE pairing attempts. Check for open BLE GATT services.",
         ),
         FlipperProfile(
             device_id="blind-ryse-01",

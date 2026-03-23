@@ -72,7 +72,7 @@ Think of it like this:
 |--------|------|-------|-----------|--------|
 | **cam-01** | Security Camera | Front exterior | WiFi, LAN API | Placeholder — need to pick manufacturer |
 | **motion-01** | Motion Detector | Living room | WiFi | Placeholder — pairs with cam-01 |
-| **tv-main** | Smart TV | Living room | WiFi, LAN API | ACR disabled, telemetry blocked |
+| **tv-samsung-main** | Samsung The Frame 65" QLED 4K (QN65LS03FADXZA) | Living room | WiFi, LAN API, BLE, IR | Tizen OS — ACR disabled, voice off, SmartThings hub off, telemetry blocked, IoT VLAN isolated |
 | **plug-tplink-01** | TP-Link Smart Plug | Living room | WiFi, LAN API | Real — uses python-kasa (local only) |
 | **light-hue-bridge** | Philips Hue Bridge | Bedroom | Zigbee, LAN API | Real — Hue Bridge on local HTTPS |
 | **light-govee-01** | Govee Light Strip | Living room | WiFi, BLE, LAN UDP | Real — prefers local UDP control |

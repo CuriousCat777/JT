@@ -257,8 +257,29 @@ agents:
           rtsp_encryption: true         # Require encrypted streams
         smart_tv:
           enabled: true
+          manufacturer: samsung
+          model: QN65LS03FADXZA         # 65" The Frame LS03FAD QLED 4K
+          serial: 0JVG3CDY800403A
+          tizen_os: true                # Samsung runs Tizen OS — full embedded Linux
+          art_mode_disabled: true       # Art Mode phones home to Samsung Art Store
           acr_disabled: true            # Automatic Content Recognition off
-          telemetry_blocked: true       # Block telemetry at router
+          voice_disabled: true          # Microphone/Bixby/voice assistant off
+          smartthings_hub_disabled: true # Built-in SmartThings hub disabled
+          samsung_account_login: false  # Do NOT log in with personal Samsung account
+          telemetry_blocked: true       # Block telemetry at router/Pi-hole
+          telemetry_domains_blocked:    # Samsung domains to block at DNS level
+            - samsungacr.com
+            - log-config.samsungacr.com
+            - samsungcloudsolution.com
+            - samsungcloudsolution.net
+            - config.samsungads.com
+            - ad.samsungadhub.com
+            - samsungads.com
+            - gpm.samsungqbe.com
+            - otn.samsungcloudcdn.com
+            - osb-apps.samsungqbe.com
+            - notice.samsungcloudsolution.com
+          prefer_hdmi_input: true       # Use external streaming device over native apps
         vehicle:
           enabled: true
           obd2_readonly: true           # OBD-II read-only mode
