@@ -144,7 +144,12 @@ class GmailProvider:
                     return True
                 if creds.expired and creds.refresh_token:
                     from google.auth.transport.requests import Request
-                    creds.refresh(Request())
+                    try:
+                        creds.refresh(Request())
+                    except Exception:
+                        # Token expired/revoked — delete stale cache, require re-auth
+                        self._token_path.unlink(missing_ok=True)
+                        return False
                     self._access_token = creds.token
                     self._save_token(creds)
                     return True
