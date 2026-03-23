@@ -675,6 +675,12 @@ tr:hover td { background: var(--bg-primary); }
         <span class="nav-icon">&#9776;</span> Daily Summary
       </div>
     </div>
+    <div class="nav-section">
+      <div class="nav-label">AI</div>
+      <div class="nav-item" data-panel="chat">
+        <span class="nav-icon">&#9993;</span> Guardian Chat
+      </div>
+    </div>
   </nav>
 
   <!-- Main Content -->
@@ -1026,6 +1032,228 @@ tr:hover td { background: var(--bg-primary); }
         <button class="btn" onclick="loadSummary()">Refresh</button>
       </div>
       <div id="summaryView"></div>
+    </div>
+
+    <!-- Guardian Chat Panel -->
+    <div id="panel-chat" class="panel">
+      <style>
+        .chat-container {
+          display: flex;
+          flex-direction: column;
+          height: calc(100vh - 120px);
+          max-height: calc(100vh - 120px);
+        }
+        .chat-header-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 0;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 0;
+          flex-shrink: 0;
+        }
+        .chat-header-bar h3 { color: var(--text-primary); margin: 0; }
+        .chat-toggle-area {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .chat-toggle-label {
+          font-size: 12px;
+          color: var(--text-muted);
+          font-weight: 500;
+        }
+        .chat-toggle-label.active {
+          color: var(--accent);
+          font-weight: 600;
+        }
+        .chat-toggle {
+          position: relative;
+          width: 44px;
+          height: 24px;
+          cursor: pointer;
+          display: inline-block;
+        }
+        .chat-toggle input { opacity: 0; width: 0; height: 0; }
+        .chat-slider {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: var(--border);
+          border-radius: 12px;
+          transition: 0.3s;
+        }
+        .chat-slider:before {
+          content: "";
+          position: absolute;
+          height: 18px;
+          width: 18px;
+          left: 3px;
+          bottom: 3px;
+          background: var(--text-muted);
+          border-radius: 50%;
+          transition: 0.3s;
+        }
+        .chat-toggle input:checked + .chat-slider {
+          background: var(--accent-glow);
+          border: 1px solid var(--accent);
+        }
+        .chat-toggle input:checked + .chat-slider:before {
+          transform: translateX(20px);
+          background: var(--accent);
+        }
+        .chat-mode-badge {
+          font-size: 11px;
+          padding: 3px 10px;
+          border-radius: 10px;
+          font-weight: 600;
+        }
+        .chat-mode-local {
+          background: var(--green-dim);
+          color: var(--green);
+          border: 1px solid var(--green);
+        }
+        .chat-mode-ai {
+          background: var(--accent-glow);
+          color: var(--accent);
+          border: 1px solid var(--accent);
+        }
+        .chat-messages {
+          flex: 1;
+          overflow-y: auto;
+          padding: 16px 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          min-height: 0;
+        }
+        .chat-msg {
+          max-width: 80%;
+          padding: 10px 14px;
+          border-radius: 10px;
+          font-size: 13px;
+          line-height: 1.6;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        }
+        .chat-msg-user {
+          align-self: flex-end;
+          background: var(--accent-glow);
+          color: var(--text-primary);
+          border: 1px solid var(--accent);
+          border-bottom-right-radius: 4px;
+        }
+        .chat-msg-guardian {
+          align-self: flex-start;
+          background: var(--bg-card);
+          color: var(--text-primary);
+          border: 1px solid var(--border);
+          border-bottom-left-radius: 4px;
+          box-shadow: var(--shadow-sm);
+        }
+        .chat-msg-guardian.chat-type-error {
+          border-color: var(--red);
+          background: var(--red-dim);
+        }
+        .chat-msg-guardian.chat-type-ai {
+          border-color: var(--accent);
+          background: var(--accent-glow);
+        }
+        .chat-msg-system {
+          align-self: center;
+          color: var(--text-muted);
+          font-size: 11px;
+          text-align: center;
+          padding: 4px;
+        }
+        .chat-msg-sender {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 4px;
+          color: var(--text-muted);
+        }
+        .chat-msg-user .chat-msg-sender { color: var(--accent); }
+        .chat-msg-guardian .chat-msg-sender { color: var(--purple); }
+        .chat-msg-guardian.chat-type-ai .chat-msg-sender { color: var(--accent); }
+        .chat-input-area {
+          display: flex;
+          gap: 10px;
+          padding: 12px 0;
+          border-top: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+        .chat-input-area input {
+          flex: 1;
+          background: var(--bg-primary);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 10px 14px;
+          color: var(--text-primary);
+          font-family: var(--font);
+          font-size: 13px;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        .chat-input-area input:focus { border-color: var(--accent); }
+        .chat-input-area input::placeholder { color: var(--text-muted); }
+        .chat-send-btn {
+          background: var(--accent);
+          border: none;
+          border-radius: 8px;
+          padding: 10px 20px;
+          color: white;
+          font-family: var(--font);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.2s;
+        }
+        .chat-send-btn:hover { opacity: 0.85; }
+        .chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .chat-typing {
+          display: none;
+          color: var(--text-muted);
+          font-size: 12px;
+          padding: 4px 0;
+        }
+        .chat-typing.visible { display: block; }
+        @keyframes chatBlink {
+          0%, 100% { opacity: 0.2; }
+          50% { opacity: 1; }
+        }
+        .chat-typing span { animation: chatBlink 1.4s infinite; }
+        .chat-typing span:nth-child(2) { animation-delay: 0.2s; }
+        .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
+      </style>
+
+      <div class="chat-container">
+        <div class="chat-header-bar">
+          <h3>Guardian Chat</h3>
+          <div class="chat-toggle-area">
+            <span class="chat-toggle-label active" id="chatLabelLocal">LOCAL</span>
+            <label class="chat-toggle">
+              <input type="checkbox" id="chatAiToggle">
+              <span class="chat-slider"></span>
+            </label>
+            <span class="chat-toggle-label" id="chatLabelAI">AI</span>
+            <span class="chat-mode-badge chat-mode-local" id="chatModeBadge">Deterministic</span>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-msg chat-msg-system">Guardian One online. Type 'help' for commands, or toggle AI mode to talk freely.</div>
+        </div>
+
+        <div class="chat-typing" id="chatTyping">
+          Guardian is thinking<span>.</span><span>.</span><span>.</span>
+        </div>
+
+        <div class="chat-input-area">
+          <input type="text" id="chatInput" placeholder="Talk to Guardian One..." autocomplete="off">
+          <button class="chat-send-btn" id="chatSendBtn" onclick="chatSend()">Send</button>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -1829,6 +2057,98 @@ async function loadWorldView() {
 // ---------------------------------------------------------------------------
 // Loader map & init
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Guardian Chat
+// ---------------------------------------------------------------------------
+const chatMsgs = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatTyping = document.getElementById('chatTyping');
+const chatAiToggle = document.getElementById('chatAiToggle');
+const chatLabelLocal = document.getElementById('chatLabelLocal');
+const chatLabelAI = document.getElementById('chatLabelAI');
+const chatModeBadge = document.getElementById('chatModeBadge');
+const chatSendBtn = document.getElementById('chatSendBtn');
+
+chatAiToggle.addEventListener('change', () => {
+  const isAI = chatAiToggle.checked;
+  chatLabelLocal.classList.toggle('active', !isAI);
+  chatLabelAI.classList.toggle('active', isAI);
+  chatModeBadge.textContent = isAI ? 'AI Engine' : 'Deterministic';
+  chatModeBadge.className = 'chat-mode-badge ' + (isAI ? 'chat-mode-ai' : 'chat-mode-local');
+  chatAddSystem(isAI
+    ? 'AI mode ON — Guardian will reason with Ollama/Anthropic.'
+    : 'AI mode OFF — deterministic commands only.');
+});
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
+});
+
+function chatAddMsg(text, type, sender) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-' + (sender === 'user' ? 'user' : 'guardian');
+  if (sender !== 'user' && type === 'ai') div.classList.add('chat-type-ai');
+  if (sender !== 'user' && type === 'error') div.classList.add('chat-type-error');
+
+  const senderDiv = document.createElement('div');
+  senderDiv.className = 'chat-msg-sender';
+  senderDiv.textContent = sender === 'user' ? 'Jeremy' : 'Guardian One';
+
+  const bodyDiv = document.createElement('div');
+  bodyDiv.textContent = text;
+
+  div.appendChild(senderDiv);
+  div.appendChild(bodyDiv);
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+function chatAddSystem(text) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-system';
+  div.textContent = text;
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+async function chatSend() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  chatInput.value = '';
+  chatAddMsg(text, 'user', 'user');
+  chatSendBtn.disabled = true;
+  chatTyping.classList.add('visible');
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, use_ai: chatAiToggle.checked }),
+    });
+    const data = await resp.json();
+    chatAddMsg(data.response, data.type || 'guardian', 'guardian');
+  } catch (err) {
+    chatAddMsg('Connection error: ' + err.message, 'error', 'guardian');
+  } finally {
+    chatSendBtn.disabled = false;
+    chatTyping.classList.remove('visible');
+    chatInput.focus();
+  }
+}
+
+function loadChat() {
+  // Focus input when chat panel is opened
+  setTimeout(() => chatInput.focus(), 100);
+  // Load agent status on first open
+  if (chatMsgs.children.length <= 1) {
+    fetch('/api/status').then(r => r.json()).then(data => {
+      const agents = data.agents.map(a => a.name).join(', ');
+      chatAddSystem('Agents online: ' + agents);
+    }).catch(() => {});
+  }
+}
+
 const loaders = {
   morning: loadMorning,
   dashboard: loadDashboard,
@@ -1842,6 +2162,7 @@ const loaders = {
   audit: loadAudit,
   config: loadConfig,
   summary: loadSummary,
+  chat: loadChat,
 };
 
 function updateClock() {
