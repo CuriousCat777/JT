@@ -30,6 +30,8 @@ guardian_one/
 ├── core/                       # System infrastructure
 │   ├── guardian.py              # Central coordinator
 │   ├── base_agent.py           # Agent contract (BaseAgent ABC)
+│   ├── daemon.py               # Headless daemon mode + health API (/health, /status, /metrics)
+│   ├── logging.py              # Structured JSON logging with daily rotation
 │   ├── mediator.py             # Cross-agent conflict resolution
 │   ├── scheduler.py            # Agent scheduling
 │   ├── sandbox.py              # Deployment testing
@@ -56,7 +58,12 @@ guardian_one/
 └── utils/                      # Shared utilities
 config/
 ├── guardian_config.yaml        # Agent & system configuration
-tests/                          # 200+ pytest test cases
+├── guardian-one.service        # systemd service unit for daemon mode
+scripts/
+├── setup.sh                    # Environment setup script
+.github/workflows/
+├── test.yml                    # CI pipeline (pytest on push/PR)
+tests/                          # 878 pytest test cases
 ```
 
 ## Managed Websites
@@ -137,7 +144,9 @@ Environment: `.env` (NOTION_TOKEN, API keys, etc.)
 ## Running Tests
 
 ```bash
-pytest tests/ -v                       # All tests (~200+)
+pytest tests/ -v                       # All tests (878)
+pytest tests/test_daemon.py            # Daemon + health API tests
+pytest tests/test_logging.py           # Structured logging tests
 pytest tests/test_website_manager.py   # Website manager tests
 pytest tests/test_notion_website_sync.py  # Notion website sync tests
 pytest tests/test_web_architect.py     # WebArchitect tests
@@ -148,6 +157,8 @@ pytest tests/test_web_architect.py     # WebArchitect tests
 ```bash
 python main.py                         # Run all agents once
 python main.py --schedule              # Start agent scheduler
+python main.py --daemon                # Run as background daemon (headless + health API)
+python main.py --daemon --daemon-port 5200  # Custom health API port
 python main.py --dashboard             # Generate CFO Excel dashboard
 python main.py --sync                  # Continuous financial sync
 python main.py --calendar-sync         # Sync Google Calendar

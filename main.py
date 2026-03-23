@@ -37,6 +37,8 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --daemon              # Run as background daemon (headless + health API)
+    python main.py --daemon --daemon-port 5200  # Custom health API port
 """
 
 from __future__ import annotations
@@ -325,6 +327,8 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--daemon", action="store_true", help="Run as background daemon (headless scheduler + health API)")
+    parser.add_argument("--daemon-port", type=int, default=5200, help="Daemon health API port (default: 5200)")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--ask", type=str, default=None, help="Ask Guardian a question")
@@ -336,6 +340,12 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    if args.daemon:
+        from guardian_one.core.daemon import GuardianDaemon
+        daemon = GuardianDaemon(guardian, port=args.daemon_port)
+        daemon.start()
+        return
 
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
