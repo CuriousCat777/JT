@@ -56,6 +56,9 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.device_agent import DeviceAgent
+from guardian_one.homelink.devices import DeviceRegistry
+from guardian_one.homelink.automations import AutomationEngine
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -83,6 +86,239 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    # DeviceAgent — smart home device management & automation
+    dev_cfg = config.agents.get("device_agent", AgentConfig(
+        name="device_agent", enabled=True,
+        allowed_resources=["devices", "network"],
+    ))
+    dev_registry = DeviceRegistry()
+    automation_engine = AutomationEngine(audit=guardian.audit)
+    dev_agent = DeviceAgent(
+        config=dev_cfg, audit=guardian.audit,
+        device_registry=dev_registry,
+        automation_engine=automation_engine,
+    )
+    guardian.register_agent(dev_agent)
+
+    # Wire device + automation awareness into HOMELINK Monitor
+    guardian.monitor = guardian.monitor.__class__(
+        gateway=guardian.gateway,
+        vault=guardian.vault,
+        registry=guardian.registry,
+        device_registry=dev_registry,
+        automation_engine=automation_engine,
+    )
+
+
+def _guardian_chat(guardian: GuardianOne) -> None:
+    """Interactive chat with Guardian One — routes to all agents."""
+    from guardian_one.core.command_router import CommandRouter
+    cfo_router = CommandRouter(guardian)
+
+    print()
+    print("  ============================================================")
+    print("  Guardian One — Sovereign Coordinator")
+    print("  Owner: Jeremy Paulo Salvino Tabernero")
+    print(f"  Agents online: {', '.join(guardian.list_agents())}")
+    print("  ============================================================")
+    print()
+    print("  Commands:")
+    print("    status                  — Full system status")
+    print("    agents                  — List all agents and their state")
+    print("    agent <name>            — Run a specific agent")
+    print("    brief                   — Weekly H.O.M.E. L.I.N.K. brief")
+    print("    devices                 — Device inventory")
+    print("    rooms                   — Room layout")
+    print("    scene <name>            — Activate scene (movie/work/away/goodnight)")
+    print("    event <name>            — Fire event (wake/sleep/leave/arrive)")
+    print("    audit                   — Device security audit")
+    print("    homelink                — HOMELINK service status")
+    print("    reviews                 — Items needing your review")
+    print("    cfo <question>          — Talk to CFO (finances)")
+    print("    think <question>        — Ask Guardian AI (requires AI engine)")
+    print("    help                    — Show this help")
+    print("    quit                    — Exit")
+    print()
+
+    while True:
+        try:
+            raw = input("  Jeremy > ").strip()
+            if not raw:
+                continue
+            lowered = raw.lower()
+
+            if lowered in ("quit", "exit", "bye"):
+                print("\n  Guardian One signing off. Stay sovereign, Jeremy.\n")
+                break
+
+            elif lowered in ("help", "?"):
+                print("\n  Type any command above, or 'cfo <question>' for finances.\n")
+
+            elif lowered == "status":
+                print()
+                print(guardian.daily_summary())
+
+            elif lowered == "agents":
+                print("\n  Registered Agents:")
+                for name in guardian.list_agents():
+                    agent = guardian.get_agent(name)
+                    if agent:
+                        try:
+                            report = agent.report()
+                            print(f"    {name:20s} [{report.status}] {report.summary[:60]}")
+                        except Exception as e:
+                            print(f"    {name:20s} [error] {e}")
+                print()
+
+            elif lowered.startswith("agent "):
+                agent_name = raw[6:].strip()
+                if agent_name in guardian.list_agents():
+                    print(f"\n  Running {agent_name}...")
+                    report = guardian.run_agent(agent_name)
+                    print(f"  [{report.status}] {report.summary}")
+                    if report.alerts:
+                        for a in report.alerts[:5]:
+                            print(f"    [ALERT] {a}")
+                    if report.recommendations:
+                        for r in report.recommendations[:5]:
+                            print(f"    [REC] {r}")
+                else:
+                    print(f"\n  Unknown agent: {agent_name}")
+                    print(f"  Available: {', '.join(guardian.list_agents())}")
+                print()
+
+            elif lowered == "brief":
+                print()
+                print(guardian.monitor.weekly_brief_text())
+                print()
+
+            elif lowered == "devices":
+                dev_agent = guardian.get_agent("device_agent")
+                if dev_agent:
+                    report = dev_agent.report()
+                    print(f"\n  {report.summary}")
+                    if report.alerts:
+                        for a in report.alerts[:10]:
+                            print(f"    [ALERT] {a}")
+                else:
+                    print("\n  DeviceAgent not registered.")
+                print()
+
+            elif lowered == "rooms":
+                dev_agent = guardian.get_agent("device_agent")
+                if dev_agent:
+                    rooms = dev_agent.device_registry.room_summary()
+                    print("\n  Room Layout:")
+                    for room in rooms:
+                        print(f"    {room['name']} ({room['type']}) — {room['device_count']} devices")
+                        for did in room["device_ids"]:
+                            d = dev_agent.device_registry.get(did)
+                            if d:
+                                print(f"      {d.device_id}: {d.name} [{d.status.value}]")
+                print()
+
+            elif lowered.startswith("scene "):
+                scene_name = raw[6:].strip()
+                dev_agent = guardian.get_agent("device_agent")
+                if dev_agent:
+                    scene_id = f"scene-{scene_name}" if not scene_name.startswith("scene-") else scene_name
+                    results = dev_agent.activate_scene(scene_id)
+                    scene = dev_agent.automation.get_scene(scene_id)
+                    if scene:
+                        print(f"\n  Scene activated: {scene.name}")
+                        print(f"  {scene.description}")
+                        for r in results:
+                            target = r["device_id"] or r["room_id"]
+                            print(f"    -> {r['action']} on {target}")
+                    else:
+                        print(f"\n  Scene '{scene_id}' not found.")
+                        print("  Available: " + ", ".join(
+                            s.scene_id.replace("scene-", "")
+                            for s in dev_agent.automation.all_scenes()
+                        ))
+                print()
+
+            elif lowered.startswith("event "):
+                event_name = raw[6:].strip()
+                dev_agent = guardian.get_agent("device_agent")
+                if dev_agent:
+                    if event_name in ("sunrise", "sunset"):
+                        results = dev_agent.handle_solar_event(event_name)
+                    else:
+                        results = dev_agent.handle_schedule_event(event_name)
+                    print(f"\n  Event fired: {event_name}")
+                    print(f"  Actions: {len(results)}")
+                    for r in results:
+                        target = r["device_id"] or r["room_id"]
+                        print(f"    -> {r['action']} on {target}")
+                print()
+
+            elif lowered == "audit":
+                dev_agent = guardian.get_agent("device_agent")
+                if dev_agent:
+                    audit_result = dev_agent.device_registry.security_audit()
+                    print(f"\n  Security Audit: {audit_result['summary']}")
+                    for issue in audit_result["issues"][:15]:
+                        print(f"    [{issue['severity'].upper():8s}] {issue['device']}: {issue['issue']}")
+                print()
+
+            elif lowered == "homelink":
+                services = guardian.gateway.list_services()
+                print("\n  H.O.M.E. L.I.N.K. Services:")
+                if services:
+                    for svc in services:
+                        status = guardian.gateway.service_status(svc)
+                        print(f"    {svc:25s} circuit={status['circuit_state']:10s} risk={guardian.monitor.assess_service(svc).risk_score}/5")
+                else:
+                    print("    No services registered.")
+                vault_health = guardian.vault.health_report()
+                print(f"  Vault: {vault_health['total_credentials']} credentials")
+                print()
+
+            elif lowered == "reviews":
+                pending = guardian.audit.pending_reviews()
+                if pending:
+                    print(f"\n  {len(pending)} items need your review:")
+                    for entry in pending[:10]:
+                        print(f"    [{entry.agent}] {entry.action}")
+                else:
+                    print("\n  No items pending review.")
+                print()
+
+            elif lowered.startswith("cfo "):
+                query = raw[4:].strip()
+                result = cfo_router.handle(query)
+                print(f"\n{result.text}")
+                if result.ai_summary:
+                    print(f"\n  {result.ai_summary}")
+                print()
+
+            elif lowered.startswith("think "):
+                question = raw[6:].strip()
+                print("\n  Asking Guardian AI...")
+                try:
+                    answer = guardian.think(question)
+                    print(f"\n  Guardian: {answer}")
+                except Exception as e:
+                    print(f"\n  AI engine offline: {e}")
+                    print("  Guardian can still run all deterministic commands above.")
+                print()
+
+            else:
+                # Try CFO router as fallback for financial queries
+                result = cfo_router.handle(raw)
+                if result.intent.name != "help" or result.intent.confidence > 0.8:
+                    print(f"\n{result.text}")
+                    if result.ai_summary:
+                        print(f"\n  {result.ai_summary}")
+                else:
+                    print(f"\n  I don't understand '{raw}'. Type 'help' for commands.")
+                print()
+
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n  Guardian One signing off. Stay sovereign, Jeremy.\n")
+            break
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -392,14 +628,8 @@ def main() -> None:
         return
 
     if args.devices or args.device_audit or args.scene or args.home_event or args.flipper or args.rooms:
-        from guardian_one.agents.device_agent import DeviceAgent
-        from guardian_one.homelink.devices import DeviceRegistry
-        dev_config = AgentConfig(name="device_agent", enabled=True,
-                                 allowed_resources=["devices", "network"])
-        dev_registry = DeviceRegistry()
-        dev_agent = DeviceAgent(config=dev_config, audit=guardian.audit,
-                                device_registry=dev_registry)
-        dev_agent.initialize()
+        dev_agent = guardian.get_agent("device_agent")
+        dev_registry = dev_agent.device_registry
 
         if args.scene:
             scene_id = f"scene-{args.scene}" if not args.scene.startswith("scene-") else args.scene
@@ -1053,26 +1283,7 @@ def main() -> None:
             print(f"\n  {result.ai_summary}")
 
     elif args.chat:
-        from guardian_one.core.command_router import CommandRouter
-        router = CommandRouter(guardian)
-        print("  Guardian One — CFO Chat")
-        print("  Type 'quit' to exit, 'help' for commands.\n")
-        while True:
-            try:
-                user_input = input("  You > ").strip()
-                if not user_input:
-                    continue
-                if user_input.lower() in ("quit", "exit", "bye"):
-                    print("  Guardian signing off.")
-                    break
-                result = router.handle(user_input)
-                print(f"\n{result.text}")
-                if result.ai_summary:
-                    print(f"\n  {result.ai_summary}")
-                print()
-            except (KeyboardInterrupt, EOFError):
-                print("\n  Guardian signing off.")
-                break
+        _guardian_chat(guardian)
 
     elif args.summary:
         print(guardian.daily_summary())

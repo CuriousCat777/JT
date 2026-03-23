@@ -323,6 +323,18 @@ class GuardianOne:
         rotation_due = vault_health["due_for_rotation"]
         if rotation_due:
             lines.append(f"  ** {rotation_due} credentials due for rotation **")
+
+        # Device + automation status from Monitor
+        if self.monitor._devices:
+            dev_audit = self.monitor._devices.security_audit()
+            lines.append(f"  Devices: {dev_audit['total_devices']} registered, "
+                         f"{dev_audit.get('online', 0)} online, "
+                         f"{dev_audit['issue_count']} security issues")
+            lines.append(f"  Rooms: {len(self.monitor._devices.all_rooms())}")
+        if self.monitor._automations:
+            auto_sum = self.monitor._automations.summary()
+            lines.append(f"  Automations: {auto_sum['enabled_rules']} rules enabled, "
+                         f"{auto_sum['total_scenes']} scenes")
         lines.append("")
 
         # AI Engine status
