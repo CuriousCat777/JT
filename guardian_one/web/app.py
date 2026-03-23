@@ -49,6 +49,9 @@ def _build_agents(guardian: GuardianOne) -> None:
     from guardian_one.agents.doordash import DoorDashAgent
     from guardian_one.agents.gmail_agent import GmailAgent
     from guardian_one.agents.web_architect import WebArchitect
+    from guardian_one.agents.device_agent import DeviceAgent
+    from guardian_one.homelink.devices import DeviceRegistry
+    from guardian_one.homelink.automations import AutomationEngine
 
     config = guardian.config
     for name, cls, kwargs in [
@@ -61,6 +64,30 @@ def _build_agents(guardian: GuardianOne) -> None:
     ]:
         cfg = config.agents.get(name, AgentConfig(name=name))
         guardian.register_agent(cls(config=cfg, audit=guardian.audit, **kwargs))
+
+    # DeviceAgent — smart home device management & automation
+    dev_cfg = config.agents.get("device_agent", AgentConfig(
+        name="device_agent", enabled=True,
+        allowed_resources=["devices", "network"],
+    ))
+    dev_registry = DeviceRegistry()
+    automation_engine = AutomationEngine(audit=guardian.audit)
+    dev_agent = DeviceAgent(
+        config=dev_cfg, audit=guardian.audit,
+        device_registry=dev_registry,
+        automation_engine=automation_engine,
+    )
+    guardian.register_agent(dev_agent)
+
+    # Wire device + automation awareness into HOMELINK Monitor
+    from guardian_one.homelink.monitor import Monitor
+    guardian.monitor = Monitor(
+        gateway=guardian.gateway,
+        vault=guardian.vault,
+        registry=guardian.registry,
+        device_registry=dev_registry,
+        automation_engine=automation_engine,
+    )
 
 
 def create_app() -> Flask:
@@ -339,6 +366,214 @@ def create_app() -> Flask:
     def api_summary():
         g = _get_guardian()
         return jsonify({"summary": g.daily_summary()})
+
+    # ------------------------------------------------------------------
+    # Chat page
+    # ------------------------------------------------------------------
+
+    @app.route("/chat")
+    def chat_page():
+        return render_template("chat.html")
+
+    # ------------------------------------------------------------------
+    # API — Guardian Chat
+    # ------------------------------------------------------------------
+
+    @app.route("/api/chat", methods=["POST"])
+    def api_chat():
+        g = _get_guardian()
+        body = request.get_json(force=True)
+        message = (body.get("message") or "").strip()
+        use_ai = body.get("use_ai", False)
+
+        if not message:
+            return jsonify({"response": "Say something, Jeremy.", "type": "error"})
+
+        lowered = message.lower()
+
+        # Deterministic command routing
+        try:
+            if lowered in ("help", "?"):
+                return jsonify({"response": _chat_help(), "type": "help"})
+
+            elif lowered == "status":
+                return jsonify({"response": g.daily_summary(), "type": "status"})
+
+            elif lowered == "agents":
+                lines = []
+                for name in g.list_agents():
+                    agent = g.get_agent(name)
+                    if agent:
+                        try:
+                            report = agent.report()
+                            lines.append(f"{name:20s} [{report.status}] {report.summary[:70]}")
+                        except Exception as e:
+                            lines.append(f"{name:20s} [error] {e}")
+                return jsonify({"response": "\n".join(lines), "type": "agents"})
+
+            elif lowered.startswith("agent "):
+                agent_name = message[6:].strip()
+                if agent_name in g.list_agents():
+                    report = g.run_agent(agent_name)
+                    lines = [f"[{report.status}] {report.summary}"]
+                    for a in (report.alerts or [])[:5]:
+                        lines.append(f"  [ALERT] {a}")
+                    for r in (report.recommendations or [])[:5]:
+                        lines.append(f"  [REC] {r}")
+                    return jsonify({"response": "\n".join(lines), "type": "agent_run"})
+                else:
+                    return jsonify({
+                        "response": f"Unknown agent: {agent_name}\nAvailable: {', '.join(g.list_agents())}",
+                        "type": "error",
+                    })
+
+            elif lowered == "brief":
+                return jsonify({"response": g.monitor.weekly_brief_text(), "type": "brief"})
+
+            elif lowered == "devices":
+                dev_agent = g.get_agent("device_agent")
+                if dev_agent:
+                    report = dev_agent.report()
+                    lines = [report.summary]
+                    for a in (report.alerts or [])[:10]:
+                        lines.append(f"  [ALERT] {a}")
+                    return jsonify({"response": "\n".join(lines), "type": "devices"})
+                return jsonify({"response": "DeviceAgent not registered.", "type": "error"})
+
+            elif lowered == "rooms":
+                dev_agent = g.get_agent("device_agent")
+                if dev_agent:
+                    rooms = dev_agent.device_registry.room_summary()
+                    lines = []
+                    for room in rooms:
+                        lines.append(f"{room['name']} ({room['type']}) — {room['device_count']} devices")
+                        for did in room["device_ids"]:
+                            d = dev_agent.device_registry.get(did)
+                            if d:
+                                lines.append(f"  {d.device_id}: {d.name} [{d.status.value}]")
+                    return jsonify({"response": "\n".join(lines), "type": "rooms"})
+                return jsonify({"response": "DeviceAgent not registered.", "type": "error"})
+
+            elif lowered.startswith("scene "):
+                scene_name = message[6:].strip()
+                dev_agent = g.get_agent("device_agent")
+                if dev_agent:
+                    scene_id = f"scene-{scene_name}" if not scene_name.startswith("scene-") else scene_name
+                    results = dev_agent.activate_scene(scene_id)
+                    scene = dev_agent.automation.get_scene(scene_id)
+                    if scene:
+                        lines = [f"Scene activated: {scene.name}", scene.description]
+                        for r in results:
+                            target = r["device_id"] or r["room_id"]
+                            lines.append(f"  -> {r['action']} on {target}")
+                        return jsonify({"response": "\n".join(lines), "type": "scene"})
+                    else:
+                        available = ", ".join(s.scene_id.replace("scene-", "") for s in dev_agent.automation.all_scenes())
+                        return jsonify({"response": f"Scene '{scene_name}' not found.\nAvailable: {available}", "type": "error"})
+                return jsonify({"response": "DeviceAgent not registered.", "type": "error"})
+
+            elif lowered.startswith("event "):
+                event_name = message[6:].strip()
+                dev_agent = g.get_agent("device_agent")
+                if dev_agent:
+                    if event_name in ("sunrise", "sunset"):
+                        results = dev_agent.handle_solar_event(event_name)
+                    else:
+                        results = dev_agent.handle_schedule_event(event_name)
+                    lines = [f"Event fired: {event_name}", f"Actions: {len(results)}"]
+                    for r in results:
+                        target = r["device_id"] or r["room_id"]
+                        lines.append(f"  -> {r['action']} on {target}")
+                    return jsonify({"response": "\n".join(lines), "type": "event"})
+                return jsonify({"response": "DeviceAgent not registered.", "type": "error"})
+
+            elif lowered == "audit":
+                dev_agent = g.get_agent("device_agent")
+                if dev_agent:
+                    audit_result = dev_agent.device_registry.security_audit()
+                    lines = [audit_result["summary"]]
+                    for issue in audit_result["issues"][:15]:
+                        lines.append(f"  [{issue['severity'].upper():8s}] {issue['device']}: {issue['issue']}")
+                    return jsonify({"response": "\n".join(lines), "type": "audit"})
+                return jsonify({"response": "DeviceAgent not registered.", "type": "error"})
+
+            elif lowered == "homelink":
+                services = g.gateway.list_services()
+                lines = []
+                for svc in services:
+                    status = g.gateway.service_status(svc)
+                    risk = g.monitor.assess_service(svc).risk_score
+                    lines.append(f"{svc:25s} circuit={status['circuit_state']:10s} risk={risk}/5")
+                vault_health = g.vault.health_report()
+                lines.append(f"\nVault: {vault_health['total_credentials']} credentials")
+                return jsonify({"response": "\n".join(lines), "type": "homelink"})
+
+            elif lowered == "reviews":
+                pending = g.audit.pending_reviews()
+                if pending:
+                    lines = [f"{len(pending)} items need your review:"]
+                    for entry in pending[:10]:
+                        lines.append(f"  [{entry.agent}] {entry.action}")
+                    return jsonify({"response": "\n".join(lines), "type": "reviews"})
+                return jsonify({"response": "No items pending review.", "type": "reviews"})
+
+            elif lowered.startswith("cfo "):
+                from guardian_one.core.command_router import CommandRouter
+                router = CommandRouter(g)
+                result = router.handle(message[4:].strip())
+                text = result.text
+                if result.ai_summary:
+                    text += f"\n\n{result.ai_summary}"
+                return jsonify({"response": text, "type": "cfo"})
+
+            # AI mode — if toggle is on and message doesn't match a command
+            elif use_ai:
+                try:
+                    answer = g.think(message)
+                    return jsonify({"response": answer, "type": "ai"})
+                except Exception as e:
+                    return jsonify({
+                        "response": f"AI engine offline: {e}\n\nTry a deterministic command instead. Type 'help' for options.",
+                        "type": "error",
+                    })
+
+            else:
+                # Try CFO router as fallback
+                from guardian_one.core.command_router import CommandRouter
+                router = CommandRouter(g)
+                result = router.handle(message)
+                if result.intent.name != "help":
+                    text = result.text
+                    if result.ai_summary:
+                        text += f"\n\n{result.ai_summary}"
+                    return jsonify({"response": text, "type": "cfo"})
+                return jsonify({
+                    "response": f"I don't understand '{message}'.\n\n{_chat_help()}",
+                    "type": "help",
+                })
+
+        except Exception as exc:
+            return jsonify({"response": f"Error: {exc}", "type": "error"})
+
+
+    def _chat_help() -> str:
+        return """Guardian One — Commands:
+
+  status              Full system status
+  agents              List all agents
+  agent <name>        Run a specific agent
+  brief               Weekly H.O.M.E. L.I.N.K. brief
+  devices             Device inventory
+  rooms               Room layout
+  scene <name>        Activate scene (movie/work/away/goodnight)
+  event <name>        Fire event (wake/sleep/leave/arrive)
+  audit               Device security audit
+  homelink            Service status
+  reviews             Items needing review
+  cfo <question>      Talk to CFO (finances)
+
+With AI toggle ON, type anything and Guardian thinks with AI.
+With AI toggle OFF, Guardian uses deterministic commands only."""
 
     return app
 

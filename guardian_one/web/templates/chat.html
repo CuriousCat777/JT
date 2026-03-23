@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guardian One</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    background: #111118;
+    border-bottom: 1px solid #2a2a3a;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #4a9eff, #7c3aed);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+  }
+
+  .header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .header-subtitle {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  /* Toggle */
+  .toggle-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toggle-label {
+    font-size: 12px;
+    color: #888;
+  }
+
+  .toggle-label.active {
+    color: #4a9eff;
+    font-weight: 600;
+  }
+
+  .toggle {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-slider {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #2a2a3a;
+    border-radius: 13px;
+    transition: 0.3s;
+  }
+
+  .toggle-slider:before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background: #666;
+    border-radius: 50%;
+    transition: 0.3s;
+  }
+
+  .toggle input:checked + .toggle-slider {
+    background: #1a3a5c;
+  }
+
+  .toggle input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+    background: #4a9eff;
+  }
+
+  .mode-indicator {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+
+  .mode-local {
+    background: #1a2a1a;
+    color: #4ade80;
+    border: 1px solid #2a4a2a;
+  }
+
+  .mode-ai {
+    background: #1a1a3a;
+    color: #818cf8;
+    border: 1px solid #2a2a5a;
+  }
+
+  /* Messages area */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .message {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .message-user {
+    align-self: flex-end;
+    background: #1a2a4a;
+    color: #c0d8f8;
+    border: 1px solid #2a3a5a;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message-guardian {
+    align-self: flex-start;
+    background: #151520;
+    color: #d0d0d8;
+    border: 1px solid #2a2a3a;
+    border-bottom-left-radius: 4px;
+  }
+
+  .message-guardian.type-error {
+    border-color: #5a2a2a;
+    background: #1a1015;
+  }
+
+  .message-guardian.type-ai {
+    border-color: #3a2a5a;
+    background: #12101f;
+  }
+
+  .message-system {
+    align-self: center;
+    background: transparent;
+    color: #555;
+    font-size: 11px;
+    text-align: center;
+    padding: 4px;
+  }
+
+  .message-sender {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    color: #666;
+  }
+
+  .message-user .message-sender { color: #4a9eff; }
+  .message-guardian .message-sender { color: #7c3aed; }
+  .message-guardian.type-ai .message-sender { color: #818cf8; }
+
+  /* Input area */
+  .input-area {
+    background: #111118;
+    border-top: 1px solid #2a2a3a;
+    padding: 16px 20px;
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .input-area input {
+    flex: 1;
+    background: #0a0a12;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .input-area input:focus {
+    border-color: #4a9eff;
+  }
+
+  .input-area input::placeholder {
+    color: #444;
+  }
+
+  .send-btn {
+    background: linear-gradient(135deg, #4a9eff, #7c3aed);
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    color: white;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .send-btn:hover { opacity: 0.85; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Scrollbar */
+  .messages::-webkit-scrollbar { width: 6px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+
+  /* Typing indicator */
+  .typing {
+    display: none;
+    align-self: flex-start;
+    padding: 12px 16px;
+    color: #555;
+    font-size: 12px;
+  }
+
+  .typing.visible { display: block; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+  }
+
+  .typing span {
+    animation: blink 1.4s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">G1</div>
+    <div>
+      <div class="header-title">Guardian One</div>
+      <div class="header-subtitle">Sovereign Coordinator — Jeremy Paulo Salvino Tabernero</div>
+    </div>
+  </div>
+  <div class="toggle-area">
+    <span class="toggle-label active" id="label-local">LOCAL</span>
+    <label class="toggle">
+      <input type="checkbox" id="ai-toggle">
+      <span class="toggle-slider"></span>
+    </label>
+    <span class="toggle-label" id="label-ai">AI</span>
+    <span class="mode-indicator mode-local" id="mode-badge">Deterministic</span>
+  </div>
+</div>
+
+<div class="messages" id="messages">
+  <div class="message message-system">Guardian One online. Type 'help' for commands.</div>
+</div>
+
+<div class="typing" id="typing">
+  Guardian is thinking<span>.</span><span>.</span><span>.</span>
+</div>
+
+<div class="input-area">
+  <input type="text" id="input" placeholder="Talk to Guardian One..." autocomplete="off" autofocus>
+  <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const typingEl = document.getElementById('typing');
+const aiToggle = document.getElementById('ai-toggle');
+const labelLocal = document.getElementById('label-local');
+const labelAI = document.getElementById('label-ai');
+const modeBadge = document.getElementById('mode-badge');
+const sendBtn = document.getElementById('send-btn');
+
+// Toggle handler
+aiToggle.addEventListener('change', () => {
+  const isAI = aiToggle.checked;
+  labelLocal.classList.toggle('active', !isAI);
+  labelAI.classList.toggle('active', isAI);
+  modeBadge.textContent = isAI ? 'AI Engine' : 'Deterministic';
+  modeBadge.className = 'mode-indicator ' + (isAI ? 'mode-ai' : 'mode-local');
+  addSystemMessage(isAI
+    ? 'AI mode ON — Guardian will think with Ollama/Anthropic for open questions.'
+    : 'AI mode OFF — Guardian uses deterministic commands only.'
+  );
+});
+
+// Enter to send
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function addMessage(text, type, sender) {
+  const div = document.createElement('div');
+  div.className = `message message-${type}` + (sender === 'guardian' && type !== 'user' ? ` type-${type}` : '');
+
+  const senderDiv = document.createElement('div');
+  senderDiv.className = 'message-sender';
+  senderDiv.textContent = sender === 'user' ? 'Jeremy' : 'Guardian One';
+
+  const bodyDiv = document.createElement('div');
+  bodyDiv.textContent = text;
+
+  div.appendChild(senderDiv);
+  div.appendChild(bodyDiv);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function addSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'message message-system';
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  inputEl.value = '';
+  addMessage(text, 'user', 'user');
+
+  sendBtn.disabled = true;
+  typingEl.classList.add('visible');
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        use_ai: aiToggle.checked,
+      }),
+    });
+    const data = await resp.json();
+    addMessage(data.response, data.type || 'guardian', 'guardian');
+  } catch (err) {
+    addMessage('Connection error: ' + err.message, 'error', 'guardian');
+  } finally {
+    sendBtn.disabled = false;
+    typingEl.classList.remove('visible');
+    inputEl.focus();
+  }
+}
+
+// Boot message
+fetch('/api/status')
+  .then(r => r.json())
+  .then(data => {
+    const agents = data.agents.map(a => a.name).join(', ');
+    addSystemMessage(`Agents online: ${agents}`);
+  })
+  .catch(() => {});
+</script>
+
+</body>
+</html>
