@@ -25,7 +25,8 @@ guardian_one/
 │   ├── doordash.py             # Meal delivery coordination
 │   ├── gmail_agent.py          # Email & inbox monitoring
 │   ├── web_architect.py        # Website security & n8n deployment
-│   └── website_manager.py      # Per-site build/deploy pipelines
+│   ├── website_manager.py      # Per-site build/deploy pipelines
+│   └── device_agent.py         # IoT/smart home device management & automation
 ├── core/                       # System infrastructure
 │   ├── guardian.py              # Central coordinator
 │   ├── base_agent.py           # Agent contract (BaseAgent ABC)
@@ -45,11 +46,13 @@ guardian_one/
 │   ├── gmail_sync.py           # Gmail API
 │   ├── doordash_sync.py        # DoorDash API
 │   └── privacy_tools.py        # VPN/privacy services
-├── homelink/                   # H.O.M.E. L.I.N.K. service layer
-│   ├── gateway.py              # API gateway (rate limit, TLS, circuit breaker)
-│   ├── vault.py                # Encrypted credential storage
-│   ├── registry.py             # Integration catalog with threat models
-│   └── monitor.py              # System health monitoring
+├── homelink/                   # H.O.M.E. L.I.N.K. — API infrastructure + smart home control
+│   ├── gateway.py              # API gateway (TLS 1.3, rate limiting, circuit breakers)
+│   ├── vault.py                # Encrypted credential storage (Fernet/PBKDF2)
+│   ├── registry.py             # Integration catalog with threat models & rollback plans
+│   ├── monitor.py              # API health monitoring, anomaly detection, weekly briefs
+│   ├── devices.py              # Device inventory, room model, Flipper Zero profiles
+│   └── automations.py          # Rule-based home automation engine (routines & scenes)
 └── utils/                      # Shared utilities
 config/
 ├── guardian_config.yaml        # Agent & system configuration
@@ -88,11 +91,41 @@ All data passes through the content classification gate (no PHI/PII ever leaves)
 5. **On-demand credentials** — Tokens loaded from Vault per-request, never cached
 6. **Agent isolation** — Each agent has defined allowed_resources
 
+## H.O.M.E. L.I.N.K.
+
+Home Operations Management Engine: Linked Infrastructure & Network Kernel.
+Two systems working as one:
+
+### API Infrastructure
+Every external API call from any agent routes through the Gateway with TLS enforcement,
+rate limiting, circuit breakers, and full audit logging. Credentials live in the Vault
+(Fernet-encrypted, PBKDF2-derived keys). Each integration has a threat model and
+rollback procedure in the Registry. The Monitor detects anomalies and generates
+weekly security briefs.
+
+### Smart Home Control
+The DeviceAgent manages Jeremy's physical devices (cameras, smart plugs, lights,
+blinds, Samsung TV, vehicle, Flipper Zero) via the device inventory in `devices.py`.
+Automation rules in `automations.py` drive schedule-based routines (wake/sleep/leave/arrive),
+occupancy-triggered actions, solar events, and named scenes (Movie Mode, Focus Mode,
+Away Mode, Goodnight). All device actions are audited and reversible.
+
+### Managed Device Ecosystem
+- TP-Link Kasa/Tapo smart plugs (local LAN API)
+- Philips Hue lights (Zigbee via Hue Bridge)
+- Govee lights (LAN UDP or cloud API)
+- Ryse SmartShade blinds (BLE/WiFi)
+- Samsung The Frame 65" (IoT VLAN isolated, hardened)
+- Security cameras (RTSP/ONVIF)
+- Flipper Zero (sub-GHz, NFC, IR, BLE security tool)
+- Connected vehicle (OBD-II + manufacturer API)
+
 ## Security Architecture
 
-- **Vault**: AES-256-GCM encrypted credential storage with per-credential scoping
-- **Gateway**: TLS enforcement, rate limiting, circuit breakers for all external calls
+- **Vault**: Fernet-encrypted credential storage with PBKDF2 key derivation, per-credential scoping, rotation tracking
+- **Gateway**: TLS 1.3 enforcement, rate limiting, circuit breakers, retry with backoff for all external calls
 - **Registry**: Every integration has a threat model (top 5 risks) and rollback procedure
+- **Device Security**: Network segmentation (IoT VLAN), firmware tracking, UPnP enforcement, security audits
 - **Content Classification**: Regex-based PHI/PII scanner blocks sensitive data from sync
 - **Audit Log**: Append-only, severity-tagged, immutable records
 

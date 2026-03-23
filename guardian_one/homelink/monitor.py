@@ -1,13 +1,14 @@
 """Monitoring & Weekly Brief for H.O.M.E. L.I.N.K.
 
-Tracks API health, detects anomalies, and generates structured reports
-for Jeremy's review.
+Unified observability for both API infrastructure and smart home systems.
 
 Provides:
-    - Real-time service health dashboard
-    - Anomaly detection (latency spikes, error bursts)
-    - Risk scoring (1-5 scale)
-    - Weekly brief generation
+    - Real-time service health dashboard (API integrations)
+    - Device inventory health and security audit (smart home)
+    - Automation engine status and execution history
+    - Anomaly detection (latency spikes, error bursts, device offline)
+    - Risk scoring (1-5 scale, combining API + device risks)
+    - Weekly brief generation covering the full H.O.M.E. L.I.N.K. picture
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ from typing import Any
 from guardian_one.homelink.gateway import Gateway, RequestRecord
 from guardian_one.homelink.vault import Vault
 from guardian_one.homelink.registry import IntegrationRegistry
+from guardian_one.homelink.devices import DeviceRegistry, DeviceStatus
+from guardian_one.homelink.automations import AutomationEngine
 
 
 @dataclass
@@ -52,10 +55,14 @@ class Monitor:
         gateway: Gateway,
         vault: Vault,
         registry: IntegrationRegistry,
+        device_registry: DeviceRegistry | None = None,
+        automation_engine: AutomationEngine | None = None,
     ) -> None:
         self._gateway = gateway
         self._vault = vault
         self._registry = registry
+        self._devices = device_registry
+        self._automations = automation_engine
         self._anomalies: list[AnomalyAlert] = []
 
     # ------------------------------------------------------------------
@@ -158,7 +165,15 @@ class Monitor:
     # ------------------------------------------------------------------
 
     def weekly_brief(self) -> dict[str, Any]:
-        """Generate the structured weekly status report."""
+        """Generate the structured weekly status report.
+
+        Covers the full H.O.M.E. L.I.N.K. picture:
+        - API integration health (gateway, circuit states, latency)
+        - Vault credential status (rotation, expiry)
+        - Device inventory health (online/offline, security audit)
+        - Automation engine status (rules, scenes, execution history)
+        - Detected anomalies across all systems
+        """
         health = self.all_health()
         vault_health = self._vault.health_report()
         anomalies = self.detect_anomalies()
@@ -177,11 +192,44 @@ class Monitor:
                 "auth_method": record.auth_method if record else "unknown",
             })
 
+        # Device inventory health
+        device_summary: dict[str, Any] = {"registered": False}
+        if self._devices:
+            audit = self._devices.security_audit()
+            device_summary = {
+                "registered": True,
+                "total_devices": audit["total_devices"],
+                "online": audit.get("online", 0),
+                "offline": audit.get("offline", 0),
+                "security_issues": audit.get("issue_count", 0),
+                "device_risk_score": audit.get("risk_score", 0),
+                "rooms": len(self._devices.all_rooms()),
+                "flipper_profiles": len(self._devices.all_flipper_profiles()),
+                "categories": self._devices.device_count_by_category(),
+            }
+            # Factor device risk into overall risk
+            overall_risk = max(overall_risk, audit.get("risk_score", 1))
+
+        # Automation engine status
+        automation_summary: dict[str, Any] = {"registered": False}
+        if self._automations:
+            auto_sum = self._automations.summary()
+            automation_summary = {
+                "registered": True,
+                "total_rules": auto_sum["total_rules"],
+                "enabled_rules": auto_sum["enabled_rules"],
+                "total_scenes": auto_sum["total_scenes"],
+                "total_executions": auto_sum["total_executions"],
+                "rules_by_trigger": auto_sum["rules_by_trigger"],
+            }
+
         return {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "overall_risk_score": overall_risk,
             "active_integrations": integrations,
             "vault": vault_health,
+            "devices": device_summary,
+            "automations": automation_summary,
             "anomalies": [
                 {
                     "service": a.service,
@@ -200,44 +248,85 @@ class Monitor:
         }
 
     def weekly_brief_text(self) -> str:
-        """Human-readable weekly brief."""
+        """Human-readable weekly brief covering full H.O.M.E. L.I.N.K. status."""
         brief = self.weekly_brief()
         lines = [
             "=" * 60,
-            "  H.O.M.E. L.I.N.K. — Weekly Security & API Brief",
+            "  H.O.M.E. L.I.N.K. — Weekly Status Brief",
+            "  Home Operations Management Engine",
             f"  Generated: {brief['generated_at']}",
             f"  Overall Risk Score: {brief['overall_risk_score']}/5",
             "=" * 60,
             "",
-            "ACTIVE INTEGRATIONS:",
         ]
 
-        for svc in brief["active_integrations"]:
-            risk_bar = "#" * svc["risk_score"] + "." * (5 - svc["risk_score"])
-            lines.append(
-                f"  [{risk_bar}] {svc['service']:20s} | "
-                f"circuit={svc['circuit_state']:10s} | "
-                f"success={svc['success_rate']:.0%} | "
-                f"latency={svc['avg_latency_ms']:.0f}ms"
-            )
+        # --- API Integrations ---
+        lines.append("API INTEGRATIONS:")
+        if brief["active_integrations"]:
+            for svc in brief["active_integrations"]:
+                risk_bar = "#" * svc["risk_score"] + "." * (5 - svc["risk_score"])
+                lines.append(
+                    f"  [{risk_bar}] {svc['service']:20s} | "
+                    f"circuit={svc['circuit_state']:10s} | "
+                    f"success={svc['success_rate']:.0%} | "
+                    f"latency={svc['avg_latency_ms']:.0f}ms"
+                )
+        else:
+            lines.append("  No integrations registered.")
 
+        # --- Vault ---
         lines.append("")
         lines.append("VAULT STATUS:")
         v = brief["vault"]
         lines.append(f"  Total credentials: {v['total_credentials']}")
         lines.append(f"  Due for rotation:  {v['due_for_rotation']}")
         lines.append(f"  Expired:           {v['expired']}")
-
         if brief["credentials_due_rotation"]:
             lines.append(f"  Rotate now: {', '.join(brief['credentials_due_rotation'])}")
 
+        # --- Devices ---
+        lines.append("")
+        lines.append("DEVICE INVENTORY:")
+        dev = brief["devices"]
+        if dev.get("registered"):
+            lines.append(f"  Total devices:     {dev['total_devices']}")
+            lines.append(f"  Online:            {dev['online']}")
+            lines.append(f"  Offline:           {dev['offline']}")
+            lines.append(f"  Security issues:   {dev['security_issues']}")
+            lines.append(f"  Device risk score: {dev['device_risk_score']}/5")
+            lines.append(f"  Rooms mapped:      {dev['rooms']}")
+            lines.append(f"  Flipper profiles:  {dev['flipper_profiles']}")
+            if dev.get("categories"):
+                cats = ", ".join(f"{k}={v}" for k, v in dev["categories"].items())
+                lines.append(f"  By category:       {cats}")
+        else:
+            lines.append("  Device registry not connected.")
+
+        # --- Automations ---
+        lines.append("")
+        lines.append("AUTOMATION ENGINE:")
+        auto = brief["automations"]
+        if auto.get("registered"):
+            lines.append(f"  Total rules:       {auto['total_rules']}")
+            lines.append(f"  Enabled rules:     {auto['enabled_rules']}")
+            lines.append(f"  Total scenes:      {auto['total_scenes']}")
+            lines.append(f"  Total executions:  {auto['total_executions']}")
+            if auto.get("rules_by_trigger"):
+                triggers = ", ".join(
+                    f"{k}={v}" for k, v in auto["rules_by_trigger"].items() if v > 0
+                )
+                if triggers:
+                    lines.append(f"  By trigger:        {triggers}")
+        else:
+            lines.append("  Automation engine not connected.")
+
+        # --- Anomalies ---
         if brief["anomalies"]:
             lines.append("")
             lines.append("ANOMALIES DETECTED:")
             for a in brief["anomalies"]:
                 lines.append(f"  [{a['severity'].upper():8s}] {a['service']}: {a['description']}")
-
-        if not brief["anomalies"]:
+        else:
             lines.append("")
             lines.append("No anomalies detected.")
 
