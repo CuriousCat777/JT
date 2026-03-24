@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Data (mounted as volumes, not baked into image)
+data/
+logs/
+
+# Docs
+*.md
+!CLAUDE.md
+LICENSE
+
+# CI
+.github
+
+# Misc
+.DS_Store
+Thumbs.db
