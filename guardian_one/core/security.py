@@ -7,13 +7,14 @@ import hmac
 import json
 import os
 import secrets
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 import base64
@@ -36,6 +37,10 @@ class AccessPolicy:
     allowed_resources: list[str] = field(default_factory=list)
     denied_resources: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SecretStoreError(Exception):
+    """Raised on secret store access failures."""
 
 
 class SecretStore:
@@ -61,6 +66,7 @@ class SecretStore:
     def __init__(self, store_path: Path, passphrase: str) -> None:
         self._store_path = store_path
         self._data: dict[str, str] = {}
+        self._lock = threading.Lock()
 
         if self._store_path.exists():
             raw = self._store_path.read_bytes()
@@ -87,13 +93,16 @@ class SecretStore:
         return Fernet(key)
 
     def _load(self) -> None:
-        raw = self._store_path.read_bytes()
-        if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
-            ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
-        else:
-            ciphertext = raw
-        plaintext = self._fernet.decrypt(ciphertext)
-        self._data = json.loads(plaintext)
+        try:
+            raw = self._store_path.read_bytes()
+            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
+            else:
+                ciphertext = raw
+            plaintext = self._fernet.decrypt(ciphertext)
+            self._data = json.loads(plaintext)
+        except (InvalidToken, json.JSONDecodeError) as exc:
+            raise SecretStoreError(f"Failed to unlock secret store: {exc}") from exc
 
     def _save(self) -> None:
         plaintext = json.dumps(self._data).encode()
@@ -102,21 +111,25 @@ class SecretStore:
         self._store_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
 
     def get(self, key: str) -> str | None:
-        return self._data.get(key)
+        with self._lock:
+            return self._data.get(key)
 
     def set(self, key: str, value: str) -> None:
-        self._data[key] = value
-        self._save()
+        with self._lock:
+            self._data[key] = value
+            self._save()
 
     def delete(self, key: str) -> bool:
-        if key in self._data:
-            del self._data[key]
-            self._save()
-            return True
-        return False
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+                self._save()
+                return True
+            return False
 
     def keys(self) -> list[str]:
-        return list(self._data.keys())
+        with self._lock:
+            return list(self._data.keys())
 
 
 class AccessController:

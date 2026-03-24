@@ -24,6 +24,7 @@ Metrics per agent:
 from __future__ import annotations
 
 import json
+import os
 import signal
 import threading
 import time
@@ -326,8 +327,11 @@ class PerformanceEvaluator:
 
     def _persist_cycle(self, cycle: EvaluationCycle) -> None:
         """Append evaluation to JSONL file for history tracking."""
-        with open(self._eval_file, "a") as f:
-            f.write(json.dumps(cycle.to_dict()) + "\n")
+        fd = os.open(self._eval_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, (json.dumps(cycle.to_dict()) + "\n").encode())
+        finally:
+            os.close(fd)
 
     # ------------------------------------------------------------------
     # Display

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import zoneinfo
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,8 +55,12 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
     raw: dict[str, Any] = {}
 
     if config_path.exists():
-        with open(config_path) as f:
-            raw = yaml.safe_load(f) or {}
+        try:
+            with open(config_path) as f:
+                raw = yaml.safe_load(f) or {}
+        except yaml.YAMLError as exc:
+            logger.error("Failed to parse config file %s: %s", config_path, exc)
+            raw = {}
 
     security_raw = raw.get("security", {})
     security = SecurityConfig(
@@ -65,13 +73,28 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
 
     agents: dict[str, AgentConfig] = {}
     for name, agent_raw in raw.get("agents", {}).items():
+        interval = agent_raw.get("schedule_interval_minutes", 60)
+        if not isinstance(interval, int) or interval < 1:
+            logger.warning(
+                "Agent '%s' has invalid schedule_interval_minutes=%r, defaulting to 60",
+                name, interval,
+            )
+            interval = 60
         agents[name] = AgentConfig(
             name=name,
             enabled=agent_raw.get("enabled", True),
-            schedule_interval_minutes=agent_raw.get("schedule_interval_minutes", 60),
+            schedule_interval_minutes=interval,
             allowed_resources=agent_raw.get("allowed_resources", []),
             custom=agent_raw.get("custom", {}),
         )
+
+    # Validate timezone
+    tz_name = raw.get("timezone", "America/Chicago")
+    try:
+        zoneinfo.ZoneInfo(tz_name)
+    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+        logger.error("Invalid timezone '%s', falling back to America/Chicago", tz_name)
+        tz_name = "America/Chicago"
 
     return GuardianConfig(
         owner=raw.get("owner", "Jeremy Paulo Salvino Tabernero"),
@@ -80,5 +103,5 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
         data_dir=os.getenv("GUARDIAN_DATA_DIR", raw.get("data_dir", "data")),
         log_dir=os.getenv("GUARDIAN_LOG_DIR", raw.get("log_dir", "logs")),
         daily_summary_hour=raw.get("daily_summary_hour", 7),
-        timezone=raw.get("timezone", "America/Chicago"),
+        timezone=tz_name,
     )

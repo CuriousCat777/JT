@@ -70,6 +70,8 @@ class AuditLog:
     ) -> None:
         self._log_dir = log_dir or Path("logs")
         self._log_dir.mkdir(parents=True, exist_ok=True)
+        # Restrict directory access to owner only
+        os.chmod(self._log_dir, 0o700)
         self._log_file = self._log_dir / "audit.jsonl"
         self._lock = threading.Lock()
         self._max_memory = max_memory_entries
@@ -97,8 +99,12 @@ class AuditLog:
         with self._lock:
             self._entries.append(entry)
             self._total_recorded += 1
-            with open(self._log_file, "a") as f:
-                f.write(json.dumps(entry.to_dict()) + "\n")
+            # Open with restrictive permissions (owner read/write only)
+            fd = os.open(self._log_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                os.write(fd, (json.dumps(entry.to_dict()) + "\n").encode())
+            finally:
+                os.close(fd)
             self._maybe_rotate()
         return entry
 

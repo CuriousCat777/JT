@@ -98,8 +98,16 @@ class Mediator:
         return conflicts
 
     def _resolve_time_conflict(self, a: Proposal, b: Proposal) -> ConflictRecord:
-        """Priority: Chronos (schedule) > CFO (payment) > Archivist (backup)."""
-        priority = {"chronos": 3, "cfo": 2, "archivist": 1}
+        """Priority: Chronos (schedule) > CFO (payment) > others > Archivist (backup)."""
+        priority = {
+            "chronos": 5,
+            "cfo": 4,
+            "gmail_agent": 3,
+            "web_architect": 3,
+            "doordash": 2,
+            "device_agent": 2,
+            "archivist": 1,
+        }
         pa = priority.get(a.agent.lower(), 0)
         pb = priority.get(b.agent.lower(), 0)
 
