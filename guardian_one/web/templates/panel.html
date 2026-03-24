@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Guardian One — Command Center</title>
+<!-- PWA -->
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#2c5282">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Guardian One">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="Guardian One">
 <style>
 :root {
   /* Refined light palette — warm ivory & slate */
@@ -77,6 +86,21 @@ body {
   z-index: 10;
 }
 .header-left { display: flex; align-items: center; gap: 16px; }
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.hamburger:hover { background: var(--bg-primary); }
 .logo {
   font-size: 14px;
   font-weight: 600;
@@ -196,9 +220,36 @@ body {
 }
 @media (max-width: 768px) {
   .shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  .sidebar {
+    display: none;
+    position: fixed;
+    top: 64px;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 100;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.mobile-open { display: block; }
+  .mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    top: 64px;
+    background: rgba(0,0,0,0.3);
+    z-index: 99;
+  }
+  .mobile-overlay.active { display: block; }
+  .hamburger { display: flex !important; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .main { padding: 16px; }
+  .header { padding: 0 16px; }
+  /* PWA standalone: extra top padding for notch */
+  @media (display-mode: standalone) {
+    .header { padding-top: env(safe-area-inset-top); height: calc(64px + env(safe-area-inset-top)); }
+    .sidebar { top: calc(64px + env(safe-area-inset-top)); }
+    .mobile-overlay { top: calc(64px + env(safe-area-inset-top)); }
+  }
 }
 
 /* Stat cards */
@@ -616,6 +667,7 @@ tr:hover td { background: var(--bg-primary); }
   <!-- Header -->
   <header class="header">
     <div class="header-left">
+      <button class="hamburger" onclick="toggleMobileNav()" aria-label="Menu">&#9776;</button>
       <div class="logo">GUARDIAN ONE <span>Command Center</span></div>
     </div>
     <div class="header-status">
@@ -625,8 +677,11 @@ tr:hover td { background: var(--bg-primary); }
     </div>
   </header>
 
+  <!-- Mobile overlay -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileNav()"></div>
+
   <!-- Sidebar -->
-  <nav class="sidebar">
+  <nav class="sidebar" id="sidebar">
     <div class="nav-section">
       <div class="nav-label">Daily</div>
       <div class="nav-item active" data-panel="morning">
@@ -1263,6 +1318,25 @@ tr:hover td { background: var(--bg-primary); }
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+// ---------------------------------------------------------------------------
+// Mobile navigation
+// ---------------------------------------------------------------------------
+function toggleMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobileOverlay');
+  sidebar.classList.toggle('mobile-open');
+  overlay.classList.toggle('active');
+}
+// Close mobile nav when a nav item is clicked
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.nav-item') && window.innerWidth <= 768) {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('mobileOverlay');
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('active');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Utils
 // ---------------------------------------------------------------------------
@@ -2182,5 +2256,15 @@ setInterval(() => {
 }, 30000);
 </script>
 
+<!-- PWA Service Worker -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw.js')
+      .then(reg => console.log('Guardian One SW registered:', reg.scope))
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+</script>
 </body>
 </html>
