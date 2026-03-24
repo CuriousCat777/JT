@@ -1,12 +1,12 @@
 # Guardian One — Docker Compose
-# Services: guardian (daemon + web panel), ollama (local AI)
+# Services: guardian (daemon + web panel), ollama (local AI, optional)
 #
 # Usage:
-#   docker compose up -d              # Start everything
-#   docker compose up -d guardian      # Guardian only (Ollama already running)
-#   docker compose logs -f guardian    # Follow Guardian logs
+#   docker compose up -d                          # Guardian only (cloud AI)
+#   docker compose --profile ollama up -d          # Guardian + local Ollama
+#   docker compose logs -f guardian                # Follow Guardian logs
 #   docker compose exec guardian python main.py --summary   # Run CLI commands
-#   docker compose down                # Stop everything
+#   docker compose down                            # Stop everything
 
 services:
   # ── Guardian One Daemon ────────────────────────────────────────
@@ -27,10 +27,7 @@ services:
       - .env
     environment:
       - GUARDIAN_MASTER_PASSPHRASE=${GUARDIAN_MASTER_PASSPHRASE:-guardian-one-default-dev-passphrase}
-      - OLLAMA_BASE_URL=http://ollama:11434
-    depends_on:
-      ollama:
-        condition: service_started
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
       interval: 30s
@@ -60,11 +57,13 @@ services:
   #   networks:
   #     - guardian-net
 
-  # ── Ollama (Local AI Engine) ───────────────────────────────────
+  # ── Ollama (Local AI Engine) — opt-in with: --profile ollama ───
   ollama:
     image: ollama/ollama:latest
     container_name: guardian-ollama
     restart: unless-stopped
+    profiles:
+      - ollama
     ports:
       - "11434:11434"
     volumes:

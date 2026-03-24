@@ -171,27 +171,28 @@ python main.py --sandbox               # Sandbox deployment
 
 ## Docker Deployment
 
-Guardian One runs in Docker with Ollama as a sidecar service.
+Guardian One runs in Docker. Ollama is optional (add `--with-ollama` for local AI).
 
 ```bash
-# Quick start
-./scripts/docker-start.sh up          # Start Guardian + Ollama
-./scripts/docker-start.sh pull-model  # Pull llama3 into Ollama
-./scripts/docker-start.sh status      # Check health
-./scripts/docker-start.sh logs        # Follow Guardian logs
-./scripts/docker-start.sh cli --summary  # Run any CLI command
-./scripts/docker-start.sh down        # Stop everything
+# Quick start (cloud AI only)
+./scripts/docker-start.sh up                  # Guardian only
+./scripts/docker-start.sh up --with-ollama    # Guardian + local Ollama
+./scripts/docker-start.sh pull-model          # Pull llama3 into Ollama
+./scripts/docker-start.sh status              # Check health
+./scripts/docker-start.sh logs                # Follow Guardian logs
+./scripts/docker-start.sh cli --summary       # Run any CLI command
+./scripts/docker-start.sh down                # Stop everything
 
 # Or use docker compose directly
-docker compose up -d --build
-docker compose exec guardian python main.py --summary
+docker compose up -d --build                         # Guardian only
+docker compose --profile ollama up -d --build        # With Ollama
 ```
 
 ### Services
 | Service | Container | Port | Purpose |
 |---------|-----------|------|---------|
 | guardian | guardian-one | 5100, 5200 | Daemon + web panel + health API |
-| ollama | guardian-ollama | 11434 | Local AI engine |
+| ollama | guardian-ollama | 11434 | Local AI engine (opt-in via `--profile ollama`) |
 
 ### Volumes
 - `guardian-one-data` — Vault, ledger, daemon state (persistent)

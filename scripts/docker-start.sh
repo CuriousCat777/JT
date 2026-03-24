@@ -1,31 +1,48 @@
 #!/usr/bin/env bash
 # Guardian One — Docker Quick Start
-# Usage: ./scripts/docker-start.sh [up|down|logs|status|shell|pull-model]
+# Usage: ./scripts/docker-start.sh [up|down|logs|status|shell|pull-model|cli] [--with-ollama]
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 CMD="${1:-up}"
+PROFILE_ARGS=""
+
+# Check for --with-ollama flag anywhere in args
+for arg in "$@"; do
+  if [[ "$arg" == "--with-ollama" ]]; then
+    PROFILE_ARGS="--profile ollama"
+    export OLLAMA_BASE_URL="http://ollama:11434"
+  fi
+done
 
 case "$CMD" in
   up)
     echo "Starting Guardian One..."
-    docker compose up -d --build
+    if [[ -n "$PROFILE_ARGS" ]]; then
+      echo "  (with local Ollama)"
+    else
+      echo "  (cloud AI only — add --with-ollama for local AI)"
+    fi
+    docker compose $PROFILE_ARGS up -d --build
     echo ""
     echo "  Guardian One is starting."
     echo "  Web Panel:   http://localhost:5100"
     echo "  Chat:        http://localhost:5100/chat"
     echo "  Health API:  http://localhost:5200/health"
-    echo "  Ollama:      http://localhost:11434"
+    if [[ -n "$PROFILE_ARGS" ]]; then
+      echo "  Ollama:      http://localhost:11434"
+      echo ""
+      echo "  Pull AI model:  ./scripts/docker-start.sh pull-model"
+    fi
     echo ""
-    echo "  Pull AI model:  ./scripts/docker-start.sh pull-model"
     echo "  View logs:      ./scripts/docker-start.sh logs"
     ;;
 
   down)
     echo "Stopping Guardian One..."
-    docker compose down
+    docker compose $PROFILE_ARGS down
     ;;
 
   logs)
@@ -34,7 +51,7 @@ case "$CMD" in
 
   status)
     echo "=== Container Status ==="
-    docker compose ps
+    docker compose $PROFILE_ARGS ps
     echo ""
     echo "=== Guardian Health ==="
     curl -s http://localhost:5200/health 2>/dev/null | python3 -m json.tool || echo "Guardian not responding"
@@ -49,7 +66,7 @@ if models:
         print(f\"  {m['name']}\")
 else:
     print('  No models pulled. Run: ./scripts/docker-start.sh pull-model')
-" 2>/dev/null || echo "  Ollama not responding"
+" 2>/dev/null || echo "  Ollama not running (start with: ./scripts/docker-start.sh up --with-ollama)"
     ;;
 
   shell)
@@ -65,13 +82,18 @@ else:
 
   cli)
     shift
-    docker compose exec guardian python main.py "$@"
+    # Remove --with-ollama from args passed to CLI
+    CLI_ARGS=()
+    for arg in "$@"; do
+      [[ "$arg" != "--with-ollama" ]] && CLI_ARGS+=("$arg")
+    done
+    docker compose exec guardian python main.py "${CLI_ARGS[@]}"
     ;;
 
   *)
-    echo "Usage: $0 [up|down|logs|status|shell|pull-model|cli]"
+    echo "Usage: $0 [up|down|logs|status|shell|pull-model|cli] [--with-ollama]"
     echo ""
-    echo "  up          Start Guardian One + Ollama"
+    echo "  up          Start Guardian One (cloud AI by default)"
     echo "  down        Stop everything"
     echo "  logs        Follow Guardian logs"
     echo "  status      Show container + health status"
@@ -79,8 +101,12 @@ else:
     echo "  pull-model  Pull Ollama model (default: llama3)"
     echo "  cli ...     Run any Guardian CLI command"
     echo ""
+    echo "Options:"
+    echo "  --with-ollama   Also start local Ollama AI engine"
+    echo ""
     echo "Examples:"
-    echo "  $0 up"
+    echo "  $0 up                        # Guardian only"
+    echo "  $0 up --with-ollama          # Guardian + Ollama"
     echo "  $0 pull-model llama3"
     echo "  $0 cli --summary"
     echo "  $0 cli --dashboard"
