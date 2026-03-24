@@ -4,6 +4,38 @@
 **Created:** 2026-03-24
 **Purpose:** Complete instructions for building the next-generation architecture on top of the existing Guardian One platform.
 
+**Notion HQ:** Guardian One HQ page contains ADR-001, System Design, Production Roadmap, Agent Registry, Integration Health, and Deliverables databases. The System Design doc defines a 4-layer architecture (H.O.M.E. L.I.N.K. → Agents → Orchestration → Control Plane).
+
+---
+
+## Operational Reality (from Daily Handoff 2026-03-23)
+
+Before starting any phase, understand what's **actually working vs. shell**:
+
+### Working Now
+- Daemon boots, runs 7 agents on intervals, logs everything
+- Ollama-powered chat interface with live financial data context
+- CFO has real ledger data from Rocket Money CSV import
+- Device registry with full 56-device inventory
+- Audit log captures every agent action (11,558+ entries)
+- Health monitor checks infrastructure every 60 seconds
+- Encrypted vault for credential storage (dev passphrase)
+
+### Not Working Yet (needs live API connections)
+- Google Calendar sync (OAuth not completed)
+- Gmail inbox monitoring (OAuth not completed)
+- Plaid/Empower live financial sync (tokens not exchanged)
+- DoorDash API (not connected)
+- n8n workflow automation (not configured)
+- **Agents do NOT call `self.think()` during run cycles** — AI reasoning exists but is unused in scheduled runs
+
+### Pre-Phase Priorities (from Notion roadmap)
+These are quick wins that should be wired before or alongside Phase 1:
+1. **Wire agents to call `self.think()`** — the AI engine exists but agents don't use it during scheduled runs
+2. **Add state diff detection** — agents should compare current vs. previous run, only report changes
+3. **Production Vault passphrase** — replace dev passphrase before any real credentials go in
+4. **Move CFO to SQLite** — enables trend analysis, not just snapshot reporting
+
 ---
 
 ## Current State (What Already Exists)
@@ -100,7 +132,7 @@ Before building anything, understand what's already production-ready:
 
 ## Phase 1: Event Bus (Foundation Layer)
 
-**Goal:** Replace direct `run_agent()` calls with a publish/subscribe event system so agents can react to each other's outputs without tight coupling.
+**Goal:** Replace direct `run_agent()` calls with a publish/subscribe event system so agents can react to each other's outputs without tight coupling. Per the Notion System Design: "Add an Event Bus (in-process pub/sub, upgradeable to Redis Streams) so agents can emit typed events and other agents can subscribe to relevant topics."
 
 ### What to Build
 
@@ -145,6 +177,14 @@ EventType constants (enum or string constants):
 3. **Add `self.emit(event_type, payload)` convenience method to `BaseAgent`** — wraps `self._event_bus.publish()`
 4. **Wire into `run_agent()`** — after each agent run, auto-publish `AGENT_RUN_COMPLETE` with report data
 5. **Wire into daemon** — daemon subscribes to `AGENT_ERROR` for auto-pause logic
+6. **Gateway circuit events** — Gateway emits events on circuit state changes (per System Design Section 3.1)
+7. **Monitor anomaly events** — Monitor emits anomaly events via bus instead of just logging (per System Design Section 3.4)
+
+### OneOS System Design Additions (from Notion)
+The System Design doc specifies these Event Bus-adjacent upgrades to existing components:
+- **Gateway**: Event emission on circuit state changes, request priority queuing, per-agent request budgets
+- **Monitor**: Continuous daemon-driven monitoring, anomaly-triggered agent alerts via Event Bus, historical trend storage
+- **Registry**: Plugin-contributed integrations, dependency graph, automatic health degradation notices
 
 ### Constraints
 - Thread-safe (use `threading.Lock`)
@@ -276,6 +316,14 @@ class ExampleAgent(BaseAgent):
 
 **Goal:** Enable Guardian One to run across multiple machines (current laptop + ROG X 64GB) with coordinated agent execution, shared state, and leader election.
 
+### Notion System Design Constraints (Section 3.5)
+The System Design doc is very specific about the Cloud Relay:
+- **No PII, no credentials, no decision data.** The relay handles ONLY: agent heartbeats, wake signals, and encrypted state sync blobs.
+- **Stateless.** No persistent storage on the relay. It is a message pass-through.
+- **Authenticated.** Device-to-relay communication uses mTLS with device certificates stored in Vault.
+- **Minimal.** Target implementation: <500 lines of Python (FastAPI or aiohttp).
+- **Hosted on existing Cloud VPS** (same infra as jtmdai.com).
+
 ### What to Build
 
 **New file: `guardian_one/homelink/relay.py`**
@@ -334,8 +382,9 @@ relay:
 
 ### Security
 - All relay traffic TLS-encrypted
-- Peer authentication via shared secret (stored in Vault)
+- Peer authentication via mTLS with device certificates (stored in Vault)
 - Relay messages audit-logged
+- Vault additions for Phase 4: daemon-mode auto-unlock (OS keychain), credential lease model (time-limited decrypt tokens), multi-device Vault sync (encrypted blob replication, never decrypted in transit)
 
 ### Tests
 - `tests/test_relay.py` — peer connection, heartbeat, leader election, state sync
