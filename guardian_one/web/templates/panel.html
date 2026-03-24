@@ -13,35 +13,36 @@
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="Guardian One">
+<link rel="stylesheet" href="/static/tokens.css">
 <style>
 :root {
-  /* Refined light palette — warm ivory & slate */
-  --bg-primary: #f8f7f4;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --bg-card-hover: #f3f1ee;
-  --border: #e8e4de;
-  --border-subtle: #f0ede8;
-  --text-primary: #1a1a1a;
-  --text-secondary: #5c5a56;
-  --text-muted: #9b9690;
-  --accent: #2c5282;
-  --accent-light: #3b6ba5;
-  --accent-glow: rgba(44, 82, 130, 0.08);
-  --green: #2f855a;
-  --green-dim: rgba(47, 133, 90, 0.08);
-  --yellow: #b7791f;
-  --yellow-dim: rgba(183, 121, 31, 0.08);
-  --red: #c53030;
-  --red-dim: rgba(197, 48, 48, 0.08);
-  --orange: #c05621;
-  --purple: #805ad5;
-  --cyan: #2b6cb0;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  /* Dark Sentinel Cartography — aliased from shared tokens */
+  --bg-primary: var(--g1-bg-base);
+  --bg-secondary: var(--g1-bg-surface);
+  --bg-card: var(--g1-bg-surface);
+  --bg-card-hover: var(--g1-bg-raised);
+  --border: var(--g1-border);
+  --border-subtle: var(--g1-border-subtle);
+  --text-primary: var(--g1-text-primary);
+  --text-secondary: var(--g1-text-secondary);
+  --text-muted: var(--g1-text-muted);
+  --accent: var(--g1-accent);
+  --accent-light: var(--g1-accent-hover);
+  --accent-glow: var(--g1-accent-dim);
+  --green: var(--g1-green);
+  --green-dim: var(--g1-green-dim);
+  --yellow: var(--g1-yellow);
+  --yellow-dim: var(--g1-yellow-dim);
+  --red: var(--g1-red);
+  --red-dim: var(--g1-red-dim);
+  --orange: var(--g1-orange);
+  --purple: var(--g1-purple);
+  --cyan: var(--g1-cyan);
+  --shadow-sm: var(--g1-shadow-sm);
+  --shadow-md: var(--g1-shadow-md);
+  --shadow-lg: var(--g1-shadow-lg);
+  --font: var(--g1-font);
+  --font-mono: var(--g1-font-mono);
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -69,8 +70,8 @@ body {
 .shell {
   display: grid;
   grid-template-columns: 240px 1fr;
-  grid-template-rows: 64px 1fr;
-  min-height: 100vh;
+  grid-template-rows: 56px 1fr;
+  min-height: calc(100vh - 48px);  /* subtract topnav height */
 }
 
 /* Header */
@@ -182,7 +183,7 @@ body {
 .main {
   padding: 32px;
   overflow-y: auto;
-  max-height: calc(100vh - 64px);
+  max-height: calc(100vh - 48px - 56px);  /* topnav + header */
   background: var(--bg-primary);
 }
 
@@ -607,7 +608,7 @@ tr:hover td { background: var(--bg-primary); }
   position: absolute;
   bottom: 16px;
   left: 16px;
-  background: rgba(255,255,255,0.95);
+  background: rgba(17, 17, 24, 0.92);
   backdrop-filter: blur(8px);
   border-radius: 10px;
   padding: 12px 16px;
@@ -662,6 +663,22 @@ tr:hover td { background: var(--bg-primary); }
 </style>
 </head>
 <body>
+
+<!-- Global Navigation -->
+<nav class="g1-topnav" aria-label="Global navigation">
+  <a href="/" class="g1-topnav__brand" aria-label="Guardian One home">
+    <div class="g1-topnav__logo" aria-hidden="true">G1</div>
+    <span class="g1-topnav__title">Guardian One</span>
+  </a>
+  <ul class="g1-topnav__links" role="menubar">
+    <li role="none"><a role="menuitem" href="/" class="g1-topnav__link" aria-current="page">Command Center</a></li>
+    <li role="none"><a role="menuitem" href="/chat" class="g1-topnav__link">Chat</a></li>
+  </ul>
+  <div class="g1-topnav__status">
+    <div class="g1-topnav__pulse" aria-label="System online"></div>
+    <span>Online</span>
+  </div>
+</nav>
 
 <div class="shell">
   <!-- Header -->

@@ -3,30 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guardian One</title>
+<title>Guardian One — Chat</title>
 <!-- PWA -->
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#2c5282">
+<meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Guardian One">
 <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/tokens.css">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
   body {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-    background: #0a0a0f;
-    color: #e0e0e0;
+    font-family: var(--g1-font-mono);
     height: 100vh;
     display: flex;
     flex-direction: column;
   }
 
-  /* Header */
-  .header {
-    background: #111118;
-    border-bottom: 1px solid #2a2a3a;
+  /* Chat header (below topnav) */
+  .chat-header {
+    background: var(--g1-bg-surface);
+    border-bottom: 1px solid var(--g1-border);
     padding: 12px 20px;
     display: flex;
     align-items: center;
@@ -34,34 +31,21 @@
     flex-shrink: 0;
   }
 
-  .header-left {
+  .chat-header__left {
     display: flex;
     align-items: center;
     gap: 12px;
   }
 
-  .logo {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #4a9eff, #7c3aed);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
+  .chat-header__title {
     font-size: 14px;
-    color: white;
-  }
-
-  .header-title {
-    font-size: 16px;
     font-weight: 600;
-    color: #fff;
+    color: var(--g1-text-primary);
   }
 
-  .header-subtitle {
+  .chat-header__subtitle {
     font-size: 11px;
-    color: #666;
+    color: var(--g1-text-muted);
     margin-top: 2px;
   }
 
@@ -74,11 +58,11 @@
 
   .toggle-label {
     font-size: 12px;
-    color: #888;
+    color: var(--g1-text-muted);
   }
 
   .toggle-label.active {
-    color: #4a9eff;
+    color: var(--g1-accent);
     font-weight: 600;
   }
 
@@ -93,12 +77,13 @@
     opacity: 0;
     width: 0;
     height: 0;
+    position: absolute;
   }
 
   .toggle-slider {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #2a2a3a;
+    background: var(--g1-border);
     border-radius: 13px;
     transition: 0.3s;
   }
@@ -110,18 +95,23 @@
     width: 20px;
     left: 3px;
     bottom: 3px;
-    background: #666;
+    background: var(--g1-text-muted);
     border-radius: 50%;
     transition: 0.3s;
   }
 
   .toggle input:checked + .toggle-slider {
-    background: #1a3a5c;
+    background: var(--g1-accent-dim);
   }
 
   .toggle input:checked + .toggle-slider:before {
     transform: translateX(22px);
-    background: #4a9eff;
+    background: var(--g1-accent);
+  }
+
+  .toggle input:focus-visible + .toggle-slider {
+    outline: 2px solid var(--g1-border-focus);
+    outline-offset: 2px;
   }
 
   .mode-indicator {
@@ -132,15 +122,15 @@
   }
 
   .mode-local {
-    background: #1a2a1a;
-    color: #4ade80;
-    border: 1px solid #2a4a2a;
+    background: var(--g1-green-dim);
+    color: var(--g1-green);
+    border: 1px solid rgba(74, 222, 128, 0.20);
   }
 
   .mode-ai {
-    background: #1a1a3a;
-    color: #818cf8;
-    border: 1px solid #2a2a5a;
+    background: var(--g1-violet-dim);
+    color: var(--g1-purple);
+    border: 1px solid rgba(124, 58, 237, 0.20);
   }
 
   /* Messages area */
@@ -156,7 +146,7 @@
   .message {
     max-width: 85%;
     padding: 12px 16px;
-    border-radius: 12px;
+    border-radius: var(--g1-radius-lg);
     font-size: 13px;
     line-height: 1.6;
     white-space: pre-wrap;
@@ -165,34 +155,34 @@
 
   .message-user {
     align-self: flex-end;
-    background: #1a2a4a;
-    color: #c0d8f8;
-    border: 1px solid #2a3a5a;
+    background: var(--g1-accent-dim);
+    color: var(--g1-text-primary);
+    border: 1px solid rgba(74, 158, 255, 0.15);
     border-bottom-right-radius: 4px;
   }
 
   .message-guardian {
     align-self: flex-start;
-    background: #151520;
-    color: #d0d0d8;
-    border: 1px solid #2a2a3a;
+    background: var(--g1-bg-raised);
+    color: var(--g1-text-primary);
+    border: 1px solid var(--g1-border);
     border-bottom-left-radius: 4px;
   }
 
   .message-guardian.type-error {
-    border-color: #5a2a2a;
-    background: #1a1015;
+    border-color: rgba(248, 113, 113, 0.25);
+    background: var(--g1-red-dim);
   }
 
   .message-guardian.type-ai {
-    border-color: #3a2a5a;
-    background: #12101f;
+    border-color: rgba(124, 58, 237, 0.25);
+    background: var(--g1-violet-dim);
   }
 
   .message-system {
     align-self: center;
     background: transparent;
-    color: #555;
+    color: var(--g1-text-muted);
     font-size: 11px;
     text-align: center;
     padding: 4px;
@@ -204,17 +194,17 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 6px;
-    color: #666;
+    color: var(--g1-text-muted);
   }
 
-  .message-user .message-sender { color: #4a9eff; }
-  .message-guardian .message-sender { color: #7c3aed; }
-  .message-guardian.type-ai .message-sender { color: #818cf8; }
+  .message-user .message-sender { color: var(--g1-accent); }
+  .message-guardian .message-sender { color: var(--g1-violet); }
+  .message-guardian.type-ai .message-sender { color: var(--g1-purple); }
 
   /* Input area */
   .input-area {
-    background: #111118;
-    border-top: 1px solid #2a2a3a;
+    background: var(--g1-bg-surface);
+    border-top: 1px solid var(--g1-border);
     padding: 16px 20px;
     display: flex;
     gap: 12px;
@@ -223,52 +213,47 @@
 
   .input-area input {
     flex: 1;
-    background: #0a0a12;
-    border: 1px solid #2a2a3a;
-    border-radius: 10px;
+    background: var(--g1-bg-input);
+    border: 1px solid var(--g1-border);
+    border-radius: var(--g1-radius-md);
     padding: 12px 16px;
-    color: #e0e0e0;
+    color: var(--g1-text-primary);
     font-family: inherit;
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color var(--g1-ease);
   }
 
   .input-area input:focus {
-    border-color: #4a9eff;
+    border-color: var(--g1-border-focus);
   }
 
   .input-area input::placeholder {
-    color: #444;
+    color: var(--g1-text-muted);
   }
 
   .send-btn {
-    background: linear-gradient(135deg, #4a9eff, #7c3aed);
+    background: var(--g1-gradient);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--g1-radius-md);
     padding: 12px 24px;
-    color: white;
+    color: #fff;
     font-family: inherit;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.2s;
+    transition: opacity var(--g1-ease);
   }
 
   .send-btn:hover { opacity: 0.85; }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* Scrollbar */
-  .messages::-webkit-scrollbar { width: 6px; }
-  .messages::-webkit-scrollbar-track { background: transparent; }
-  .messages::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
 
   /* Typing indicator */
   .typing {
     display: none;
     align-self: flex-start;
     padding: 12px 16px;
-    color: #555;
+    color: var(--g1-text-muted);
     font-size: 12px;
   }
 
@@ -288,37 +273,52 @@
 </head>
 <body>
 
-<div class="header">
-  <div class="header-left">
-    <div class="logo">G1</div>
+<!-- Global Navigation -->
+<nav class="g1-topnav" aria-label="Global navigation">
+  <a href="/" class="g1-topnav__brand" aria-label="Guardian One home">
+    <div class="g1-topnav__logo" aria-hidden="true">G1</div>
+    <span class="g1-topnav__title">Guardian One</span>
+  </a>
+  <ul class="g1-topnav__links" role="menubar">
+    <li role="none"><a role="menuitem" href="/" class="g1-topnav__link">Command Center</a></li>
+    <li role="none"><a role="menuitem" href="/chat" class="g1-topnav__link" aria-current="page">Chat</a></li>
+  </ul>
+  <div class="g1-topnav__status">
+    <div class="g1-topnav__pulse" aria-label="System online"></div>
+    <span>Online</span>
+  </div>
+</nav>
+
+<header class="chat-header">
+  <div class="chat-header__left">
     <div>
-      <div class="header-title">Guardian One</div>
-      <div class="header-subtitle">Sovereign Coordinator — Jeremy Paulo Salvino Tabernero</div>
+      <div class="chat-header__title">Guardian Chat</div>
+      <div class="chat-header__subtitle">Sovereign Coordinator</div>
     </div>
   </div>
   <div class="toggle-area">
-    <a href="/" style="color: #666; text-decoration: none; font-size: 12px; margin-right: 12px; border: 1px solid #2a2a3a; padding: 4px 12px; border-radius: 8px;">Command Center</a>
     <span class="toggle-label active" id="label-local">LOCAL</span>
-    <label class="toggle">
-      <input type="checkbox" id="ai-toggle">
+    <label class="toggle" aria-label="Toggle AI mode">
+      <input type="checkbox" id="ai-toggle" aria-describedby="mode-badge">
       <span class="toggle-slider"></span>
     </label>
     <span class="toggle-label" id="label-ai">AI</span>
-    <span class="mode-indicator mode-local" id="mode-badge">Deterministic</span>
+    <span class="mode-indicator mode-local" id="mode-badge" role="status">Deterministic</span>
   </div>
-</div>
+</header>
 
-<div class="messages" id="messages">
+<div class="messages" id="messages" role="log" aria-live="polite" aria-label="Chat messages">
   <div class="message message-system">Guardian One online. Type 'help' for commands.</div>
 </div>
 
-<div class="typing" id="typing">
+<div class="typing" id="typing" aria-live="polite">
   Guardian is thinking<span>.</span><span>.</span><span>.</span>
 </div>
 
 <div class="input-area">
+  <label for="input" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Message</label>
   <input type="text" id="input" placeholder="Talk to Guardian One..." autocomplete="off" autofocus>
-  <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+  <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send message">Send</button>
 </div>
 
 <script>
@@ -339,8 +339,8 @@ aiToggle.addEventListener('change', () => {
   modeBadge.textContent = isAI ? 'AI Engine' : 'Deterministic';
   modeBadge.className = 'mode-indicator ' + (isAI ? 'mode-ai' : 'mode-local');
   addSystemMessage(isAI
-    ? 'AI mode ON — Guardian will think with Ollama/Anthropic for open questions.'
-    : 'AI mode OFF — Guardian uses deterministic commands only.'
+    ? 'AI mode ON \u2014 Guardian will think with Ollama/Anthropic for open questions.'
+    : 'AI mode OFF \u2014 Guardian uses deterministic commands only.'
   );
 });
 
