@@ -118,7 +118,10 @@ class Vault:
         plaintext = json.dumps(data).encode()
         encrypted = self._fernet.encrypt(plaintext)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
+        # Atomic write: write to temp file then rename to prevent corruption
+        tmp_path = self._path.with_suffix(".tmp")
+        tmp_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
+        os.replace(tmp_path, self._path)
 
     # ------------------------------------------------------------------
     # CRUD

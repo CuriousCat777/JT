@@ -19,9 +19,15 @@ def generate_key() -> bytes:
 
 
 def derive_key_from_passphrase(passphrase: str, salt: bytes | None = None) -> bytes:
-    """Derive a Fernet key from a passphrase using PBKDF2."""
+    """Derive a Fernet key from a passphrase using PBKDF2.
+
+    WARNING: If no salt is provided, a random 16-byte salt is generated.
+    This means the key will be different each time — callers that need
+    deterministic keys MUST supply their own salt.
+    """
     if salt is None:
-        salt = b"guardian-one-default-salt"
+        import os
+        salt = os.urandom(16)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,

@@ -48,8 +48,9 @@ def test_derive_key_deterministic():
 
 
 def test_derive_key_different_passphrases():
-    k1 = derive_key_from_passphrase("pass1")
-    k2 = derive_key_from_passphrase("pass2")
+    salt = b"fixed-test-salt"
+    k1 = derive_key_from_passphrase("pass1", salt=salt)
+    k2 = derive_key_from_passphrase("pass2", salt=salt)
     assert k1 != k2
 
 
@@ -59,9 +60,11 @@ def test_derive_key_different_salts():
     assert k1 != k2
 
 
-def test_derive_key_default_salt():
-    key = derive_key_from_passphrase("test")
-    assert key is not None
+def test_derive_key_random_salt():
+    """With no salt provided, each call uses a random salt (keys differ)."""
+    k1 = derive_key_from_passphrase("test")
+    k2 = derive_key_from_passphrase("test")
+    assert k1 != k2  # random salts produce different keys
 
 
 # ------------------------------------------------------------------
