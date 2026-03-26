@@ -8,19 +8,50 @@ Usage:
 
 from __future__ import annotations
 
+import functools
 import json
+import os
+import secrets
 import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, abort
 
 from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne
 from guardian_one.core.audit import Severity
 from guardian_one.core.base_agent import AgentStatus
+
+
+# ---------------------------------------------------------------------------
+# Authentication for state-changing endpoints
+# ---------------------------------------------------------------------------
+
+def _require_local_or_token(f):
+    """Guard POST endpoints: must be localhost or supply valid bearer token.
+
+    The token is read from GUARDIAN_PANEL_TOKEN env var.  If not set,
+    only loopback requests (127.0.0.1 / ::1) are allowed.
+    """
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        remote = request.remote_addr or ""
+        is_local = remote in ("127.0.0.1", "::1")
+
+        panel_token = os.environ.get("GUARDIAN_PANEL_TOKEN", "")
+        if panel_token:
+            auth = request.headers.get("Authorization", "")
+            if auth == f"Bearer {panel_token}":
+                return f(*args, **kwargs)
+
+        if is_local:
+            return f(*args, **kwargs)
+
+        abort(403)
+    return wrapper
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -141,6 +172,7 @@ def create_app() -> Flask:
         return jsonify(result)
 
     @app.route("/api/agents/<name>/run", methods=["POST"])
+    @_require_local_or_token
     def api_run_agent(name: str):
         g = _get_guardian()
         try:
@@ -158,6 +190,7 @@ def create_app() -> Flask:
             return jsonify({"error": f"Unknown agent: {name}"}), 404
 
     @app.route("/api/agents/run-all", methods=["POST"])
+    @_require_local_or_token
     def api_run_all():
         g = _get_guardian()
         reports = g.run_all()
@@ -370,6 +403,7 @@ def create_app() -> Flask:
         ])
 
     @app.route("/api/homelink/scenes/<scene_id>/activate", methods=["POST"])
+    @_require_local_or_token
     def api_activate_scene(scene_id: str):
         g = _get_guardian()
         agent = g.get_agent("device_agent")
@@ -383,6 +417,7 @@ def create_app() -> Flask:
         })
 
     @app.route("/api/homelink/devices/<device_id>/on", methods=["POST"])
+    @_require_local_or_token
     def api_device_on(device_id: str):
         g = _get_guardian()
         agent = g.get_agent("device_agent")
@@ -409,6 +444,7 @@ def create_app() -> Flask:
         return jsonify(result)
 
     @app.route("/api/homelink/devices/<device_id>/off", methods=["POST"])
+    @_require_local_or_token
     def api_device_off(device_id: str):
         g = _get_guardian()
         agent = g.get_agent("device_agent")
@@ -435,6 +471,7 @@ def create_app() -> Flask:
         return jsonify(result)
 
     @app.route("/api/homelink/devices/<device_id>/brightness", methods=["POST"])
+    @_require_local_or_token
     def api_device_brightness(device_id: str):
         g = _get_guardian()
         agent = g.get_agent("device_agent")
@@ -444,7 +481,10 @@ def create_app() -> Flask:
         if device is None:
             return jsonify({"error": f"Device not found: {device_id}"}), 404
         body = request.get_json(silent=True) or {}
-        pct = max(0, min(100, int(body.get("brightness", 50))))
+        try:
+            pct = max(0, min(100, int(body.get("brightness", 50))))
+        except (ValueError, TypeError):
+            return jsonify({"error": "brightness must be an integer 0-100"}), 400
         driver = agent.drivers.for_device(device)
         if driver is None:
             return jsonify({"error": f"No driver for {device_id}"}), 400
@@ -458,6 +498,7 @@ def create_app() -> Flask:
         return jsonify(result)
 
     @app.route("/api/homelink/events/<event>", methods=["POST"])
+    @_require_local_or_token
     def api_schedule_event(event: str):
         """Trigger a schedule event: wake, sleep, leave, arrive."""
         if event not in ("wake", "sleep", "leave", "arrive"):
@@ -624,6 +665,7 @@ def create_app() -> Flask:
                         "count": len(audio_devices)})
 
     @app.route("/api/homelink/volume/<device_id>", methods=["POST"])
+    @_require_local_or_token
     def api_set_volume(device_id: str):
         """Set volume on a device (TV only for now)."""
         g = _get_guardian()
@@ -636,20 +678,24 @@ def create_app() -> Flask:
             return jsonify({"error": f"Unknown device: {device_id}"}), 404
 
         body = request.get_json(silent=True) or {}
-        level = body.get("volume", 20)
+        try:
+            level = max(0, min(100, int(body.get("volume", 20))))
+        except (ValueError, TypeError):
+            return jsonify({"error": "volume must be an integer 0-100"}), 400
 
         from guardian_one.homelink.drivers import LgWebOsDriver, DriverFactory
         factory = DriverFactory(vault_retrieve=g.vault.retrieve)
 
         if device.category.value == "smart_tv" and device.ip_address:
             driver = factory.get_lg_driver(device.ip_address)
-            result = driver.set_volume(int(level))
+            result = driver.set_volume(level)
             return jsonify({"success": result.get("success", False),
                             "device": device_id, "volume": level})
 
         return jsonify({"error": "Volume control not supported for this device"}), 400
 
     @app.route("/api/homelink/mute/<device_id>", methods=["POST"])
+    @_require_local_or_token
     def api_mute_device(device_id: str):
         """Mute a specific device."""
         g = _get_guardian()
@@ -673,6 +719,7 @@ def create_app() -> Flask:
         return jsonify({"error": "Mute not supported for this device"}), 400
 
     @app.route("/api/homelink/silence-all", methods=["POST"])
+    @_require_local_or_token
     def api_silence_all():
         """EMERGENCY: Mute TV, kill power to all audio devices via Kasa plugs."""
         g = _get_guardian()
@@ -807,6 +854,7 @@ def create_app() -> Flask:
         return jsonify({"commands": commands, "aliases": aliases})
 
     @app.route("/api/homelink/email-commands/process", methods=["POST"])
+    @_require_local_or_token
     def api_process_email_command():
         """Process a single email command (manual trigger or from Gmail agent)."""
         nonlocal _email_processor
@@ -843,6 +891,7 @@ def create_app() -> Flask:
         })
 
     @app.route("/api/homelink/email-commands/scan", methods=["POST"])
+    @_require_local_or_token
     def api_scan_email_commands():
         """Scan Gmail inbox for unread HOMELINK: commands and execute them."""
         nonlocal _email_processor
@@ -913,6 +962,7 @@ def create_app() -> Flask:
         return jsonify(_ring_monitor.status())
 
     @app.route("/api/homelink/ring/start", methods=["POST"])
+    @_require_local_or_token
     def api_ring_start():
         nonlocal _ring_monitor
         g = _get_guardian()
@@ -925,12 +975,14 @@ def create_app() -> Flask:
                         "interval": _ring_monitor._poll_interval})
 
     @app.route("/api/homelink/ring/stop", methods=["POST"])
+    @_require_local_or_token
     def api_ring_stop():
         if _ring_monitor:
             _ring_monitor.stop_polling()
         return jsonify({"status": "polling_stopped"})
 
     @app.route("/api/homelink/ring/check", methods=["POST"])
+    @_require_local_or_token
     def api_ring_check():
         nonlocal _ring_monitor
         g = _get_guardian()

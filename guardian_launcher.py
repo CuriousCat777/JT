@@ -28,7 +28,7 @@ from pathlib import Path
 # =============================================================================
 
 def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+    print("\033[H\033[2J", end="", flush=True)
 
 def pause():
     input("\n  Press ENTER to continue...")
