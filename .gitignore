@@ -69,3 +69,12 @@ data/*.xlsx
 data/*.csv
 data/*.png
 data/homelink-reference/
+
+# Financial ledger (bank accounts, transactions, net worth history)
+data/cfo_ledger.json
+
+# Guardian One logs & backups (contain PII and operational data)
+guardian_one_log*.json
+
+# Skills inventory (personal learning patterns)
+guardian_skills.json
