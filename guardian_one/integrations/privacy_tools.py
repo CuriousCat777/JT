@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import abc
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
@@ -147,6 +148,11 @@ class NordVPNProvider(VPNProvider):
             self._last_error = f"Failed to get VPN status: {exc}"
             return VPNStatus(connected=False)
 
+    @staticmethod
+    def _validate_country(country: str) -> bool:
+        """Allow only alphanumeric country names and underscores."""
+        return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9_ -]{0,49}$", country))
+
     def connect(self, country: str | None = None) -> bool:
         if not self._cli_available:
             self._last_error = "NordVPN CLI not installed"
@@ -154,6 +160,9 @@ class NordVPNProvider(VPNProvider):
         try:
             cmd = ["nordvpn", "connect"]
             if country:
+                if not self._validate_country(country):
+                    self._last_error = f"Invalid country name: {country!r}"
+                    return False
                 cmd.append(country)
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=30,

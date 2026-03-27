@@ -97,7 +97,8 @@ class AuditLog:
         with self._lock:
             self._entries.append(entry)
             self._total_recorded += 1
-            with open(self._log_file, "a") as f:
+            fd = os.open(self._log_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            with os.fdopen(fd, "a") as f:
                 f.write(json.dumps(entry.to_dict()) + "\n")
             self._maybe_rotate()
         return entry

@@ -8,7 +8,7 @@ timezone: "America/Chicago"
 daily_summary_hour: 7   # 7 AM local time
 data_dir: "data"
 log_dir: "logs"
-phone: "6028100527"
+# phone: loaded from NOTIFY_PHONE env var (see config/.env.example)
 
 # AI Engine — the sovereign brain
 # Ollama runs locally on your machine (true data sovereignty)

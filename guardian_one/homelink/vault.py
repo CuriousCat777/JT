@@ -121,6 +121,7 @@ class Vault:
         # Atomic write: write to temp file then rename to prevent corruption
         tmp_path = self._path.with_suffix(".tmp")
         tmp_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
+        os.chmod(tmp_path, 0o600)
         os.replace(tmp_path, self._path)
 
     # ------------------------------------------------------------------
