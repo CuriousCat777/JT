@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -36,7 +37,12 @@ def _get_guardian() -> GuardianOne:
         with _lock:
             if _guardian is None:
                 config = load_config()
-                _guardian = GuardianOne(config=config)
+                passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "")
+                if not passphrase:
+                    raise RuntimeError(
+                        "GUARDIAN_MASTER_PASSPHRASE env var must be set to start the dev panel."
+                    )
+                _guardian = GuardianOne(config=config, vault_passphrase=passphrase)
                 _build_agents(_guardian)
     return _guardian
 
@@ -180,7 +186,10 @@ def create_app() -> Flask:
         g = _get_guardian()
         agent_filter = request.args.get("agent")
         severity_filter = request.args.get("severity")
-        limit = min(int(request.args.get("limit", 100)), 500)
+        try:
+            limit = min(int(request.args.get("limit", 100)), 500)
+        except (ValueError, TypeError):
+            limit = 100
 
         sev = None
         if severity_filter:
@@ -992,8 +1001,8 @@ def run_devpanel(guardian: GuardianOne | None = None, port: int = 5100, debug: b
     print(f"\n  Guardian One — Command Center")
     print(f"  http://localhost:{port}")
     print(f"  Press Ctrl+C to stop.\n")
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="127.0.0.1", port=port, debug=debug)
 
 
 if __name__ == "__main__":
-    run_devpanel(debug=True)
+    run_devpanel(debug=False)

@@ -16,6 +16,7 @@ NO TERMINAL KNOWLEDGE NEEDED. Just double-click.
 """
 
 import os
+import subprocess
 import sys
 import glob
 import shutil
@@ -28,7 +29,7 @@ from pathlib import Path
 # =============================================================================
 
 def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+    subprocess.run(["cls" if os.name == "nt" else "clear"], shell=False, check=False)
 
 def pause():
     input("\n  Press ENTER to continue...")

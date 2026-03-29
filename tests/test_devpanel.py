@@ -1,8 +1,14 @@
 """Tests for the Guardian One web-based dev panel."""
 
 import json
+import os
 import pytest
-from guardian_one.web.app import create_app
+from guardian_one.web.app import create_app, _guardian, _lock
+
+
+@pytest.fixture(autouse=True)
+def _set_passphrase(monkeypatch):
+    monkeypatch.setenv("GUARDIAN_MASTER_PASSPHRASE", "test-passphrase")
 
 
 @pytest.fixture
