@@ -1,342 +1,472 @@
 /* ==========================================================================
-   Guardian One — Design Tokens (Sentinel Cartography)
-   Dark palette for all Guardian One web surfaces.
+   GUARDIAN ONE — Sentinel Cartography Design System
+   Dark palette tokens, component classes, and global nav
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   1. DESIGN TOKENS (CSS Custom Properties)
+   -------------------------------------------------------------------------- */
 :root {
-  /* ── Surface Hierarchy ─────────────────────────────────── */
-  --g1-surface-0: #0d1117;
-  --g1-surface-1: #161b22;
-  --g1-surface-2: #1c2128;
-  --g1-surface-3: #21262d;
-  --g1-surface-4: #282e36;
-  --g1-surface-overlay: rgba(13, 17, 23, 0.85);
+  /* --- Surface hierarchy (darkest to lightest) --- */
+  --g1-surface-root:        #0d1117;
+  --g1-surface-0:           #0d1117;
+  --g1-surface-1:           #161b22;
+  --g1-surface-2:           #1c2128;
+  --g1-surface-3:           #21262d;
+  --g1-surface-4:           #282e36;
+  --g1-surface-5:           #30363d;
+  --g1-surface-overlay:     rgba(13, 17, 23, 0.85);
 
-  /* ── Borders ───────────────────────────────────────────── */
-  --g1-border: #30363d;
-  --g1-border-subtle: #21262d;
-  --g1-border-strong: #484f58;
+  /* --- Border / divider --- */
+  --g1-border-default:      #30363d;
+  --g1-border-muted:        #21262d;
+  --g1-border-emphasis:     #484f58;
 
-  /* ── Text ──────────────────────────────────────────────── */
-  --g1-text-primary: #c9d1d9;
-  --g1-text-secondary: #8b949e;
-  --g1-text-muted: #484f58;
-  --g1-text-inverse: #0d1117;
-  --g1-text-link: #58a6ff;
+  /* --- Text --- */
+  --g1-text-primary:        #e6edf3;
+  --g1-text-secondary:      #c9d1d9;
+  --g1-text-muted:          #8b949e;
+  --g1-text-faint:          #484f58;
+  --g1-text-on-accent:      #0d1117;
 
-  /* ── Accent ────────────────────────────────────────────── */
-  --g1-accent: #58a6ff;
-  --g1-accent-hover: #79b8ff;
-  --g1-accent-muted: #1f6feb;
-  --g1-accent-dim: rgba(88, 166, 255, 0.10);
-  --g1-accent-glow: rgba(88, 166, 255, 0.12);
+  /* --- Accent (teal / cyan) --- */
+  --g1-accent:              #58a6ff;
+  --g1-accent-hover:        #79b8ff;
+  --g1-accent-muted:        rgba(88, 166, 255, 0.15);
+  --g1-accent-emphasis:     #1f6feb;
 
-  /* ── Semantic: Success ─────────────────────────────────── */
-  --g1-success: #3fb950;
-  --g1-success-hover: #56d364;
-  --g1-success-dim: rgba(63, 185, 80, 0.10);
+  /* --- Semantic: success --- */
+  --g1-success:             #3fb950;
+  --g1-success-hover:       #56d364;
+  --g1-success-muted:       rgba(63, 185, 80, 0.15);
 
-  /* ── Semantic: Warning ─────────────────────────────────── */
-  --g1-warning: #d29922;
-  --g1-warning-hover: #e3b341;
-  --g1-warning-dim: rgba(210, 153, 34, 0.10);
+  /* --- Semantic: warning --- */
+  --g1-warning:             #d29922;
+  --g1-warning-hover:       #e3b341;
+  --g1-warning-muted:       rgba(210, 153, 34, 0.15);
 
-  /* ── Semantic: Error ───────────────────────────────────── */
-  --g1-error: #f85149;
-  --g1-error-hover: #ff7b72;
-  --g1-error-dim: rgba(248, 81, 73, 0.10);
+  /* --- Semantic: error / danger --- */
+  --g1-error:               #f85149;
+  --g1-error-hover:         #ff7b72;
+  --g1-error-muted:         rgba(248, 81, 73, 0.15);
 
-  /* ── Semantic: Info ────────────────────────────────────── */
-  --g1-info: #58a6ff;
-  --g1-info-dim: rgba(88, 166, 255, 0.10);
+  /* --- Semantic: info --- */
+  --g1-info:                #58a6ff;
+  --g1-info-hover:          #79b8ff;
+  --g1-info-muted:          rgba(88, 166, 255, 0.15);
 
-  /* ── Extended Palette ──────────────────────────────────── */
-  --g1-orange: #db6d28;
-  --g1-orange-dim: rgba(219, 109, 40, 0.10);
-  --g1-purple: #bc8cff;
-  --g1-purple-dim: rgba(188, 140, 255, 0.10);
-  --g1-cyan: #39d2c0;
-  --g1-cyan-dim: rgba(57, 210, 192, 0.10);
-  --g1-pink: #f778ba;
-  --g1-pink-dim: rgba(247, 120, 186, 0.10);
+  /* --- Extended palette --- */
+  --g1-orange:              #db6d28;
+  --g1-orange-muted:        rgba(219, 109, 40, 0.15);
+  --g1-purple:              #bc8cff;
+  --g1-purple-muted:        rgba(188, 140, 255, 0.15);
 
-  /* ── Typography ────────────────────────────────────────── */
-  --g1-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --g1-font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
-  --g1-font-size-xs: 10px;
-  --g1-font-size-sm: 12px;
-  --g1-font-size-base: 13px;
-  --g1-font-size-md: 14px;
-  --g1-font-size-lg: 16px;
-  --g1-font-size-xl: 20px;
-  --g1-font-size-2xl: 24px;
-  --g1-font-size-3xl: 32px;
-  --g1-font-weight-light: 300;
-  --g1-font-weight-normal: 400;
-  --g1-font-weight-medium: 500;
-  --g1-font-weight-semibold: 600;
-  --g1-font-weight-bold: 700;
-  --g1-line-height-tight: 1.25;
-  --g1-line-height-normal: 1.5;
-  --g1-line-height-relaxed: 1.75;
+  /* --- Typography: font families --- */
+  --g1-font-sans:           'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --g1-font-mono:           'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --g1-font-display:        'Inter', var(--g1-font-sans);
 
-  /* ── Border Radius ─────────────────────────────────────── */
-  --g1-radius-sm: 4px;
-  --g1-radius-md: 8px;
-  --g1-radius-lg: 12px;
-  --g1-radius-xl: 16px;
-  --g1-radius-full: 9999px;
+  /* --- Typography: sizes --- */
+  --g1-text-xs:             0.75rem;   /* 12px */
+  --g1-text-sm:             0.8125rem; /* 13px */
+  --g1-text-base:           0.875rem;  /* 14px */
+  --g1-text-md:             1rem;      /* 16px */
+  --g1-text-lg:             1.125rem;  /* 18px */
+  --g1-text-xl:             1.25rem;   /* 20px */
+  --g1-text-2xl:            1.5rem;    /* 24px */
+  --g1-text-3xl:            1.875rem;  /* 30px */
 
-  /* ── Shadows (dark theme — subtle glows) ───────────────── */
-  --g1-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --g1-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --g1-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --g1-shadow-glow-accent: 0 0 12px rgba(88, 166, 255, 0.15);
-  --g1-shadow-glow-success: 0 0 12px rgba(63, 185, 80, 0.15);
-  --g1-shadow-glow-error: 0 0 12px rgba(248, 81, 73, 0.15);
+  /* --- Typography: weights --- */
+  --g1-weight-normal:       400;
+  --g1-weight-medium:       500;
+  --g1-weight-semibold:     600;
+  --g1-weight-bold:         700;
 
-  /* ── Transitions ───────────────────────────────────────── */
-  --g1-transition-fast: 0.15s ease;
-  --g1-transition-base: 0.2s ease;
-  --g1-transition-slow: 0.3s ease;
-  --g1-transition-spring: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* --- Typography: line heights --- */
+  --g1-leading-tight:       1.25;
+  --g1-leading-normal:      1.5;
+  --g1-leading-relaxed:     1.75;
 
-  /* ── Spacing ───────────────────────────────────────────── */
-  --g1-space-1: 4px;
-  --g1-space-2: 8px;
-  --g1-space-3: 12px;
-  --g1-space-4: 16px;
-  --g1-space-5: 20px;
-  --g1-space-6: 24px;
-  --g1-space-8: 32px;
-  --g1-space-10: 40px;
-  --g1-space-12: 48px;
+  /* --- Border radii --- */
+  --g1-radius-sm:           4px;
+  --g1-radius-md:           6px;
+  --g1-radius-lg:           8px;
+  --g1-radius-xl:           12px;
+  --g1-radius-full:         9999px;
+
+  /* --- Shadows (dark-theme subtle glows) --- */
+  --g1-shadow-sm:           0 1px 2px rgba(0, 0, 0, 0.4);
+  --g1-shadow-md:           0 2px 8px rgba(0, 0, 0, 0.5), 0 0 1px rgba(88, 166, 255, 0.05);
+  --g1-shadow-lg:           0 4px 16px rgba(0, 0, 0, 0.6), 0 0 2px rgba(88, 166, 255, 0.08);
+  --g1-shadow-glow-accent:  0 0 8px rgba(88, 166, 255, 0.25);
+  --g1-shadow-glow-success: 0 0 8px rgba(63, 185, 80, 0.25);
+  --g1-shadow-glow-error:   0 0 8px rgba(248, 81, 73, 0.25);
+  --g1-shadow-inset:        inset 0 1px 3px rgba(0, 0, 0, 0.35);
+
+  /* --- Transitions --- */
+  --g1-transition-fast:     120ms ease-in-out;
+  --g1-transition-normal:   200ms ease-in-out;
+  --g1-transition-slow:     350ms ease-in-out;
+  --g1-transition-colors:   color var(--g1-transition-normal),
+                            background-color var(--g1-transition-normal),
+                            border-color var(--g1-transition-normal),
+                            box-shadow var(--g1-transition-normal);
+
+  /* --- Spacing (reference) --- */
+  --g1-space-1:             0.25rem;
+  --g1-space-2:             0.5rem;
+  --g1-space-3:             0.75rem;
+  --g1-space-4:             1rem;
+  --g1-space-6:             1.5rem;
+  --g1-space-8:             2rem;
+
+  /* --- Z-index layers --- */
+  --g1-z-nav:               1000;
+  --g1-z-overlay:           1100;
+  --g1-z-modal:             1200;
 }
 
 
-/* ==========================================================================
-   Global TopNav (.g1-topnav)
-   ========================================================================== */
+/* --------------------------------------------------------------------------
+   2. GLOBAL RESETS & BASE
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-.g1-topnav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 48px;
-  padding: 0 24px;
-  background: var(--g1-surface-1);
-  border-bottom: 1px solid var(--g1-border);
+body {
+  margin: 0;
   font-family: var(--g1-font-sans);
-  z-index: 100;
-}
-
-.g1-topnav__logo {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--g1-accent);
-  text-transform: uppercase;
-  user-select: none;
-}
-
-.g1-topnav__links {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.g1-topnav__link {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: var(--g1-radius-md);
-  font-size: var(--g1-font-size-sm);
-  font-weight: var(--g1-font-weight-medium);
+  font-size: var(--g1-text-base);
+  line-height: var(--g1-leading-normal);
   color: var(--g1-text-secondary);
-  text-decoration: none;
-  transition: color var(--g1-transition-fast), background var(--g1-transition-fast);
-}
-
-.g1-topnav__link:hover {
-  color: var(--g1-text-primary);
-  background: var(--g1-surface-3);
-}
-
-.g1-topnav__link[aria-current="page"] {
-  color: var(--g1-accent);
-  background: var(--g1-accent-dim);
-  font-weight: var(--g1-font-weight-semibold);
-}
-
-.g1-topnav__status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--g1-font-size-sm);
-  color: var(--g1-text-muted);
+  background-color: var(--g1-surface-root);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 
-/* ==========================================================================
-   Shared Button Classes (.g1-btn)
-   ========================================================================== */
-
-.g1-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: 1px solid var(--g1-border);
-  border-radius: var(--g1-radius-md);
-  background: var(--g1-surface-2);
-  color: var(--g1-text-secondary);
-  font-family: var(--g1-font-sans);
-  font-size: var(--g1-font-size-sm);
-  font-weight: var(--g1-font-weight-medium);
-  cursor: pointer;
-  transition: all var(--g1-transition-fast);
-  text-decoration: none;
-  line-height: 1;
-}
-
-.g1-btn:hover {
-  background: var(--g1-surface-3);
-  color: var(--g1-text-primary);
-  border-color: var(--g1-border-strong);
-}
-
-.g1-btn-primary {
-  background: var(--g1-accent-muted);
-  color: #fff;
-  border-color: var(--g1-accent-muted);
-}
-
-.g1-btn-primary:hover {
-  background: var(--g1-accent);
-  border-color: var(--g1-accent);
-  box-shadow: var(--g1-shadow-glow-accent);
-}
-
-.g1-btn-danger {
-  border-color: var(--g1-error);
-  color: var(--g1-error);
-}
-
-.g1-btn-danger:hover {
-  background: var(--g1-error-dim);
-}
-
-.g1-btn-sm {
-  padding: 5px 12px;
-  font-size: var(--g1-font-size-xs);
-}
-
-
-/* ==========================================================================
-   Shared Card Class (.g1-card)
-   ========================================================================== */
-
-.g1-card {
-  background: var(--g1-surface-2);
-  border: 1px solid var(--g1-border);
-  border-radius: var(--g1-radius-lg);
-  padding: 20px;
-  transition: box-shadow var(--g1-transition-base), border-color var(--g1-transition-base);
-}
-
-.g1-card:hover {
-  border-color: var(--g1-border-strong);
-  box-shadow: var(--g1-shadow-md);
-}
-
-
-/* ==========================================================================
-   Shared Badge Classes (.g1-badge)
-   ========================================================================== */
-
-.g1-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--g1-radius-full);
-  font-size: var(--g1-font-size-xs);
-  font-weight: var(--g1-font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  line-height: 1.6;
-}
-
-.g1-badge-success {
-  background: var(--g1-success-dim);
-  color: var(--g1-success);
-}
-
-.g1-badge-warning {
-  background: var(--g1-warning-dim);
-  color: var(--g1-warning);
-}
-
-.g1-badge-error {
-  background: var(--g1-error-dim);
-  color: var(--g1-error);
-}
-
-.g1-badge-info {
-  background: var(--g1-accent-dim);
-  color: var(--g1-accent);
-}
-
-.g1-badge-neutral {
-  background: rgba(139, 148, 158, 0.10);
-  color: var(--g1-text-secondary);
-}
-
-
-/* ==========================================================================
-   Focus-visible Outlines
-   ========================================================================== */
-
-*:focus-visible {
+/* --------------------------------------------------------------------------
+   3. FOCUS-VISIBLE OUTLINES
+   -------------------------------------------------------------------------- */
+:focus-visible {
   outline: 2px solid var(--g1-accent);
   outline-offset: 2px;
+  border-radius: var(--g1-radius-sm);
 }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--g1-accent);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--g1-accent-dim);
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 
-/* ==========================================================================
-   Dark Scrollbar Styling
-   ========================================================================== */
-
+/* --------------------------------------------------------------------------
+   4. DARK SCROLLBAR STYLING
+   -------------------------------------------------------------------------- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--g1-surface-1);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--g1-border);
-  border-radius: 3px;
+  background: var(--g1-surface-5);
+  border-radius: var(--g1-radius-full);
+  border: 2px solid var(--g1-surface-1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--g1-border-strong);
+  background: var(--g1-border-emphasis);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--g1-surface-1);
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--g1-border) transparent;
+  scrollbar-color: var(--g1-surface-5) var(--g1-surface-1);
+}
+
+
+/* --------------------------------------------------------------------------
+   5. TOP NAVIGATION BAR — .g1-topnav
+   -------------------------------------------------------------------------- */
+.g1-topnav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--g1-z-nav);
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 var(--g1-space-4);
+  background-color: var(--g1-surface-1);
+  border-bottom: 1px solid var(--g1-border-default);
+  box-shadow: var(--g1-shadow-md);
+  font-family: var(--g1-font-sans);
+}
+
+/* Logo / brand — left */
+.g1-topnav__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--g1-space-2);
+  font-family: var(--g1-font-display);
+  font-size: var(--g1-text-sm);
+  font-weight: var(--g1-weight-bold);
+  color: var(--g1-text-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.g1-topnav__brand:hover {
+  color: var(--g1-accent);
+}
+
+/* Center nav links */
+.g1-topnav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--g1-space-1);
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.g1-topnav__links a,
+.g1-topnav__links [role="link"],
+.g1-topnav__links [role="menuitem"] {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--g1-space-1) var(--g1-space-3);
+  font-size: var(--g1-text-sm);
+  font-weight: var(--g1-weight-medium);
+  color: var(--g1-text-muted);
+  text-decoration: none;
+  border-radius: var(--g1-radius-md);
+  transition: var(--g1-transition-colors);
+  cursor: pointer;
+}
+
+.g1-topnav__links a:hover,
+.g1-topnav__links [role="link"]:hover,
+.g1-topnav__links [role="menuitem"]:hover {
+  color: var(--g1-text-primary);
+  background-color: var(--g1-surface-3);
+}
+
+.g1-topnav__links a[aria-current="page"],
+.g1-topnav__links [aria-current="page"] {
+  color: var(--g1-text-primary);
+  background-color: var(--g1-accent-muted);
+}
+
+/* Status indicator — right */
+.g1-topnav__status {
+  display: flex;
+  align-items: center;
+  gap: var(--g1-space-2);
+  font-size: var(--g1-text-xs);
+  font-weight: var(--g1-weight-medium);
+  color: var(--g1-text-muted);
+  white-space: nowrap;
+}
+
+.g1-topnav__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--g1-radius-full);
+  background-color: var(--g1-success);
+  box-shadow: var(--g1-shadow-glow-success);
+}
+
+.g1-topnav__status-dot--warning {
+  background-color: var(--g1-warning);
+  box-shadow: 0 0 8px rgba(210, 153, 34, 0.3);
+}
+
+.g1-topnav__status-dot--error {
+  background-color: var(--g1-error);
+  box-shadow: var(--g1-shadow-glow-error);
+}
+
+/* Body offset to account for fixed nav */
+.g1-has-topnav {
+  padding-top: 48px;
+}
+
+
+/* --------------------------------------------------------------------------
+   6. BUTTONS — .g1-btn
+   -------------------------------------------------------------------------- */
+.g1-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g1-space-2);
+  padding: 6px 16px;
+  font-family: var(--g1-font-sans);
+  font-size: var(--g1-text-sm);
+  font-weight: var(--g1-weight-medium);
+  line-height: var(--g1-leading-tight);
+  color: var(--g1-text-secondary);
+  background-color: var(--g1-surface-3);
+  border: 1px solid var(--g1-border-default);
+  border-radius: var(--g1-radius-md);
+  cursor: pointer;
+  transition: var(--g1-transition-colors);
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.g1-btn:hover {
+  color: var(--g1-text-primary);
+  background-color: var(--g1-surface-4);
+  border-color: var(--g1-border-emphasis);
+}
+
+.g1-btn:active {
+  background-color: var(--g1-surface-5);
+}
+
+.g1-btn:disabled,
+.g1-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primary button */
+.g1-btn-primary {
+  color: var(--g1-text-on-accent);
+  background-color: var(--g1-accent-emphasis);
+  border-color: var(--g1-accent-emphasis);
+}
+
+.g1-btn-primary:hover {
+  color: var(--g1-text-on-accent);
+  background-color: var(--g1-accent);
+  border-color: var(--g1-accent);
+  box-shadow: var(--g1-shadow-glow-accent);
+}
+
+/* Danger button */
+.g1-btn-danger {
+  color: var(--g1-error);
+  background-color: var(--g1-error-muted);
+  border-color: transparent;
+}
+
+.g1-btn-danger:hover {
+  color: #ffffff;
+  background-color: var(--g1-error);
+  border-color: var(--g1-error);
+  box-shadow: var(--g1-shadow-glow-error);
+}
+
+/* Small variant */
+.g1-btn-sm {
+  padding: 3px 10px;
+  font-size: var(--g1-text-xs);
+}
+
+
+/* --------------------------------------------------------------------------
+   7. CARDS — .g1-card
+   -------------------------------------------------------------------------- */
+.g1-card {
+  background-color: var(--g1-surface-2);
+  border: 1px solid var(--g1-border-default);
+  border-radius: var(--g1-radius-lg);
+  padding: var(--g1-space-4);
+  box-shadow: var(--g1-shadow-sm);
+  transition: border-color var(--g1-transition-normal),
+              box-shadow var(--g1-transition-normal);
+}
+
+.g1-card:hover {
+  border-color: var(--g1-border-emphasis);
+  box-shadow: var(--g1-shadow-md);
+}
+
+.g1-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--g1-space-3);
+  padding-bottom: var(--g1-space-3);
+  border-bottom: 1px solid var(--g1-border-muted);
+}
+
+.g1-card__title {
+  font-size: var(--g1-text-md);
+  font-weight: var(--g1-weight-semibold);
+  color: var(--g1-text-primary);
+  margin: 0;
+}
+
+.g1-card__body {
+  color: var(--g1-text-secondary);
+  font-size: var(--g1-text-base);
+}
+
+
+/* --------------------------------------------------------------------------
+   8. BADGES — .g1-badge
+   -------------------------------------------------------------------------- */
+.g1-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--g1-font-sans);
+  font-size: var(--g1-text-xs);
+  font-weight: var(--g1-weight-semibold);
+  line-height: var(--g1-leading-tight);
+  color: var(--g1-text-secondary);
+  background-color: var(--g1-surface-4);
+  border-radius: var(--g1-radius-full);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.g1-badge-success {
+  color: var(--g1-success);
+  background-color: var(--g1-success-muted);
+}
+
+.g1-badge-warning {
+  color: var(--g1-warning);
+  background-color: var(--g1-warning-muted);
+}
+
+.g1-badge-error {
+  color: var(--g1-error);
+  background-color: var(--g1-error-muted);
+}
+
+.g1-badge-info {
+  color: var(--g1-info);
+  background-color: var(--g1-info-muted);
+}
+
+.g1-badge-purple {
+  color: var(--g1-purple);
+  background-color: var(--g1-purple-muted);
+}
+
+.g1-badge-orange {
+  color: var(--g1-orange);
+  background-color: var(--g1-orange-muted);
 }
