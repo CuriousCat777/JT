@@ -1,0 +1,342 @@
+/* ==========================================================================
+   Guardian One — Design Tokens (Sentinel Cartography)
+   Dark palette for all Guardian One web surfaces.
+   ========================================================================== */
+
+:root {
+  /* ── Surface Hierarchy ─────────────────────────────────── */
+  --g1-surface-0: #0d1117;
+  --g1-surface-1: #161b22;
+  --g1-surface-2: #1c2128;
+  --g1-surface-3: #21262d;
+  --g1-surface-4: #282e36;
+  --g1-surface-overlay: rgba(13, 17, 23, 0.85);
+
+  /* ── Borders ───────────────────────────────────────────── */
+  --g1-border: #30363d;
+  --g1-border-subtle: #21262d;
+  --g1-border-strong: #484f58;
+
+  /* ── Text ──────────────────────────────────────────────── */
+  --g1-text-primary: #c9d1d9;
+  --g1-text-secondary: #8b949e;
+  --g1-text-muted: #484f58;
+  --g1-text-inverse: #0d1117;
+  --g1-text-link: #58a6ff;
+
+  /* ── Accent ────────────────────────────────────────────── */
+  --g1-accent: #58a6ff;
+  --g1-accent-hover: #79b8ff;
+  --g1-accent-muted: #1f6feb;
+  --g1-accent-dim: rgba(88, 166, 255, 0.10);
+  --g1-accent-glow: rgba(88, 166, 255, 0.12);
+
+  /* ── Semantic: Success ─────────────────────────────────── */
+  --g1-success: #3fb950;
+  --g1-success-hover: #56d364;
+  --g1-success-dim: rgba(63, 185, 80, 0.10);
+
+  /* ── Semantic: Warning ─────────────────────────────────── */
+  --g1-warning: #d29922;
+  --g1-warning-hover: #e3b341;
+  --g1-warning-dim: rgba(210, 153, 34, 0.10);
+
+  /* ── Semantic: Error ───────────────────────────────────── */
+  --g1-error: #f85149;
+  --g1-error-hover: #ff7b72;
+  --g1-error-dim: rgba(248, 81, 73, 0.10);
+
+  /* ── Semantic: Info ────────────────────────────────────── */
+  --g1-info: #58a6ff;
+  --g1-info-dim: rgba(88, 166, 255, 0.10);
+
+  /* ── Extended Palette ──────────────────────────────────── */
+  --g1-orange: #db6d28;
+  --g1-orange-dim: rgba(219, 109, 40, 0.10);
+  --g1-purple: #bc8cff;
+  --g1-purple-dim: rgba(188, 140, 255, 0.10);
+  --g1-cyan: #39d2c0;
+  --g1-cyan-dim: rgba(57, 210, 192, 0.10);
+  --g1-pink: #f778ba;
+  --g1-pink-dim: rgba(247, 120, 186, 0.10);
+
+  /* ── Typography ────────────────────────────────────────── */
+  --g1-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --g1-font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  --g1-font-size-xs: 10px;
+  --g1-font-size-sm: 12px;
+  --g1-font-size-base: 13px;
+  --g1-font-size-md: 14px;
+  --g1-font-size-lg: 16px;
+  --g1-font-size-xl: 20px;
+  --g1-font-size-2xl: 24px;
+  --g1-font-size-3xl: 32px;
+  --g1-font-weight-light: 300;
+  --g1-font-weight-normal: 400;
+  --g1-font-weight-medium: 500;
+  --g1-font-weight-semibold: 600;
+  --g1-font-weight-bold: 700;
+  --g1-line-height-tight: 1.25;
+  --g1-line-height-normal: 1.5;
+  --g1-line-height-relaxed: 1.75;
+
+  /* ── Border Radius ─────────────────────────────────────── */
+  --g1-radius-sm: 4px;
+  --g1-radius-md: 8px;
+  --g1-radius-lg: 12px;
+  --g1-radius-xl: 16px;
+  --g1-radius-full: 9999px;
+
+  /* ── Shadows (dark theme — subtle glows) ───────────────── */
+  --g1-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --g1-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --g1-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --g1-shadow-glow-accent: 0 0 12px rgba(88, 166, 255, 0.15);
+  --g1-shadow-glow-success: 0 0 12px rgba(63, 185, 80, 0.15);
+  --g1-shadow-glow-error: 0 0 12px rgba(248, 81, 73, 0.15);
+
+  /* ── Transitions ───────────────────────────────────────── */
+  --g1-transition-fast: 0.15s ease;
+  --g1-transition-base: 0.2s ease;
+  --g1-transition-slow: 0.3s ease;
+  --g1-transition-spring: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Spacing ───────────────────────────────────────────── */
+  --g1-space-1: 4px;
+  --g1-space-2: 8px;
+  --g1-space-3: 12px;
+  --g1-space-4: 16px;
+  --g1-space-5: 20px;
+  --g1-space-6: 24px;
+  --g1-space-8: 32px;
+  --g1-space-10: 40px;
+  --g1-space-12: 48px;
+}
+
+
+/* ==========================================================================
+   Global TopNav (.g1-topnav)
+   ========================================================================== */
+
+.g1-topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 24px;
+  background: var(--g1-surface-1);
+  border-bottom: 1px solid var(--g1-border);
+  font-family: var(--g1-font-sans);
+  z-index: 100;
+}
+
+.g1-topnav__logo {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--g1-accent);
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.g1-topnav__links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.g1-topnav__link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--g1-radius-md);
+  font-size: var(--g1-font-size-sm);
+  font-weight: var(--g1-font-weight-medium);
+  color: var(--g1-text-secondary);
+  text-decoration: none;
+  transition: color var(--g1-transition-fast), background var(--g1-transition-fast);
+}
+
+.g1-topnav__link:hover {
+  color: var(--g1-text-primary);
+  background: var(--g1-surface-3);
+}
+
+.g1-topnav__link[aria-current="page"] {
+  color: var(--g1-accent);
+  background: var(--g1-accent-dim);
+  font-weight: var(--g1-font-weight-semibold);
+}
+
+.g1-topnav__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--g1-font-size-sm);
+  color: var(--g1-text-muted);
+}
+
+
+/* ==========================================================================
+   Shared Button Classes (.g1-btn)
+   ========================================================================== */
+
+.g1-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--g1-border);
+  border-radius: var(--g1-radius-md);
+  background: var(--g1-surface-2);
+  color: var(--g1-text-secondary);
+  font-family: var(--g1-font-sans);
+  font-size: var(--g1-font-size-sm);
+  font-weight: var(--g1-font-weight-medium);
+  cursor: pointer;
+  transition: all var(--g1-transition-fast);
+  text-decoration: none;
+  line-height: 1;
+}
+
+.g1-btn:hover {
+  background: var(--g1-surface-3);
+  color: var(--g1-text-primary);
+  border-color: var(--g1-border-strong);
+}
+
+.g1-btn-primary {
+  background: var(--g1-accent-muted);
+  color: #fff;
+  border-color: var(--g1-accent-muted);
+}
+
+.g1-btn-primary:hover {
+  background: var(--g1-accent);
+  border-color: var(--g1-accent);
+  box-shadow: var(--g1-shadow-glow-accent);
+}
+
+.g1-btn-danger {
+  border-color: var(--g1-error);
+  color: var(--g1-error);
+}
+
+.g1-btn-danger:hover {
+  background: var(--g1-error-dim);
+}
+
+.g1-btn-sm {
+  padding: 5px 12px;
+  font-size: var(--g1-font-size-xs);
+}
+
+
+/* ==========================================================================
+   Shared Card Class (.g1-card)
+   ========================================================================== */
+
+.g1-card {
+  background: var(--g1-surface-2);
+  border: 1px solid var(--g1-border);
+  border-radius: var(--g1-radius-lg);
+  padding: 20px;
+  transition: box-shadow var(--g1-transition-base), border-color var(--g1-transition-base);
+}
+
+.g1-card:hover {
+  border-color: var(--g1-border-strong);
+  box-shadow: var(--g1-shadow-md);
+}
+
+
+/* ==========================================================================
+   Shared Badge Classes (.g1-badge)
+   ========================================================================== */
+
+.g1-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--g1-radius-full);
+  font-size: var(--g1-font-size-xs);
+  font-weight: var(--g1-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.6;
+}
+
+.g1-badge-success {
+  background: var(--g1-success-dim);
+  color: var(--g1-success);
+}
+
+.g1-badge-warning {
+  background: var(--g1-warning-dim);
+  color: var(--g1-warning);
+}
+
+.g1-badge-error {
+  background: var(--g1-error-dim);
+  color: var(--g1-error);
+}
+
+.g1-badge-info {
+  background: var(--g1-accent-dim);
+  color: var(--g1-accent);
+}
+
+.g1-badge-neutral {
+  background: rgba(139, 148, 158, 0.10);
+  color: var(--g1-text-secondary);
+}
+
+
+/* ==========================================================================
+   Focus-visible Outlines
+   ========================================================================== */
+
+*:focus-visible {
+  outline: 2px solid var(--g1-accent);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--g1-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--g1-accent-dim);
+}
+
+
+/* ==========================================================================
+   Dark Scrollbar Styling
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--g1-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--g1-border-strong);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--g1-border) transparent;
+}

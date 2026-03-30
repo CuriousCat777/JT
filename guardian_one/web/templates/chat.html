@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guardian One — AI Engine Chat</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--g1-font-family, 'Inter', system-ui, -apple-system, sans-serif);
+      background: var(--g1-bg);
+      color: var(--g1-text);
+      line-height: 1.5;
+    }
+
+    /* ── Screen-reader only utility ────────────────────────── */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ── Top Navigation ────────────────────────────────────── */
+    .g1-topnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      height: 3.5rem;
+      background: var(--g1-surface);
+      border-bottom: 1px solid var(--g1-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .g1-topnav__logo {
+      font-size: 0.875rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--g1-accent);
+      text-decoration: none;
+    }
+
+    .g1-topnav__links {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .g1-topnav__links a {
+      color: var(--g1-text-muted);
+      text-decoration: none;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      padding: 0.25rem 0;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .g1-topnav__links a:hover {
+      color: var(--g1-text);
+    }
+
+    .g1-topnav__links a[aria-current="page"] {
+      color: var(--g1-accent);
+      border-bottom-color: var(--g1-accent);
+    }
+
+    .g1-topnav__status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--g1-text-muted);
+    }
+
+    .g1-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--g1-success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--g1-success); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px transparent; }
+    }
+
+    /* ── Chat Layout ───────────────────────────────────────── */
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 3.5rem);
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* ── Chat Header / Controls ────────────────────────────── */
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid var(--g1-border);
+      background: var(--g1-surface);
+    }
+
+    .chat-header__title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--g1-text);
+    }
+
+    /* ── Toggle Switch ─────────────────────────────────────── */
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .toggle-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--g1-text-muted);
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--g1-border);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+
+    .toggle-slider::before {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--g1-text);
+      transition: transform 0.25s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--g1-accent);
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(18px);
+    }
+
+    .toggle-switch input:focus-visible + .toggle-slider {
+      outline: 2px solid var(--g1-accent);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px var(--g1-accent-dim, rgba(99, 102, 241, 0.25));
+    }
+
+    /* ── Message Area ──────────────────────────────────────── */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--g1-border) transparent;
+    }
+
+    .chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: var(--g1-border);
+      border-radius: 3px;
+    }
+
+    /* ── Message Bubbles ───────────────────────────────────── */
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 75%;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message--user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .message--assistant {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .message__bubble {
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      word-wrap: break-word;
+    }
+
+    .message--user .message__bubble {
+      background: var(--g1-accent);
+      color: var(--g1-bg);
+      border-bottom-right-radius: 4px;
+    }
+
+    .message--assistant .message__bubble {
+      background: var(--g1-surface);
+      color: var(--g1-text);
+      border: 1px solid var(--g1-border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message__meta {
+      font-size: 0.6875rem;
+      color: var(--g1-text-muted);
+      margin-top: 0.25rem;
+      padding: 0 0.25rem;
+    }
+
+    /* ── Loading Indicator ─────────────────────────────────── */
+    .loading-indicator {
+      display: none;
+      align-self: flex-start;
+      padding: 0.75rem 1rem;
+      background: var(--g1-surface);
+      border: 1px solid var(--g1-border);
+      border-radius: 12px;
+      border-bottom-left-radius: 4px;
+    }
+
+    .loading-indicator.active {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .loading-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .loading-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--g1-text-muted);
+      animation: dotBounce 1.4s infinite ease-in-out both;
+    }
+
+    .loading-dots span:nth-child(1) { animation-delay: 0s; }
+    .loading-dots span:nth-child(2) { animation-delay: 0.16s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    .loading-text {
+      font-size: 0.75rem;
+      color: var(--g1-text-muted);
+    }
+
+    /* ── Input Area ────────────────────────────────────────── */
+    .chat-input-area {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--g1-border);
+      background: var(--g1-surface);
+    }
+
+    .chat-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--g1-bg);
+      border: 1px solid var(--g1-border);
+      border-radius: 12px;
+      padding: 0.5rem 0.75rem;
+      transition: border-color 0.2s;
+    }
+
+    .chat-input-wrapper:focus-within {
+      border-color: var(--g1-accent);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--g1-text);
+      font-size: 0.875rem;
+      font-family: inherit;
+      padding: 0.375rem 0;
+    }
+
+    .chat-input::placeholder {
+      color: var(--g1-text-muted);
+    }
+
+    .chat-send-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: var(--g1-accent);
+      color: var(--g1-bg);
+      cursor: pointer;
+      transition: opacity 0.2s;
+      flex-shrink: 0;
+    }
+
+    .chat-send-btn:hover {
+      opacity: 0.85;
+    }
+
+    .chat-send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .chat-send-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Top Navigation ──────────────────────────────────── -->
+  <nav class="g1-topnav" aria-label="Main navigation">
+    <a href="/" class="g1-topnav__logo">GUARDIAN ONE</a>
+    <ul class="g1-topnav__links">
+      <li><a href="/">Command Center</a></li>
+      <li><a href="/chat" aria-current="page">Chat</a></li>
+    </ul>
+    <div class="g1-topnav__status">
+      <span class="g1-pulse" aria-hidden="true"></span>
+      <span>Online</span>
+    </div>
+  </nav>
+
+  <!-- ── Chat Container ──────────────────────────────────── -->
+  <div class="chat-container">
+
+    <!-- Chat Header with AI Engine toggle -->
+    <div class="chat-header">
+      <h1 class="chat-header__title">AI Engine</h1>
+      <div class="toggle-group">
+        <span class="toggle-label" id="toggle-label">AI Engine</span>
+        <label class="toggle-switch">
+          <input
+            type="checkbox"
+            id="ai-toggle"
+            checked
+            role="switch"
+            aria-checked="true"
+            aria-labelledby="toggle-label"
+          >
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Message Area -->
+    <div
+      id="chat-messages"
+      class="chat-messages"
+      role="log"
+      aria-live="polite"
+      aria-label="Chat conversation"
+      aria-describedby="chat-desc"
+    >
+      <p id="chat-desc" class="sr-only">
+        Messages from Guardian One AI Engine will appear here in chronological order.
+      </p>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" class="loading-indicator" aria-hidden="true">
+      <div class="loading-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <span class="loading-text">Guardian One is thinking...</span>
+    </div>
+
+    <!-- Input Area -->
+    <div class="chat-input-area">
+      <label for="chat-input" class="sr-only">Type your message to Guardian One</label>
+      <div class="chat-input-wrapper">
+        <input
+          type="text"
+          id="chat-input"
+          class="chat-input"
+          placeholder="Ask Guardian One..."
+          autocomplete="off"
+          aria-label="Message input"
+          aria-describedby="chat-desc"
+        >
+        <button
+          id="chat-send"
+          class="chat-send-btn"
+          type="button"
+          aria-label="Send message"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Chat Script ─────────────────────────────────────── -->
+  <script>
+    (function () {
+      const messagesEl = document.getElementById('chat-messages');
+      const inputEl = document.getElementById('chat-input');
+      const sendBtn = document.getElementById('chat-send');
+      const loadingEl = document.getElementById('loading-indicator');
+      const aiToggle = document.getElementById('ai-toggle');
+
+      function formatTime(date) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function appendMessage(text, role) {
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('message', 'message--' + role);
+
+        const bubble = document.createElement('div');
+        bubble.classList.add('message__bubble');
+        bubble.textContent = text;
+
+        const meta = document.createElement('div');
+        meta.classList.add('message__meta');
+        meta.textContent = (role === 'user' ? 'You' : 'Guardian One') + ' \u00B7 ' + formatTime(new Date());
+
+        wrapper.appendChild(bubble);
+        wrapper.appendChild(meta);
+        messagesEl.appendChild(wrapper);
+
+        // Auto-scroll to latest message
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function setLoading(active) {
+        loadingEl.classList.toggle('active', active);
+        loadingEl.setAttribute('aria-hidden', String(!active));
+        sendBtn.disabled = active;
+        if (active) {
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      }
+
+      async function sendMessage() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+
+        // Check if AI Engine is enabled
+        if (!aiToggle.checked) {
+          appendMessage('AI Engine is currently disabled. Toggle it on to chat.', 'assistant');
+          return;
+        }
+
+        appendMessage(text, 'user');
+        inputEl.value = '';
+        setLoading(true);
+
+        try {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Server responded with ' + response.status);
+          }
+
+          const data = await response.json();
+          appendMessage(data.reply, 'assistant');
+        } catch (err) {
+          appendMessage('Error: Unable to reach Guardian One. ' + err.message, 'assistant');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Send on button click
+      sendBtn.addEventListener('click', sendMessage);
+
+      // Send on Enter key
+      inputEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // Toggle aria-checked state
+      aiToggle.addEventListener('change', function () {
+        this.setAttribute('aria-checked', String(this.checked));
+      });
+
+      // Focus input on load
+      inputEl.focus();
+    })();
+  </script>
+
+</body>
+</html>

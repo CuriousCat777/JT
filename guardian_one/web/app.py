@@ -80,6 +80,10 @@ def create_app() -> Flask:
     def index():
         return render_template("panel.html")
 
+    @app.route("/chat")
+    def chat():
+        return render_template("chat.html")
+
     # ------------------------------------------------------------------
     # API — System
     # ------------------------------------------------------------------
@@ -975,6 +979,32 @@ def create_app() -> Flask:
     def api_summary():
         g = _get_guardian()
         return jsonify({"summary": g.daily_summary()})
+
+    # ------------------------------------------------------------------
+    # API — Chat (AI Engine)
+    # ------------------------------------------------------------------
+
+    @app.route("/api/chat", methods=["POST"])
+    def api_chat():
+        g = _get_guardian()
+        body = request.get_json(silent=True) or {}
+        message = body.get("message", "").strip()
+        if not message:
+            return jsonify({"error": "Empty message"}), 400
+
+        # Try the AI engine if available, otherwise return a status summary
+        try:
+            from guardian_one.core.ai_engine import AIEngine
+            engine = AIEngine(guardian=g)
+            reply = engine.chat(message)
+        except (ImportError, AttributeError):
+            # Fallback: return a helpful status-based response
+            reply = (
+                f"AI Engine is not yet connected. Your message: \"{message}\"\n\n"
+                f"System status: {len(g.list_agents())} agents registered, "
+                f"owner={g.config.owner}, tz={g.config.timezone}."
+            )
+        return jsonify({"reply": reply})
 
     return app
 
