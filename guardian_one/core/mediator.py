@@ -82,11 +82,18 @@ class Mediator:
             for j in range(i + 1, len(proposals)):
                 a, b = proposals[i], proposals[j]
 
-                # Time overlap check
+                # Time overlap check (parse to datetime for safe comparison)
                 if a.time_start and b.time_start and a.time_end and b.time_end:
-                    if a.time_start < b.time_end and b.time_start < a.time_end:
-                        record = self._resolve_time_conflict(a, b)
-                        conflicts.append(record)
+                    try:
+                        a_start = datetime.fromisoformat(a.time_start)
+                        a_end = datetime.fromisoformat(a.time_end)
+                        b_start = datetime.fromisoformat(b.time_start)
+                        b_end = datetime.fromisoformat(b.time_end)
+                        if a_start < b_end and b_start < a_end:
+                            record = self._resolve_time_conflict(a, b)
+                            conflicts.append(record)
+                    except (ValueError, TypeError):
+                        pass  # skip unparseable timestamps
 
                 # Same resource contention
                 if a.resource == b.resource and a.agent != b.agent:

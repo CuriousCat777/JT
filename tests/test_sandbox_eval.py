@@ -27,7 +27,7 @@ def _make_guardian() -> GuardianOne:
             "archivist": AgentConfig(name="archivist", allowed_resources=["files"]),
         },
     )
-    guardian = GuardianOne(config)
+    guardian = GuardianOne(config, vault_passphrase="test-pass")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
     guardian.register_agent(Archivist(config.agents["archivist"], guardian.audit))
     return guardian

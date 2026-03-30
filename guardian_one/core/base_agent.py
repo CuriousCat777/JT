@@ -178,7 +178,7 @@ class BaseAgent(abc.ABC):
                 "model": response.model,
                 "tokens": response.tokens_used,
                 "latency_ms": response.latency_ms,
-                "prompt_preview": prompt[:100],
+                "prompt_length": len(prompt),
             },
         )
 

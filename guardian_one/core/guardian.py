@@ -56,8 +56,13 @@ class GuardianOne:
         # H.O.M.E. L.I.N.K. subsystems
         self.gateway = Gateway(audit=self.audit)
         passphrase = vault_passphrase or os.environ.get(
-            "GUARDIAN_MASTER_PASSPHRASE", "guardian-one-default-dev-passphrase"
+            "GUARDIAN_MASTER_PASSPHRASE", ""
         )
+        if not passphrase:
+            raise ValueError(
+                "Vault passphrase is required. Set GUARDIAN_MASTER_PASSPHRASE "
+                "environment variable or pass vault_passphrase to GuardianOne."
+            )
         vault_path = Path(self.config.data_dir) / "vault.enc"
         self.vault = Vault(vault_path, passphrase=passphrase)
         self.registry = IntegrationRegistry()
@@ -243,17 +248,18 @@ class GuardianOne:
             )
             return report
         except Exception as exc:
+            error_type = type(exc).__name__
             self.audit.record(
                 agent="guardian_one",
                 action=f"run_error:{name}",
                 severity=Severity.ERROR,
-                details={"error": str(exc)},
+                details={"error_type": error_type},
                 requires_review=True,
             )
             return AgentReport(
                 agent_name=name,
                 status=AgentStatus.ERROR.value,
-                summary=f"Error: {exc}",
+                summary=f"Error running agent ({error_type}). Check audit log.",
             )
 
     def run_all(self) -> list[AgentReport]:
@@ -302,7 +308,7 @@ class GuardianOne:
                 lines.append("")
             except Exception as exc:
                 lines.append(f"--- {name} ---")
-                lines.append(f"  Error generating report: {exc}")
+                lines.append(f"  Error generating report ({type(exc).__name__}).")
                 lines.append("")
 
         # H.O.M.E. L.I.N.K. status

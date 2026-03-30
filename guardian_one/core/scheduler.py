@@ -125,7 +125,16 @@ class Scheduler:
     def _tick_loop(self) -> None:
         """Run pending scheduled jobs until stop is signaled."""
         while not self._stop_event.is_set():
-            schedule.run_pending()
+            try:
+                schedule.run_pending()
+            except Exception as exc:
+                self.guardian.audit.record(
+                    agent="scheduler",
+                    action="tick_error",
+                    severity=Severity.ERROR,
+                    details={"error_type": type(exc).__name__},
+                    requires_review=True,
+                )
             self._stop_event.wait(timeout=1)
 
     # ------------------------------------------------------------------
@@ -216,10 +225,10 @@ class Scheduler:
             target = parts[1].lower()
             try:
                 minutes = int(parts[2])
-                if minutes < 1:
+                if minutes < 1 or minutes > 1440:
                     raise ValueError
             except ValueError:
-                print("  Interval must be a positive integer (minutes).")
+                print("  Interval must be a positive integer (1–1440 minutes).")
                 return True
             agent = self.guardian.get_agent(target)
             if agent:

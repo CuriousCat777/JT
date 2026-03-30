@@ -1,12 +1,16 @@
 """Tests for the Guardian One web-based dev panel."""
 
 import json
+import os
 import pytest
+import guardian_one.web.app as web_app
 from guardian_one.web.app import create_app
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("GUARDIAN_MASTER_PASSPHRASE", "test-pass")
+    web_app._guardian = None  # reset singleton for test isolation
     app = create_app()
     app.config["TESTING"] = True
     with app.test_client() as c:
