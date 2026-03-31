@@ -21,6 +21,11 @@ from pathlib import Path
 
 _context = threading.local()
 
+# Standard LogRecord attributes — anything not in this set was passed via extra={}
+_LOG_RECORD_BUILTINS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", (), None).__dict__
+)
+
 
 def set_correlation_id(correlation_id: str | None = None) -> str:
     """Set a correlation ID for the current thread. Returns the ID."""
@@ -45,10 +50,9 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
             "correlation_id": get_correlation_id(),
         }
-        # Include extra fields
-        for key in ("extra", "agent", "action", "details"):
-            val = getattr(record, key, None)
-            if val is not None:
+        # Capture any user-supplied extra= fields (not in standard LogRecord)
+        for key, val in record.__dict__.items():
+            if key not in _LOG_RECORD_BUILTINS and key not in log_entry:
                 log_entry[key] = val
         if record.exc_info and record.exc_info[1]:
             log_entry["exception"] = str(record.exc_info[1])

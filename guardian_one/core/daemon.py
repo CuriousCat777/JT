@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_PORT = 5200
 _MAX_CONSECUTIVE_FAILURES = 5
+_AUTO_RESUME_CYCLES = 3  # Resume paused agents after this many scheduler ticks
 _STATE_FILE = "daemon_state.json"
 
 
@@ -42,6 +43,7 @@ class GuardianDaemon:
         self._running = False
         self._start_time: float = 0.0
         self._lock = threading.Lock()
+        self._cycle_count: int = 0
 
         # Per-agent tracking: {"agent_name": {"last_run": iso|null, "errors": int, "runs": int, "paused": bool}}
         self._agent_state: dict[str, dict] = {}
@@ -128,6 +130,7 @@ class GuardianDaemon:
         state["errors"] = state.get("errors", 0) + 1
         if state["errors"] >= _MAX_CONSECUTIVE_FAILURES and not state.get("paused"):
             state["paused"] = True
+            state["paused_at_cycle"] = self._cycle_count
             self._guardian.audit.record(
                 agent="daemon",
                 action="agent_auto_paused",
@@ -136,15 +139,41 @@ class GuardianDaemon:
                     "agent": name,
                     "consecutive_errors": state["errors"],
                     "reason": detail or "too many consecutive failures",
+                    "will_retry_after_cycles": _AUTO_RESUME_CYCLES,
                 },
             )
+
+    def _try_resume_paused(self) -> None:
+        """Auto-resume agents paused by transient failures after a cool-down period."""
+        with self._lock:
+            for name, state in self._agent_state.items():
+                if not state.get("paused"):
+                    continue
+                paused_at = state.get("paused_at_cycle", 0)
+                if self._cycle_count - paused_at >= _AUTO_RESUME_CYCLES:
+                    state["paused"] = False
+                    state["errors"] = 0
+                    state.pop("paused_at_cycle", None)
+                    self._save_state()
+                    self._guardian.audit.record(
+                        agent="daemon",
+                        action="agent_auto_resumed",
+                        severity=Severity.INFO,
+                        details={"agent": name, "cool_down_cycles": _AUTO_RESUME_CYCLES},
+                    )
 
     # ------------------------------------------------------------------
     # Schedule setup
     # ------------------------------------------------------------------
 
     def _schedule_agents(self) -> None:
-        """Register each enabled agent with the ``schedule`` library."""
+        """Register each enabled agent with the ``schedule`` library.
+
+        If an agent has a restored ``last_run`` timestamp, calculate
+        remaining time so we honour the configured interval rather than
+        always waiting a full cycle after restart.
+        """
+        now = datetime.now(timezone.utc)
         for name in self._guardian.list_agents():
             agent = self._guardian.get_agent(name)
             if agent is None:
@@ -152,7 +181,25 @@ class GuardianDaemon:
             if not agent.config.enabled:
                 continue
             interval = getattr(agent.config, "schedule_interval_minutes", 15)
-            schedule.every(interval).minutes.do(self._run_agent, name)
+            job = schedule.every(interval).minutes.do(self._run_agent, name)
+
+            # If the agent ran recently, adjust next_run so we don't
+            # wait a full interval after a quick restart.
+            state = self._agent_state.get(name, {})
+            last_run_iso = state.get("last_run")
+            if last_run_iso and job is not None:
+                try:
+                    last_run = datetime.fromisoformat(last_run_iso)
+                    elapsed = (now - last_run).total_seconds()
+                    remaining = (interval * 60) - elapsed
+                    if remaining <= 0:
+                        # Overdue — run on next tick
+                        job.next_run = datetime.now()
+                    else:
+                        from datetime import timedelta
+                        job.next_run = datetime.now() + timedelta(seconds=remaining)
+                except (ValueError, TypeError):
+                    pass  # Malformed timestamp; fall back to default
 
         self._guardian.audit.record(
             agent="daemon",
@@ -237,6 +284,8 @@ class GuardianDaemon:
         # Tick loop — runs pending jobs every second.
         while self._running:
             schedule.run_pending()
+            self._cycle_count += 1
+            self._try_resume_paused()
             time.sleep(1)
 
         # After loop exits, persist final state.

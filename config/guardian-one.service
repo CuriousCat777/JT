@@ -6,9 +6,9 @@ After=network.target
 Type=simple
 User=jeremy
 WorkingDirectory=/home/jeremy/JT
-Environment=PATH=/home/jeremy/.local/bin:/usr/bin:/bin
+Environment=PATH=/home/jeremy/JT/venv/bin:/home/jeremy/.local/bin:/usr/bin:/bin
 EnvironmentFile=/home/jeremy/JT/.env
-ExecStart=/usr/bin/python3 /home/jeremy/JT/main.py --daemon
+ExecStart=/home/jeremy/JT/venv/bin/python /home/jeremy/JT/main.py --daemon
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
