@@ -23,7 +23,7 @@ def _make_notion_sync(audit: AuditLog) -> NotionSync:
     """Create a NotionSync with fake gateway/vault for testing."""
     tmp = Path(tempfile.mkdtemp())
     gateway = Gateway(audit)
-    vault = Vault(tmp / "vault.enc", passphrase="test-pass")
+    vault = Vault(tmp / "vault.enc", passphrase="test-passphrase!!")
     return NotionSync(
         gateway=gateway,
         vault=vault,

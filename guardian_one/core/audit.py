@@ -40,6 +40,11 @@ class AuditEntry:
         return asdict(self)
 
 
+# Translation table that strips ASCII control characters (0x00-0x1F, 0x7F)
+# from strings to prevent log injection.  Newlines, tabs, carriage returns,
+# null bytes, etc. are all removed.
+_CONTROL_CHAR_TABLE = str.maketrans("", "", "".join(chr(c) for c in range(0x20)) + "\x7f")
+
 # Default limits
 _DEFAULT_MAX_MEMORY = 10_000
 _DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -78,6 +83,24 @@ class AuditLog:
         self._entries: deque[AuditEntry] = deque(maxlen=max_memory_entries)
         self._total_recorded: int = 0
 
+    @staticmethod
+    def _sanitize_details(details: dict[str, Any]) -> dict[str, Any]:
+        """Strip control characters from detail values to prevent log injection.
+
+        Newlines in values would corrupt the JSONL format; other control chars
+        could confuse log parsers.
+        """
+        sanitized: dict[str, Any] = {}
+        for k, v in details.items():
+            key = str(k).translate(_CONTROL_CHAR_TABLE)
+            if isinstance(v, str):
+                sanitized[key] = v.translate(_CONTROL_CHAR_TABLE)
+            elif isinstance(v, dict):
+                sanitized[key] = AuditLog._sanitize_details(v)
+            else:
+                sanitized[key] = v
+        return sanitized
+
     def record(
         self,
         agent: str,
@@ -86,12 +109,13 @@ class AuditLog:
         details: dict[str, Any] | None = None,
         requires_review: bool = False,
     ) -> AuditEntry:
+        safe_details = self._sanitize_details(details) if details else {}
         entry = AuditEntry(
             timestamp=datetime.now(timezone.utc).isoformat(),
-            agent=agent,
-            action=action,
+            agent=str(agent).translate(_CONTROL_CHAR_TABLE),
+            action=str(action).translate(_CONTROL_CHAR_TABLE),
             severity=severity.value,
-            details=details or {},
+            details=safe_details,
             requires_review=requires_review,
         )
         with self._lock:

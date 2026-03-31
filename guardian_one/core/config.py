@@ -43,6 +43,16 @@ class GuardianConfig:
     timezone: str = "America/Chicago"
 
 
+def _validated_path(raw_path: str, label: str) -> str:
+    """Reject path traversal attempts (e.g. ``../../etc``) in directory settings."""
+    resolved = Path(raw_path).resolve()
+    if ".." in Path(raw_path).parts:
+        raise ValueError(
+            f"Directory traversal detected in {label}: {raw_path!r}"
+        )
+    return str(resolved)
+
+
 def load_config(config_path: Path | None = None) -> GuardianConfig:
     """Load configuration from YAML file, with env-var overrides."""
     load_dotenv()
@@ -73,12 +83,19 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
             custom=agent_raw.get("custom", {}),
         )
 
+    data_dir = _validated_path(
+        os.getenv("GUARDIAN_DATA_DIR", raw.get("data_dir", "data")), "data_dir"
+    )
+    log_dir = _validated_path(
+        os.getenv("GUARDIAN_LOG_DIR", raw.get("log_dir", "logs")), "log_dir"
+    )
+
     return GuardianConfig(
         owner=raw.get("owner", "Jeremy Paulo Salvino Tabernero"),
         security=security,
         agents=agents,
-        data_dir=os.getenv("GUARDIAN_DATA_DIR", raw.get("data_dir", "data")),
-        log_dir=os.getenv("GUARDIAN_LOG_DIR", raw.get("log_dir", "logs")),
+        data_dir=data_dir,
+        log_dir=log_dir,
         daily_summary_hour=raw.get("daily_summary_hour", 7),
         timezone=raw.get("timezone", "America/Chicago"),
     )

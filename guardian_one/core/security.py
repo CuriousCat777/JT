@@ -57,8 +57,14 @@ class SecretStore:
     _SALT_MARKER = b"GUARDIAN_SALT_V2"  # exactly 16 bytes
     _SALT_LENGTH = 16
     _LEGACY_SALT = b"guardian-one-static-salt-v1"
+    _MIN_PASSPHRASE_LENGTH = 16
 
     def __init__(self, store_path: Path, passphrase: str) -> None:
+        if len(passphrase) < self._MIN_PASSPHRASE_LENGTH:
+            raise ValueError(
+                f"Passphrase must be at least {self._MIN_PASSPHRASE_LENGTH} characters "
+                f"(got {len(passphrase)}). Use a strong, random passphrase."
+            )
         self._store_path = store_path
         self._data: dict[str, str] = {}
 
@@ -128,6 +134,7 @@ class AccessController:
 
     def __init__(self) -> None:
         self._policies: dict[str, AccessPolicy] = {}
+        self._access_log: list[dict[str, Any]] = []
 
     def register(self, policy: AccessPolicy) -> None:
         self._policies[policy.identity] = policy
@@ -135,14 +142,34 @@ class AccessController:
     def check(self, identity: str, resource: str) -> bool:
         policy = self._policies.get(identity)
         if policy is None:
+            self._log_access(identity, resource, False, "no_policy")
             return False
         if policy.level == AccessLevel.OWNER:
+            self._log_access(identity, resource, True, "owner_access")
             return True
         if resource in policy.denied_resources:
+            self._log_access(identity, resource, False, "denied_resource")
             return False
         if policy.allowed_resources and resource not in policy.allowed_resources:
+            self._log_access(identity, resource, False, "not_in_allowed")
             return False
+        self._log_access(identity, resource, True, "allowed")
         return True
+
+    def _log_access(
+        self, identity: str, resource: str, granted: bool, reason: str
+    ) -> None:
+        self._access_log.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "identity": identity,
+            "resource": resource,
+            "granted": granted,
+            "reason": reason,
+        })
+
+    def recent_access_log(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return recent access check records for audit review."""
+        return self._access_log[-limit:]
 
     def get_policy(self, identity: str) -> AccessPolicy | None:
         return self._policies.get(identity)

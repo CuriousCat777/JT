@@ -25,6 +25,12 @@ from typing import Any
 
 from guardian_one.core.audit import AuditLog, Severity
 
+# Headers whose values must be redacted in logs / audit trails
+_SENSITIVE_HEADERS = frozenset({
+    "authorization", "x-api-key", "api-key", "cookie",
+    "set-cookie", "proxy-authorization", "x-auth-token",
+})
+
 
 class CircuitState(Enum):
     CLOSED = "closed"      # Normal operation
@@ -77,7 +83,7 @@ class _RateLimiter:
         self._lock = threading.Lock()
 
     def allow(self) -> bool:
-        now = time.time()
+        now = time.monotonic()
         with self._lock:
             self._timestamps = [
                 t for t in self._timestamps if t > now - self._window
@@ -88,7 +94,7 @@ class _RateLimiter:
             return True
 
     def remaining(self) -> int:
-        now = time.time()
+        now = time.monotonic()
         with self._lock:
             active = [t for t in self._timestamps if t > now - self._window]
             return max(0, self._max - len(active))
@@ -293,6 +299,14 @@ class Gateway:
         )
         return {"success": False, "status_code": 0, "data": None,
                 "error": f"All {config.max_retries + 1} attempts failed: {last_error}"}
+
+    @staticmethod
+    def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
+        """Return a copy of *headers* with sensitive values replaced."""
+        return {
+            k: ("***REDACTED***" if k.lower() in _SENSITIVE_HEADERS else v)
+            for k, v in headers.items()
+        }
 
     def _do_request(
         self,

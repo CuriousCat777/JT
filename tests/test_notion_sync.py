@@ -35,7 +35,7 @@ def _make_audit() -> AuditLog:
 
 
 def _make_vault(tmpdir: str, token: str = "ntn_test_token_12345") -> Vault:
-    vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+    vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
     if token:
         vault.store("NOTION_TOKEN", token, service="notion", scope="write")
     return vault

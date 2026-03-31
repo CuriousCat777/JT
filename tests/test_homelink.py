@@ -30,7 +30,7 @@ def _make_audit() -> AuditLog:
 
 def test_vault_store_and_retrieve():
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("API_KEY", "sk-12345", service="doordash")
         assert vault.retrieve("API_KEY") == "sk-12345"
         assert vault.retrieve("nonexistent") is None
@@ -39,16 +39,16 @@ def test_vault_store_and_retrieve():
 def test_vault_persistence():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "vault.enc"
-        vault1 = Vault(path, passphrase="test-pass")
+        vault1 = Vault(path, passphrase="test-passphrase!!")
         vault1.store("KEY", "value", service="test")
 
-        vault2 = Vault(path, passphrase="test-pass")
+        vault2 = Vault(path, passphrase="test-passphrase!!")
         assert vault2.retrieve("KEY") == "value"
 
 
 def test_vault_rotation():
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("KEY", "old_value", service="test")
         assert vault.rotate("KEY", "new_value") is True
         assert vault.retrieve("KEY") == "new_value"
@@ -57,7 +57,7 @@ def test_vault_rotation():
 
 def test_vault_delete():
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("KEY", "value")
         assert vault.delete("KEY") is True
         assert vault.retrieve("KEY") is None
@@ -66,7 +66,7 @@ def test_vault_delete():
 
 def test_vault_list_keys():
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("A", "1")
         vault.store("B", "2")
         assert sorted(vault.list_keys()) == ["A", "B"]
@@ -74,7 +74,7 @@ def test_vault_list_keys():
 
 def test_vault_health_report():
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("KEY1", "v1", service="doordash")
         vault.store("KEY2", "v2", service="google")
 
@@ -87,11 +87,11 @@ def test_vault_health_report():
 def test_vault_wrong_passphrase():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "vault.enc"
-        vault1 = Vault(path, passphrase="correct")
+        vault1 = Vault(path, passphrase="correct-pass-1234")
         vault1.store("KEY", "secret")
 
         try:
-            Vault(path, passphrase="wrong")
+            Vault(path, passphrase="wrong-pass-001234")
             assert False, "Should have raised VaultError"
         except VaultError:
             pass
@@ -284,7 +284,7 @@ def test_monitor_assess_service():
     gw.register_service(ServiceConfig(name="svc", base_url="https://api.example.com"))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         reg = IntegrationRegistry()
         monitor = Monitor(gateway=gw, vault=vault, registry=reg)
 
@@ -296,7 +296,7 @@ def test_monitor_assess_service():
 def test_monitor_unknown_service():
     gw = Gateway(audit=_make_audit())
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         reg = IntegrationRegistry()
         monitor = Monitor(gateway=gw, vault=vault, registry=reg)
 
@@ -309,7 +309,7 @@ def test_monitor_weekly_brief():
     gw.register_service(ServiceConfig(name="svc", base_url="https://api.example.com"))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         vault.store("TEST_KEY", "value", service="test")
         reg = IntegrationRegistry()
         reg.load_defaults()
@@ -327,7 +327,7 @@ def test_monitor_weekly_brief_text():
     gw.register_service(ServiceConfig(name="svc", base_url="https://api.example.com"))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test")
+        vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
         reg = IntegrationRegistry()
         monitor = Monitor(gateway=gw, vault=vault, registry=reg)
 
@@ -355,7 +355,7 @@ def test_guardian_has_homelink(monkeypatch):
     from guardian_one.core.guardian import GuardianOne
     from guardian_one.agents.chronos import Chronos
 
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
 
     # Gateway should have services from registry

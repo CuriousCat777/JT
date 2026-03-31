@@ -65,7 +65,14 @@ class Vault:
     _SALT_LENGTH = 16
     _LEGACY_SALT = b"homelink-vault-salt-v1"
 
+    _MIN_PASSPHRASE_LENGTH = 16
+
     def __init__(self, vault_path: Path, passphrase: str) -> None:
+        if len(passphrase) < self._MIN_PASSPHRASE_LENGTH:
+            raise VaultError(
+                f"Passphrase must be at least {self._MIN_PASSPHRASE_LENGTH} characters "
+                f"(got {len(passphrase)}). Use a strong, random passphrase."
+            )
         self._path = vault_path
         self._lock = threading.Lock()
         self._secrets: dict[str, str] = {}

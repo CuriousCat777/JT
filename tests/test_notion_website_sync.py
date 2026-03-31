@@ -17,7 +17,7 @@ def _make_audit() -> AuditLog:
 
 def _make_sync(tmpdir: str) -> tuple[NotionSync, Gateway, Vault]:
     audit = _make_audit()
-    vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-pass")
+    vault = Vault(Path(tmpdir) / "vault.enc", passphrase="test-passphrase!!")
     vault.store("NOTION_TOKEN", "ntn_test_token", service="notion", scope="write")
     gateway = Gateway(audit=audit)
     gateway.register_service(ServiceConfig(

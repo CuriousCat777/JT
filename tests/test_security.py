@@ -52,7 +52,7 @@ def test_access_controller_unknown_identity():
 def test_secret_store_roundtrip():
     with tempfile.TemporaryDirectory() as tmpdir:
         store_path = Path(tmpdir) / "secrets.enc"
-        store = SecretStore(store_path, passphrase="test-passphrase")
+        store = SecretStore(store_path, passphrase="test-passphrase!!")
         store.set("api_key", "sk-12345")
         store.set("password", "hunter2")
 
@@ -61,14 +61,14 @@ def test_secret_store_roundtrip():
         assert store.get("nonexistent") is None
 
         # Reload from disk
-        store2 = SecretStore(store_path, passphrase="test-passphrase")
+        store2 = SecretStore(store_path, passphrase="test-passphrase!!")
         assert store2.get("api_key") == "sk-12345"
 
 
 def test_secret_store_delete():
     with tempfile.TemporaryDirectory() as tmpdir:
         store_path = Path(tmpdir) / "secrets.enc"
-        store = SecretStore(store_path, passphrase="test-passphrase")
+        store = SecretStore(store_path, passphrase="test-passphrase!!")
         store.set("key", "value")
         assert store.delete("key") is True
         assert store.get("key") is None
