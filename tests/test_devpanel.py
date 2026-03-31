@@ -9,7 +9,7 @@ from guardian_one.web.app import create_app
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setenv("GUARDIAN_MASTER_PASSPHRASE", "test-pass")
+    monkeypatch.setenv("GUARDIAN_MASTER_PASSPHRASE", "test-passphrase!!")
     web_app._guardian = None  # reset singleton for test isolation
     app = create_app()
     app.config["TESTING"] = True

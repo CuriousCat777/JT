@@ -26,14 +26,14 @@ def _make_config() -> GuardianConfig:
 
 
 def test_guardian_boot():
-    guardian = GuardianOne(_make_config(), vault_passphrase="test-pass")
+    guardian = GuardianOne(_make_config(), vault_passphrase="test-passphrase!!")
     assert guardian.list_agents() == []
     assert guardian.access.check("jeremy", "anything") is True
 
 
 def test_register_and_run_agents():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
 
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
     guardian.register_agent(Archivist(config.agents["archivist"], guardian.audit))
@@ -49,7 +49,7 @@ def test_register_and_run_agents():
 
 def test_run_single_agent():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
 
     report = guardian.run_agent("chronos")
@@ -58,7 +58,7 @@ def test_run_single_agent():
 
 def test_daily_summary():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
 
     summary = guardian.daily_summary()
@@ -69,7 +69,7 @@ def test_daily_summary():
 def test_disabled_agent():
     config = _make_config()
     config.agents["chronos"].enabled = False
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
 
     report = guardian.run_agent("chronos")
@@ -78,7 +78,7 @@ def test_disabled_agent():
 
 def test_access_control_for_agents():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
 
     assert guardian.access.check("chronos", "calendar") is True
@@ -108,7 +108,7 @@ def test_mediator_time_conflict():
 
 def test_guardian_shutdown():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
     guardian.shutdown()
 

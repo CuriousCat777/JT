@@ -341,7 +341,7 @@ def _make_config() -> GuardianConfig:
 
 
 def test_guardian_has_ai_engine():
-    guardian = GuardianOne(_make_config(), vault_passphrase="test-pass")
+    guardian = GuardianOne(_make_config(), vault_passphrase="test-passphrase!!")
     assert guardian.ai_engine is not None
     status = guardian.ai_status()
     assert "ollama" in status
@@ -350,7 +350,7 @@ def test_guardian_has_ai_engine():
 
 def test_guardian_injects_ai_into_agents():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
 
     agent = _DummyAgent(config.agents["test"], guardian.audit)
     guardian.register_agent(agent)
@@ -361,7 +361,7 @@ def test_guardian_injects_ai_into_agents():
 
 def test_guardian_think():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
 
     mock_response = AIResponse(
         content="All agents healthy.",
@@ -376,7 +376,7 @@ def test_guardian_think():
 
 def test_guardian_daily_summary_includes_ai():
     config = _make_config()
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     summary = guardian.daily_summary()
     assert "AI Engine" in summary
     assert "Ollama" in summary or "ollama" in summary.lower()

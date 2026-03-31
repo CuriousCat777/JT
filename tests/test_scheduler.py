@@ -23,7 +23,7 @@ def _make_guardian() -> GuardianOne:
             "cfo": AgentConfig(name="cfo", schedule_interval_minutes=60, allowed_resources=["accounts"]),
         },
     )
-    guardian = GuardianOne(config, vault_passphrase="test-pass")
+    guardian = GuardianOne(config, vault_passphrase="test-passphrase!!")
     guardian.register_agent(Chronos(config.agents["chronos"], guardian.audit))
     guardian.register_agent(Archivist(config.agents["archivist"], guardian.audit))
     guardian.register_agent(CFO(config.agents["cfo"], guardian.audit, data_dir=config.data_dir))
