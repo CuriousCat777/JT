@@ -293,11 +293,9 @@ def website_build_workflow_nodes(domain: str) -> list[dict[str, Any]]:
             "position": [450, 300],
             "parameters": {
                 "jsCode": (
-                    f"// Generate static pages for {domain}\n"
+                    f"const domain = {json.dumps(domain)};\n"
                     "const pages = ['index.html', 'about.html', 'contact.html'];\n"
-                    "return pages.map(p => ({json: {page: p, domain: '"
-                    + domain
-                    + "'}}));"
+                    "return pages.map(p => ({json: {page: p, domain}}));"
                 ),
             },
         },
@@ -384,7 +382,7 @@ def security_scan_workflow_nodes(domain: str) -> list[dict[str, Any]]:
             "position": [650, 300],
             "parameters": {
                 "jsCode": (
-                    "// Check security headers\n"
+                    f"const domain = {json.dumps(domain)};\n"
                     "const headers = $input.first().json.headers || {};\n"
                     "const required = [\n"
                     "  'content-security-policy',\n"
@@ -394,7 +392,7 @@ def security_scan_workflow_nodes(domain: str) -> list[dict[str, Any]]:
                     "];\n"
                     "const missing = required.filter(h => !headers[h]);\n"
                     "return [{json: {\n"
-                    f"  domain: '{domain}',\n"
+                    "  domain,\n"
                     "  headers_present: required.length - missing.length,\n"
                     "  headers_missing: missing,\n"
                     "  passed: missing.length === 0,\n"
@@ -436,10 +434,11 @@ def uptime_monitor_workflow_nodes(domain: str) -> list[dict[str, Any]]:
             "position": [650, 300],
             "parameters": {
                 "jsCode": (
+                    f"const domain = {json.dumps(domain)};\n"
                     "const resp = $input.first().json;\n"
                     "const ok = resp.statusCode >= 200 && resp.statusCode < 400;\n"
                     "return [{json: {\n"
-                    f"  domain: '{domain}',\n"
+                    "  domain,\n"
                     "  status_code: resp.statusCode,\n"
                     "  up: ok,\n"
                     "  checked_at: new Date().toISOString()\n"

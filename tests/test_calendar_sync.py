@@ -422,8 +422,8 @@ class TestGoogleCalendarProviderAPI:
         status = provider.status()
         assert status["provider"] == "google_calendar"
         assert status["authenticated"] is True
-        assert "credentials_path" in status
-        assert "token_path" in status
+        assert "credentials_configured" in status
+        assert "token_configured" in status
 
     def test_start_oauth_flow_no_creds(self, tmp_path):
         provider = GoogleCalendarProvider(

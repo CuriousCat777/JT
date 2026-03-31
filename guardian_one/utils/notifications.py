@@ -248,11 +248,14 @@ class iMessageChannel:
         if len(body) > 2000:
             body = body[:1997] + "..."
 
+        # Escape backslashes and double-quotes to prevent AppleScript injection
+        safe_recipient = self.recipient.replace("\\", "\\\\").replace('"', '\\"')
+        safe_body = body.replace("\\", "\\\\").replace('"', '\\"')
         script = (
             f'tell application "Messages"\n'
             f'  set targetService to 1st account whose service type = iMessage\n'
-            f'  set targetBuddy to participant "{self.recipient}" of targetService\n'
-            f'  send "{body}" to targetBuddy\n'
+            f'  set targetBuddy to participant "{safe_recipient}" of targetService\n'
+            f'  send "{safe_body}" to targetBuddy\n'
             f'end tell'
         )
 

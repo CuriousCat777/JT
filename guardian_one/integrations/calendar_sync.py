@@ -479,8 +479,8 @@ class GoogleCalendarProvider(CalendarProvider):
             "has_credentials": self.has_credentials,
             "has_token": self.has_token,
             "authenticated": self._authenticated,
-            "credentials_path": self._credentials_path,
-            "token_path": self._token_path,
+            "credentials_configured": bool(self._credentials_path),
+            "token_configured": bool(self._token_path),
             "last_error": self._last_error,
         }
 

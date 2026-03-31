@@ -26,9 +26,13 @@ import os
 import time
 import urllib.request
 import urllib.error
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+# DoorDash delivery IDs: alphanumeric, hyphens, underscores only
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +305,8 @@ class DoorDashDriveProvider(DoorDashProvider):
 
     def get_delivery_status(self, external_delivery_id: str) -> DeliveryResponse | None:
         """Get delivery status via GET /drive/v2/deliveries/{id}."""
+        if not _SAFE_ID.match(external_delivery_id):
+            return None
         result = self._request("GET", f"/drive/v2/deliveries/{external_delivery_id}")
         if result is None or result.get("error"):
             return None

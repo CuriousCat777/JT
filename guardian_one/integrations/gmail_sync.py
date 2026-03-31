@@ -20,6 +20,7 @@ import abc
 import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +32,9 @@ from typing import Any
 
 GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1"
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+# Gmail IDs are alphanumeric (hex or base64url-safe characters)
+_SAFE_GMAIL_ID = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
 
 
 @dataclass
@@ -277,6 +281,8 @@ class GmailProvider:
         Returns:
             Parsed EmailMessage or None.
         """
+        if not _SAFE_GMAIL_ID.match(message_id):
+            return None
         result = self._api_request(
             f"messages/{message_id}",
             params={"format": format},
@@ -291,6 +297,8 @@ class GmailProvider:
         Returns:
             Raw bytes of the attachment data.
         """
+        if not _SAFE_GMAIL_ID.match(message_id) or not _SAFE_GMAIL_ID.match(attachment_id):
+            return b""
         result = self._api_request(
             f"messages/{message_id}/attachments/{attachment_id}"
         )
