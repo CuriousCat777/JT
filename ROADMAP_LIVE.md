@@ -7,32 +7,32 @@ that runs 24/7 and reliably manages Jeremy's life operations.
 
 ## 1. Persistent Background Service (Daemon Mode)
 
-**Status:** Not started
+**Status:** COMPLETE
 **Why:** Right now Guardian One only runs when you manually invoke `python main.py`.
 For a live system, it needs to run continuously as a background service that
 survives reboots, crashes, and SSH disconnects.
 
 **Tasks:**
-- [ ] Create a systemd service unit (`guardian-one.service`) for Linux deployment
-- [ ] Add auto-restart on crash with backoff (`Restart=on-failure`)
-- [ ] Add a `--daemon` flag to `main.py` that runs the scheduler in headless mode
+- [x] Create a systemd service unit (`guardian-one.service`) for Linux deployment
+- [x] Add auto-restart on crash with backoff (`Restart=on-failure`)
+- [x] Add a `--daemon` flag to `main.py` that runs the scheduler in headless mode
       (no interactive prompt, just scheduled agent cycles + health endpoint)
-- [ ] Write a startup script that loads `.env`, checks dependencies, and launches
-- [ ] Add graceful shutdown with SIGTERM handling and state persistence
+- [x] Write a startup script that loads `.env`, checks dependencies, and launches
+- [x] Add graceful shutdown with SIGTERM handling and state persistence
 
 ---
 
 ## 2. Health Check & Status API
 
-**Status:** Not started
+**Status:** COMPLETE (core endpoints live, notification wiring pending)
 **Why:** A live system needs a way to check "is Guardian One running and healthy?"
 without SSH-ing in and reading logs. Also enables monitoring/alerting if it goes down.
 
 **Tasks:**
-- [ ] Add a lightweight HTTP health endpoint (`/health` on a local port)
+- [x] Add a lightweight HTTP health endpoint (`/health` on a local port)
       that returns system status, agent states, last run times, uptime
-- [ ] Add a `/status` endpoint with detailed agent reports (JSON)
-- [ ] Add a `/metrics` endpoint for key numbers (net worth, alert count,
+- [x] Add a `/status` endpoint with detailed agent reports (JSON)
+- [x] Add a `/metrics` endpoint for key numbers (net worth, alert count,
       agents healthy, last sync time)
 - [ ] Wire health checks into the notification system — if Guardian One itself
       is unhealthy, send an alert
@@ -41,16 +41,16 @@ without SSH-ing in and reading logs. Also enables monitoring/alerting if it goes
 
 ## 3. Real Credential & Secret Management
 
-**Status:** Partial (Vault exists but uses default passphrase)
+**Status:** MOSTLY COMPLETE (passphrase enforced, random salts, rotation tracking)
 **Why:** Going live means real API keys, bank tokens, and OAuth credentials.
 The default dev passphrase needs to go. Secrets must be locked down.
 
 **Tasks:**
-- [ ] Remove the hardcoded default passphrase (`guardian-one-default-dev-passphrase`)
-- [ ] Require `GUARDIAN_MASTER_PASSPHRASE` to be set at startup (fail fast if missing)
+- [x] Remove the hardcoded default passphrase (`guardian-one-default-dev-passphrase`)
+- [x] Require `GUARDIAN_MASTER_PASSPHRASE` to be set at startup (fail fast if missing)
 - [ ] Add credential validation on boot — verify Plaid tokens, Google OAuth,
       SMTP credentials are present and working before marking agents "ready"
-- [ ] Add automatic credential rotation reminders (Vault already tracks rotation dates)
+- [x] Add automatic credential rotation reminders (Vault already tracks rotation dates)
 - [ ] Document the full list of required credentials per agent in a setup guide
 
 ---
@@ -107,15 +107,15 @@ to diagnose what happened. The audit log tracks actions but not operational deta
 
 ## 7. Automated Test Suite & CI
 
-**Status:** Tests exist but no CI pipeline
+**Status:** MOSTLY COMPLETE (733 tests passing, CI pipeline active)
 **Why:** Before going live (and before every update), you need confidence that
 changes don't break things. Tests need to run automatically.
 
 **Tasks:**
-- [ ] Ensure all 14 test files pass cleanly (`pytest tests/`)
+- [x] Ensure all test files pass cleanly (`pytest tests/` — 733 passing)
 - [ ] Add integration test that boots GuardianOne, registers all agents,
       runs a full cycle, and verifies reports
-- [ ] Add GitHub Actions workflow (`.github/workflows/test.yml`)
+- [x] Add GitHub Actions workflow (`.github/workflows/test.yml`)
       that runs tests on every push
 - [ ] Add test coverage tracking (target: 80%+)
 - [ ] Add a pre-commit hook or CI check for linting (ruff/flake8)
@@ -179,9 +179,9 @@ manual processes to verify it produces correct results.
 
 ## Priority Order
 
-| Phase | Items | Goal |
-|-------|-------|------|
-| **Foundation** | 1, 3, 4 | Can run unattended with real credentials and persistent data |
-| **Reliability** | 5, 6, 7 | Won't silently fail; you'll know when something's wrong |
-| **Deployment** | 2, 8, 9 | Deployable, observable, communicates proactively |
-| **Go-Live** | 10 | Validated and trusted — flip the switch |
+| Phase | Items | Goal | Status |
+|-------|-------|------|--------|
+| **Foundation** | 1, 3, 4 | Can run unattended with real credentials and persistent data | 1 done, 3 mostly done, 4 not started |
+| **Reliability** | 5, 6, 7 | Won't silently fail; you'll know when something's wrong | 7 mostly done, 5-6 not started |
+| **Deployment** | 2, 8, 9 | Deployable, observable, communicates proactively | 2 done, 8-9 not started |
+| **Go-Live** | 10 | Validated and trusted — flip the switch | Blocked by above |
