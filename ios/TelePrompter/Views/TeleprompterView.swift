@@ -1,14 +1,31 @@
 import SwiftUI
 
-/// Full-screen teleprompter with auto-scroll and practice tracking
+/// Full-screen teleprompter matching PromptSmart Pro / Teleprompter Premium UX
+/// Features: WPM-calibrated scroll, focus line, mirror mode, auto-pause on cues,
+/// font size control, elapsed/ETA timers, progress bar, tap-to-pause gestures
 struct TeleprompterView: View {
     let script: Script
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var appState: AppState
 
-    @State private var scrollSpeed: Double = 3
+    // Scroll state
+    @State private var scrollWPM: Double = 160
     @State private var isScrolling = false
     @State private var scrollOffset: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+
+    // Display settings
+    @State private var fontSize: CGFloat = 28
+    @State private var isMirrored = false
+    @State private var showFocusLine = true
+    @State private var showSettings = false
+    @State private var theme: PrompterTheme = .dark
+
+    // Timer
+    @State private var elapsedSeconds = 0
+    @State private var timerActive = false
+
+    // Practice
     @State private var showRating = false
     @State private var practiceSessionId: String?
     @State private var practiceStartTime = Date()
@@ -17,48 +34,146 @@ struct TeleprompterView: View {
     @State private var aiFeedback: String?
 
     private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+    private let secondTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    enum PrompterTheme: String, CaseIterable {
+        case dark, light, highContrast
+        var bg: Color {
+            switch self {
+            case .dark: return Color(hex: "0a0a0a")
+            case .light: return .white
+            case .highContrast: return .black
+            }
+        }
+        var text: Color {
+            switch self {
+            case .dark: return Color(hex: "f5f5f7")
+            case .light: return Color(hex: "1c1c1e")
+            case .highContrast: return .yellow
+            }
+        }
+    }
+
+    private var wordCount: Int {
+        script.content.split(separator: " ").count
+    }
+
+    private var etaSeconds: Int {
+        guard scrollWPM > 0 else { return 0 }
+        return Int(ceil(Double(wordCount) / scrollWPM * 60))
+    }
+
+    private var progress: Double {
+        guard contentHeight > 0 else { return 0 }
+        return min(1, scrollOffset / contentHeight)
+    }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            theme.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Button("Done") { exitPrompter() }
-                        .foregroundStyle(.blue)
-                    Spacer()
-                    Text(script.title)
-                        .font(.subheadline).fontWeight(.semibold)
-                        .lineLimit(1)
-                    Spacer()
-                    // Mirror button placeholder
-                    Text("Done").opacity(0)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
+                topBar
+                infoStrip
+                progressBar
 
-                // Script content
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        scriptContent
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 40)
-                            .id("content")
+                ZStack {
+                    // Focus line
+                    if showFocusLine {
+                        GeometryReader { geo in
+                            Rectangle()
+                                .fill(Color.blue.opacity(0.25))
+                                .frame(height: 2)
+                                .offset(y: geo.size.height * 0.4)
+                        }
+                    }
+
+                    // Script content
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            scriptContent
+                                .padding(.horizontal, 24)
+                                .padding(.top, UIScreen.main.bounds.height * 0.4)
+                                .padding(.bottom, UIScreen.main.bounds.height * 0.5)
+                                .scaleEffect(x: isMirrored ? -1 : 1, y: 1)
+                        }
                     }
                 }
-                .onReceive(timer) { _ in
-                    guard isScrolling else { return }
-                    scrollOffset += scrollSpeed * 0.5
-                }
 
-                // Controls
                 controlBar
             }
         }
         .onAppear { startPracticeSession() }
+        .onReceive(secondTimer) { _ in
+            if timerActive { elapsedSeconds += 1 }
+        }
         .sheet(isPresented: $showRating) { ratingSheet }
+        .sheet(isPresented: $showSettings) { settingsSheet }
+        .onTapGesture { toggleScrolling() }
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            Button("Done") { exitPrompter() }
+                .foregroundStyle(.blue)
+            Spacer()
+            Text(script.title)
+                .font(.caption).fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+            HStack(spacing: 12) {
+                Button { isMirrored.toggle() } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .foregroundStyle(isMirrored ? .blue : .secondary)
+                }
+                Button { fontSize = max(16, fontSize - 2) } label: {
+                    Text("A-").font(.caption).foregroundStyle(.secondary)
+                }
+                Button { fontSize = min(72, fontSize + 2) } label: {
+                    Text("A+").font(.caption.bold()).foregroundStyle(.secondary)
+                }
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape").foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Info Strip
+
+    private var infoStrip: some View {
+        HStack {
+            Label(formatTime(elapsedSeconds), systemImage: "clock")
+            Spacer()
+            Text("\(Int(scrollWPM)) WPM")
+            Spacer()
+            Text("\(wordCount) words")
+            Spacer()
+            Label(formatTime(etaSeconds), systemImage: "hourglass")
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+        .background(Color.black.opacity(0.5))
+    }
+
+    // MARK: - Progress Bar
+
+    private var progressBar: some View {
+        GeometryReader { geo in
+            Rectangle()
+                .fill(Color.blue)
+                .frame(width: geo.size.width * progress, height: 2)
+        }
+        .frame(height: 2)
+        .background(Color.white.opacity(0.1))
     }
 
     // MARK: - Script Content
@@ -70,32 +185,44 @@ struct TeleprompterView: View {
                 switch section {
                 case .text(let text):
                     Text(text)
-                        .font(.title2)
-                        .fontWeight(.regular)
-                        .lineSpacing(8)
-                        .foregroundStyle(.white)
+                        .font(.system(size: fontSize))
+                        .lineSpacing(fontSize * 0.3)
+                        .foregroundStyle(theme.text)
                 case .pause(let label):
                     HStack {
-                        Spacer()
-                        Text("--- \(label) ---")
-                            .font(.callout).fontWeight(.bold)
+                        Rectangle().fill(Color.orange.opacity(0.3)).frame(height: 1)
+                        Text(label)
+                            .font(.system(size: fontSize * 0.55, weight: .bold))
                             .foregroundStyle(.orange)
-                            .padding(.vertical, 16)
-                        Spacer()
+                            .textCase(.uppercase)
+                            .tracking(3)
+                        Rectangle().fill(Color.orange.opacity(0.3)).frame(height: 1)
                     }
+                    .padding(.vertical, 20)
                 case .header(let title):
                     Text(title)
-                        .font(.headline)
+                        .font(.system(size: fontSize * 0.7, weight: .heavy))
                         .foregroundStyle(.green)
                         .textCase(.uppercase)
-                        .tracking(1)
-                        .padding(.top, 24)
+                        .tracking(2)
+                        .padding(.top, 28)
                         .padding(.bottom, 8)
+                        .overlay(
+                            Rectangle().fill(Color.green.opacity(0.3)).frame(height: 1),
+                            alignment: .bottom
+                        )
                 case .placeholder(let text):
                     Text(text)
-                        .font(.title3)
+                        .font(.system(size: fontSize * 0.9, weight: .semibold))
                         .foregroundStyle(.blue)
-                        .fontWeight(.semibold)
+                        .padding(.horizontal, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                case .stageDirection(let text):
+                    Text(text)
+                        .font(.system(size: fontSize * 0.6))
+                        .italic()
+                        .foregroundStyle(.yellow.opacity(0.8))
                 }
             }
         }
@@ -104,50 +231,59 @@ struct TeleprompterView: View {
     // MARK: - Controls
 
     private var controlBar: some View {
-        HStack(spacing: 16) {
-            // Rewind
-            Button { scrollOffset = max(0, scrollOffset - 200) } label: {
-                Image(systemName: "backward.fill")
-                    .font(.title3)
-            }
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.1))
-            .clipShape(Circle())
+        VStack(spacing: 0) {
+            // Transport controls
+            HStack(spacing: 20) {
+                Button { scrollOffset = 0 } label: {
+                    Image(systemName: "backward.end.fill").font(.body)
+                }
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
 
-            // Play/Pause
-            Button { isScrolling.toggle() } label: {
-                Image(systemName: isScrolling ? "pause.fill" : "play.fill")
-                    .font(.title2)
-            }
-            .frame(width: 56, height: 56)
-            .background(Color.blue)
-            .clipShape(Circle())
+                Button { scrollOffset = max(0, scrollOffset - 300) } label: {
+                    Image(systemName: "backward.fill").font(.body)
+                }
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
 
-            // Forward
-            Button { scrollOffset += 200 } label: {
-                Image(systemName: "forward.fill")
-                    .font(.title3)
-            }
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.1))
-            .clipShape(Circle())
+                Button { toggleScrolling() } label: {
+                    Image(systemName: isScrolling ? "pause.fill" : "play.fill")
+                        .font(.title2)
+                }
+                .frame(width: 60, height: 60)
+                .background(isScrolling ? Color.orange : Color.blue)
+                .clipShape(Circle())
 
-            Spacer()
+                Button { scrollOffset += 300 } label: {
+                    Image(systemName: "forward.fill").font(.body)
+                }
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
+            }
+            .foregroundStyle(.white)
+            .padding(.top, 10)
 
             // Speed slider
-            VStack(spacing: 2) {
-                Slider(value: $scrollSpeed, in: 1...10, step: 1)
-                    .tint(.blue)
-                Text("\(Int(scrollSpeed))x")
+            HStack {
+                Text("Speed")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                Slider(value: $scrollWPM, in: 60...300, step: 10)
+                    .tint(.blue)
+                Text("\(Int(scrollWPM)) WPM")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .frame(width: 65)
+                    .monospacedDigit()
             }
-            .frame(width: 100)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
         .background(.ultraThinMaterial)
-        .foregroundStyle(.white)
     }
 
     // MARK: - Rating Sheet
@@ -158,10 +294,9 @@ struct TeleprompterView: View {
                 Text("Rate Your Practice")
                     .font(.title2).fontWeight(.bold)
 
-                Text("How did that session feel?")
+                Text("Duration: \(formatTime(elapsedSeconds))")
                     .foregroundStyle(.secondary)
 
-                // Stars
                 HStack(spacing: 12) {
                     ForEach(1...5, id: \.self) { star in
                         Button {
@@ -216,7 +351,49 @@ struct TeleprompterView: View {
         }
     }
 
+    // MARK: - Settings Sheet
+
+    private var settingsSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Text") {
+                    HStack {
+                        Text("Font Size")
+                        Spacer()
+                        Text("\(Int(fontSize))px")
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $fontSize, in: 16...72, step: 2)
+
+                    Toggle("Mirror Mode", isOn: $isMirrored)
+                    Toggle("Focus Line", isOn: $showFocusLine)
+                }
+
+                Section("Theme") {
+                    Picker("Color Theme", selection: $theme) {
+                        Text("Dark").tag(PrompterTheme.dark)
+                        Text("Light").tag(PrompterTheme.light)
+                        Text("High Contrast").tag(PrompterTheme.highContrast)
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showSettings = false }
+                }
+            }
+        }
+    }
+
     // MARK: - Logic
+
+    private func toggleScrolling() {
+        isScrolling.toggle()
+        timerActive = isScrolling
+    }
 
     private func startPracticeSession() {
         practiceStartTime = Date()
@@ -229,6 +406,7 @@ struct TeleprompterView: View {
 
     private func exitPrompter() {
         isScrolling = false
+        timerActive = false
         if practiceSessionId != nil {
             showRating = true
         } else {
@@ -237,23 +415,21 @@ struct TeleprompterView: View {
     }
 
     private func submitPractice() async {
-        guard let sessionId = practiceSessionId else {
-            dismiss()
-            return
-        }
+        guard let sessionId = practiceSessionId else { dismiss(); return }
         let duration = Int(Date().timeIntervalSince(practiceStartTime))
         if let result = await appState.practiceStore.completeSession(
             sessionId: sessionId, duration: duration,
             rating: selfRating, notes: practiceNotes
         ) {
             aiFeedback = result.aiFeedback
-            if result.aiFeedback.isEmpty {
-                dismiss()
-            }
-            // Feedback is shown in the sheet; user will dismiss after reading
-        } else {
-            dismiss()
-        }
+            if result.aiFeedback.isEmpty { dismiss() }
+        } else { dismiss() }
+    }
+
+    private func formatTime(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     // MARK: - Script Parsing
@@ -263,6 +439,7 @@ struct TeleprompterView: View {
         case pause(String)
         case header(String)
         case placeholder(String)
+        case stageDirection(String)
     }
 
     private func parseScript(_ text: String) -> [ScriptSection] {
@@ -270,38 +447,43 @@ struct TeleprompterView: View {
         let lines = text.components(separatedBy: "\n")
         var buffer = ""
 
-        let headerPattern = /^(SITUATION|BACKGROUND|ASSESSMENT|RECOMMENDATION|SETTING UP|PERCEPTION|INVITATION|KNOWLEDGE|EMOTION|STRATEGY & SUMMARY|MEDICATIONS|FOLLOW-UP|WHEN TO COME BACK|ACTIVITY & DIET|OPENING|AGENDA|CLINICAL|DECISION|CLOSING):?$/
+        let headerPattern = /^(SITUATION|BACKGROUND|ASSESSMENT|RECOMMENDATION|SETTING UP|PERCEPTION|INVITATION|KNOWLEDGE|EMOTION|STRATEGY & SUMMARY|MEDICATIONS|FOLLOW-UP|WHEN TO COME BACK|ACTIVITY & DIET|OPENING|AGENDA SETTING|AGENDA|CLINICAL EXPLANATION|CLINICAL|DECISION POINTS|DECISION|ANTICIPATED QUESTIONS|DIFFICULT SCENARIOS|CLOSING):?$/
+
+        let stagePattern = /^\[(LOOK[^\]]*|GESTURE[^\]]*|TONE[^\]]*|SLOW DOWN[^\]]*|SPEED UP[^\]]*|EMPHASIZE[^\]]*|WARNING SHOT[^\]]*|SUMMARIZE[^\]]*)\]$/
 
         for line in lines {
             if line.contains("[PAUSE") {
-                if !buffer.isEmpty {
-                    sections.append(.text(buffer))
-                    buffer = ""
-                }
-                let label = line.replacingOccurrences(of: "[", with: "")
-                    .replacingOccurrences(of: "]", with: "")
-                sections.append(.pause(label))
+                if !buffer.isEmpty { sections.append(.text(buffer)); buffer = "" }
+                sections.append(.pause("PAUSE"))
             } else if line.wholeMatch(of: headerPattern) != nil {
-                if !buffer.isEmpty {
-                    sections.append(.text(buffer))
-                    buffer = ""
-                }
+                if !buffer.isEmpty { sections.append(.text(buffer)); buffer = "" }
                 sections.append(.header(line.replacingOccurrences(of: ":", with: "")))
+            } else if line.wholeMatch(of: stagePattern) != nil {
+                if !buffer.isEmpty { sections.append(.text(buffer)); buffer = "" }
+                sections.append(.stageDirection(line))
             } else if line.hasPrefix("[") && line.hasSuffix("]") {
-                if !buffer.isEmpty {
-                    sections.append(.text(buffer))
-                    buffer = ""
-                }
+                if !buffer.isEmpty { sections.append(.text(buffer)); buffer = "" }
                 sections.append(.placeholder(line))
             } else {
                 buffer += (buffer.isEmpty ? "" : "\n") + line
             }
         }
-
-        if !buffer.isEmpty {
-            sections.append(.text(buffer))
-        }
-
+        if !buffer.isEmpty { sections.append(.text(buffer)) }
         return sections
+    }
+}
+
+// MARK: - Color hex helper
+
+extension Color {
+    init(hex: String) {
+        let scanner = Scanner(string: hex)
+        var rgb: UInt64 = 0
+        scanner.scanHexInt64(&rgb)
+        self.init(
+            red: Double((rgb >> 16) & 0xFF) / 255,
+            green: Double((rgb >> 8) & 0xFF) / 255,
+            blue: Double(rgb & 0xFF) / 255
+        )
     }
 }

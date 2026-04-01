@@ -13,183 +13,332 @@
 </head>
 <body>
 
-  <!-- ======================== SCRIPTS VIEW ======================== -->
-  <div id="scripts-view" class="view active">
-    <div class="view-header">Scripts</div>
-    <div class="view-sub">Tap a script to start the teleprompter</div>
-    <div id="scripts-list">
-      <div class="loading"><div class="spinner"></div> Loading...</div>
+<!-- Toast notification -->
+<div id="toast" class="toast"></div>
+
+<!-- ======================== SCRIPTS VIEW ======================== -->
+<div id="scripts-view" class="view active">
+  <div class="view-header">Scripts</div>
+
+  <!-- Search -->
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input id="search-input" class="search-input" placeholder="Search scripts...">
+  </div>
+
+  <!-- Category filters -->
+  <div class="filter-row">
+    <button class="filter-pill active" data-cat="all" onclick="app.setFilter('all')">All</button>
+    <button class="filter-pill" data-cat="admission" onclick="app.setFilter('admission')">Admission</button>
+    <button class="filter-pill" data-cat="discharge" onclick="app.setFilter('discharge')">Discharge</button>
+    <button class="filter-pill" data-cat="handoff" onclick="app.setFilter('handoff')">Handoff</button>
+    <button class="filter-pill" data-cat="bad_news" onclick="app.setFilter('bad_news')">Bad News</button>
+    <button class="filter-pill" data-cat="consult" onclick="app.setFilter('consult')">Consult</button>
+    <button class="filter-pill" data-cat="family" onclick="app.setFilter('family')">Family</button>
+    <button class="filter-pill" data-cat="code" onclick="app.setFilter('code')">Code</button>
+    <button class="filter-pill" data-cat="general" onclick="app.setFilter('general')">General</button>
+  </div>
+
+  <div id="scripts-list">
+    <div class="loading"><div class="spinner"></div> Loading...</div>
+  </div>
+
+  <!-- New script FAB -->
+  <button class="btn btn-sm" style="position:fixed;bottom:calc(80px + var(--safe-bottom));right:16px;z-index:50;border-radius:24px;padding:10px 18px;"
+          onclick="app.openEditor()">+ New Script</button>
+</div>
+
+<!-- ======================== GENERATE VIEW ======================== -->
+<div id="generate-view" class="view">
+  <div class="view-header">Generate</div>
+  <div class="view-sub">AI-powered script creation for clinical scenarios</div>
+
+  <div class="form-group">
+    <label class="form-label">Category</label>
+    <select id="gen-category" class="form-select">
+      <option value="admission">Admission</option>
+      <option value="discharge">Discharge</option>
+      <option value="consult">Consultation</option>
+      <option value="handoff">Handoff (SBAR)</option>
+      <option value="bad_news">Difficult News (SPIKES)</option>
+      <option value="family">Family Meeting</option>
+      <option value="informed_consent">Informed Consent</option>
+      <option value="code">Code / Rapid Response</option>
+      <option value="cross_cover">Cross-Cover</option>
+      <option value="general" selected>General</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Chief Complaint</label>
+    <input id="gen-complaint" class="form-input" placeholder="e.g., chest pain, COPD exacerbation">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Patient Age</label>
+    <input id="gen-age" class="form-input" type="number" placeholder="e.g., 72">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Setting / Context</label>
+    <input id="gen-setting" class="form-input" placeholder="e.g., ICU step-down, night shift">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Scenario Description (optional)</label>
+    <textarea id="gen-scenario" class="form-textarea" placeholder="Describe the clinical scenario in detail..."></textarea>
+  </div>
+  <button id="gen-btn" class="btn" onclick="app.generateScript()">Generate Script</button>
+</div>
+
+<!-- ======================== PRACTICE VIEW ======================== -->
+<div id="practice-view" class="view">
+  <div class="view-header">Practice</div>
+  <div class="view-sub">Track your communication skills over time</div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-value blue" id="stat-sessions">--</div>
+      <div class="stat-label">Sessions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value orange" id="stat-rating">--</div>
+      <div class="stat-label">Avg Rating</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value green" id="stat-minutes">--</div>
+      <div class="stat-label">Minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value purple" id="stat-week">--</div>
+      <div class="stat-label">This Week</div>
     </div>
   </div>
 
-  <!-- ======================== GENERATE VIEW ======================== -->
-  <div id="generate-view" class="view">
-    <div class="view-header">Generate</div>
-    <div class="view-sub">AI-powered script creation for clinical scenarios</div>
+  <div class="section-title">Session History</div>
+  <div id="sessions-list"><div class="empty">No sessions yet</div></div>
+</div>
 
-    <div class="form-group">
-      <label class="form-label">Category</label>
-      <select id="gen-category" class="form-select">
-        <option value="admission">Admission</option>
-        <option value="discharge">Discharge</option>
-        <option value="consult">Consultation</option>
-        <option value="handoff">Handoff (SBAR)</option>
-        <option value="bad_news">Difficult News (SPIKES)</option>
-        <option value="family">Family Meeting</option>
-        <option value="informed_consent">Informed Consent</option>
-        <option value="code">Code / Rapid Response</option>
-        <option value="cross_cover">Cross-Cover</option>
-        <option value="general" selected>General</option>
-      </select>
-    </div>
+<!-- ======================== ADVISORY VIEW ======================== -->
+<div id="advisory-view" class="view">
+  <div class="view-header">Advisory</div>
+  <div class="view-sub">AI coaching for patient communication</div>
 
-    <div class="form-group">
-      <label class="form-label">Chief Complaint</label>
-      <input id="gen-complaint" class="form-input" placeholder="e.g., chest pain, COPD exacerbation">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Patient Age</label>
-      <input id="gen-age" class="form-input" type="number" placeholder="e.g., 72">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Setting / Context</label>
-      <input id="gen-setting" class="form-input" placeholder="e.g., ICU step-down, night shift">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Scenario Description (optional)</label>
-      <textarea id="gen-scenario" class="form-textarea" placeholder="Describe the clinical scenario in detail..."></textarea>
-    </div>
-
-    <button id="gen-btn" class="btn" onclick="window.app.generateScript()">Generate Script</button>
+  <div class="form-group">
+    <label class="form-label">Describe a scenario</label>
+    <textarea id="advisory-input" class="form-textarea" placeholder="e.g., Patient is anxious about diagnosis, family wants aggressive care but patient expressed DNR wishes..."></textarea>
   </div>
+  <button id="advisory-btn" class="btn" onclick="app.askAdvisory()">Get Advice</button>
 
-  <!-- ======================== PRACTICE VIEW ======================== -->
-  <div id="practice-view" class="view">
-    <div class="view-header">Practice</div>
-    <div class="view-sub">Track your communication skills over time</div>
+  <div class="section-title" style="margin-top:8px;">Recent Coaching</div>
+  <div id="tips-list"><div class="empty"><div class="empty-icon">💡</div>No tips yet</div></div>
+</div>
 
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-value" id="stat-sessions">--</div>
-        <div class="stat-label">Total Sessions</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="stat-rating">--</div>
-        <div class="stat-label">Avg Rating</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="stat-minutes">--</div>
-        <div class="stat-label">Minutes Practiced</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="stat-week">--</div>
-        <div class="stat-label">This Week</div>
+<!-- ======================== TELEPROMPTER VIEW ======================== -->
+<div id="prompter-view" class="view">
+  <div class="prompter-container">
+    <!-- Top bar -->
+    <div class="prompter-topbar">
+      <button class="prompter-topbar-btn" onclick="app.exitPrompter()">Done</button>
+      <div class="prompter-topbar-title" id="prompter-topbar-title">Script</div>
+      <div class="prompter-topbar-right">
+        <button id="mirror-btn" class="topbar-icon-btn" onclick="app.toggleMirror()" title="Mirror Mode">⟷</button>
+        <button class="topbar-icon-btn" onclick="app.adjustFontSize(-2)" title="Decrease Font">A-</button>
+        <button class="topbar-icon-btn" onclick="app.adjustFontSize(2)" title="Increase Font">A+</button>
+        <button class="topbar-icon-btn" onclick="app.openSettings()" title="Settings">⚙</button>
       </div>
     </div>
 
-    <div style="padding:0 16px;margin-bottom:8px;">
-      <div style="font-size:16px;font-weight:600;">Session History</div>
-    </div>
-    <div id="sessions-list">
-      <div class="empty">No practice sessions yet.</div>
-    </div>
-  </div>
-
-  <!-- ======================== ADVISORY VIEW ======================== -->
-  <div id="advisory-view" class="view">
-    <div class="view-header">Advisory</div>
-    <div class="view-sub">AI coaching for patient communication</div>
-
-    <div class="form-group">
-      <label class="form-label">Describe a scenario for coaching</label>
-      <textarea id="advisory-input" class="form-textarea" placeholder="e.g., Patient is anxious about diagnosis, family wants aggressive care but patient has expressed DNR wishes..."></textarea>
-    </div>
-    <button id="advisory-btn" class="btn" onclick="window.app.askAdvisory()">Get Advice</button>
-
-    <div style="padding:12px 16px 4px;font-size:16px;font-weight:600;">Recent Tips</div>
-    <div id="tips-list">
-      <div class="empty"><div class="empty-icon">💡</div>No tips yet.</div>
-    </div>
-  </div>
-
-  <!-- ======================== PROMPTER VIEW ======================== -->
-  <div id="prompter-view" class="view">
-    <div class="prompter-container">
-      <div class="prompter-header">
-        <button class="prompter-back" onclick="window.app.exitPrompter()">← Done</button>
-        <div class="prompter-title" id="prompter-script-title">Script</div>
+    <!-- Info strip -->
+    <div class="prompter-info">
+      <div class="prompter-info-item">
+        <span class="prompter-info-label">Elapsed</span>
+        <span class="prompter-info-value" id="info-elapsed">0:00</span>
       </div>
+      <div class="prompter-info-item">
+        <span class="prompter-info-value" id="info-wpm">160</span>
+        <span class="prompter-info-label">WPM</span>
+      </div>
+      <div class="prompter-info-item">
+        <span class="prompter-info-value" id="info-words">0</span>
+        <span class="prompter-info-label">words</span>
+      </div>
+      <div class="prompter-info-item">
+        <span class="prompter-info-label">ETA</span>
+        <span class="prompter-info-value" id="info-eta">0:00</span>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+
+    <!-- Script display -->
+    <div class="prompter-scroll-wrapper">
+      <div class="prompter-focus-line" id="prompter-focus-line"></div>
       <div class="prompter-scroll" id="prompter-text"></div>
-      <div class="prompter-controls">
-        <button onclick="document.getElementById('prompter-text').scrollTop -= 200">↑</button>
-        <button id="play-btn" class="play-btn" onclick="window.app.toggleScrolling()">▶</button>
-        <button onclick="document.getElementById('prompter-text').scrollTop += 200">↓</button>
-        <input type="range" class="speed-slider" id="speed-slider" min="1" max="10" value="3"
-               oninput="window.app.updateSpeed(this.value)">
-        <span class="speed-display" id="speed-display">3x</span>
+    </div>
+
+    <!-- Controls -->
+    <div class="prompter-controls">
+      <div class="controls-main">
+        <button class="ctrl-btn" onclick="app.resetScroll()" title="Reset">⏮</button>
+        <button class="ctrl-btn" onclick="app.scrollJump(-1)" title="Page Up">⏪</button>
+        <button id="play-btn" class="ctrl-btn play-btn" onclick="app.toggleScrolling()">▶</button>
+        <button class="ctrl-btn" onclick="app.scrollJump(1)" title="Page Down">⏩</button>
+      </div>
+      <div class="controls-speed">
+        <span class="speed-label">Speed</span>
+        <input type="range" class="speed-slider" id="speed-slider" min="60" max="300" value="160" step="10"
+               oninput="app.updateSpeed(this.value)">
+        <span class="speed-value" id="speed-value">160 WPM</span>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- ======================== COMPLETE PRACTICE MODAL ======================== -->
-  <div id="complete-modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-title">Rate Your Practice</div>
-      <p style="text-align:center;color:var(--text-secondary);font-size:14px;margin-bottom:12px;">
-        How did that session feel?
-      </p>
-      <div class="rating" id="rating-stars">
-        <button onclick="window.app.setRating(1)">★</button>
-        <button onclick="window.app.setRating(2)">★</button>
-        <button onclick="window.app.setRating(3)">★</button>
-        <button onclick="window.app.setRating(4)">★</button>
-        <button onclick="window.app.setRating(5)">★</button>
+<!-- ======================== SETTINGS PANEL ======================== -->
+<div id="settings-panel" class="settings-panel">
+  <div class="settings-content">
+    <div class="settings-header">
+      <span class="settings-title">Display Settings</span>
+      <button class="settings-close" onclick="app.closeSettings()">✕</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Text</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Font Size</span>
+        <div class="settings-row-value">
+          <span id="set-font-val">28px</span>
+          <input type="range" class="settings-slider" id="set-font" min="16" max="72" value="28"
+                 oninput="app.updateSetting('fontSize', this.value)">
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Notes (optional)</label>
-        <textarea id="practice-notes" class="form-textarea" placeholder="What went well? What to improve?"></textarea>
+      <div class="settings-row">
+        <span class="settings-row-label">Line Height</span>
+        <div class="settings-row-value">
+          <span id="set-line-val">1.7</span>
+          <input type="range" class="settings-slider" id="set-line" min="10" max="30" value="17"
+                 oninput="app.updateSetting('lineHeight', this.value)">
+        </div>
       </div>
-      <button class="btn" onclick="window.app.submitPractice()">Submit & Get AI Feedback</button>
-      <button class="btn btn-secondary" onclick="window.app.cancelComplete()">Skip</button>
+      <div class="settings-row">
+        <span class="settings-row-label">Margins</span>
+        <div class="settings-row-value">
+          <span id="set-margin-val">24px</span>
+          <input type="range" class="settings-slider" id="set-margin" min="8" max="60" value="24"
+                 oninput="app.updateSetting('margins', this.value)">
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Color Theme</div>
+      <div class="theme-picker">
+        <div class="theme-swatch active" data-theme="dark" style="background:#0a0a0a;border:1px solid #333" onclick="app.setTheme('dark')"></div>
+        <div class="theme-swatch" data-theme="light" style="background:#ffffff" onclick="app.setTheme('light')"></div>
+        <div class="theme-swatch" data-theme="highContrast" style="background:#000;border:2px solid #ffff00" onclick="app.setTheme('highContrast')"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Display</div>
+      <div class="settings-row">
+        <span class="settings-row-label">Mirror Mode</span>
+        <button class="toggle" id="set-mirror" onclick="app.toggleSetting('mirrorMode')"></button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Focus Line</span>
+        <button class="toggle on" id="set-focus" onclick="app.toggleSetting('showFocusLine')"></button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Auto-Pause on Cue</span>
+        <button class="toggle on" id="set-autopause" onclick="app.toggleSetting('autoPauseOnCue')"></button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-row-label">Narrow Margins</span>
+        <button class="toggle" id="set-narrow" onclick="app.toggleSetting('narrowMargins')"></button>
+      </div>
     </div>
   </div>
+</div>
 
-  <!-- ======================== BOTTOM NAV ======================== -->
-  <nav id="main-nav" class="nav">
-    <button class="nav-btn active" data-view="scripts-view">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-      </svg>
-      Scripts
-    </button>
-    <button class="nav-btn" data-view="generate-view">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-      </svg>
-      Generate
-    </button>
-    <button class="nav-btn" data-view="practice-view">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-      </svg>
-      Practice
-    </button>
-    <button class="nav-btn" data-view="advisory-view">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-        <line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-      Advisory
-    </button>
-  </nav>
+<!-- ======================== SCRIPT EDITOR ======================== -->
+<div id="editor-view" class="editor-view">
+  <div class="editor-header">
+    <button class="editor-header-btn" onclick="app.closeEditor()">Cancel</button>
+    <span class="editor-header-title">Script Editor</span>
+    <button class="editor-header-btn" onclick="app.saveEditor()" style="font-weight:700">Save</button>
+  </div>
+  <div class="editor-meta">
+    <span id="editor-words">0 words</span>
+    <span id="editor-chars">0 chars</span>
+    <span id="editor-time">0 min</span>
+  </div>
+  <div class="editor-body">
+    <input class="editor-title-input" id="editor-title" placeholder="Script title...">
+    <textarea class="editor-textarea" id="editor-content" placeholder="Write your script here...
 
-  <script src="/static/app.js"></script>
+Use these markers:
+[PAUSE] — auto-pause point
+[Patient Name] — placeholder
+SITUATION: — section header (SBAR)
+**bold text** — emphasis"></textarea>
+  </div>
+</div>
+
+<!-- ======================== COMPLETE PRACTICE MODAL ======================== -->
+<div id="complete-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Rate Your Practice</div>
+    <p style="text-align:center;color:var(--text-secondary);font-size:14px;margin-bottom:4px;">
+      Session duration: <strong id="practice-duration">0:00</strong>
+    </p>
+    <div class="rating" id="rating-stars">
+      <button onclick="app.setRating(1)">★</button>
+      <button onclick="app.setRating(2)">★</button>
+      <button onclick="app.setRating(3)">★</button>
+      <button onclick="app.setRating(4)">★</button>
+      <button onclick="app.setRating(5)">★</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <textarea id="practice-notes" class="form-textarea" placeholder="What went well? What to improve?"></textarea>
+    </div>
+    <button class="btn" onclick="app.submitPractice()">Submit & Get AI Feedback</button>
+    <button class="btn btn-secondary" onclick="app.cancelComplete()">Skip</button>
+  </div>
+</div>
+
+<!-- ======================== BOTTOM NAV ======================== -->
+<nav id="main-nav" class="nav">
+  <button class="nav-btn active" data-view="scripts-view">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+    Scripts
+  </button>
+  <button class="nav-btn" data-view="generate-view">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+    Generate
+  </button>
+  <button class="nav-btn" data-view="practice-view">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+    </svg>
+    Practice
+  </button>
+  <button class="nav-btn" data-view="advisory-view">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    Advisory
+  </button>
+</nav>
+
+<script src="/static/app.js"></script>
 </body>
 </html>
