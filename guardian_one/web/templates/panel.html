@@ -770,8 +770,37 @@ tr:hover td { background: var(--bg-primary); }
     <div id="panel-vault" class="panel">
       <h3 style="color: var(--text-primary); margin-bottom: 16px;">Vault Status</h3>
       <div class="grid-3" id="vaultStats"></div>
+
+      <!-- Required Keys Checklist -->
       <div class="card" style="margin-top: 16px;">
-        <div class="card-title">Credentials (metadata only)</div>
+        <div class="card-title">Connection Status</div>
+        <div id="vaultRequiredKeys" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:12px;"></div>
+      </div>
+
+      <!-- Add Key Form -->
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-title">Add / Update Credential</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+          <div style="flex:1;min-width:160px;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Key Name</label>
+            <input type="text" id="vaultNewKey" placeholder="e.g. NOTION_TOKEN" style="width:100%;padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;font-family:monospace;font-size:12px;">
+          </div>
+          <div style="flex:1;min-width:160px;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Service</label>
+            <input type="text" id="vaultNewService" placeholder="e.g. notion" style="width:100%;padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;font-size:12px;">
+          </div>
+          <div style="flex:2;min-width:200px;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Value (encrypted at rest)</label>
+            <input type="password" id="vaultNewValue" placeholder="Paste API key / token here" style="width:100%;padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;font-family:monospace;font-size:12px;">
+          </div>
+          <button class="btn" onclick="storeVaultKey()" style="white-space:nowrap;">Store Key</button>
+        </div>
+        <div id="vaultStoreResult" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+
+      <!-- Existing Credentials Table -->
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-title">Stored Credentials (metadata only)</div>
         <div class="table-wrap">
           <table id="vaultTable">
             <thead>
@@ -1581,6 +1610,19 @@ async function loadVault() {
     </div>
   `;
 
+  // Required keys checklist
+  const rk = data.required_keys || [];
+  const configured = rk.filter(k => k.configured).length;
+  const total = rk.length;
+  document.getElementById('vaultRequiredKeys').innerHTML = rk.map(k => `
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg-tertiary);border-radius:4px;font-size:12px;cursor:pointer;"
+         onclick="if(!${k.configured}){document.getElementById('vaultNewKey').value='${k.key_name}';document.getElementById('vaultNewService').value='${k.service}';document.getElementById('vaultNewValue').focus();}">
+      <span style="color:${k.configured ? 'var(--green)' : 'var(--red)'};font-size:14px;">${k.configured ? '&#10003;' : '&#10007;'}</span>
+      <span style="font-family:monospace;color:${k.configured ? 'var(--text-secondary)' : 'var(--text-primary)'}">${k.key_name}</span>
+      <span style="margin-left:auto;color:var(--text-muted);font-size:10px;">${k.service}</span>
+    </div>
+  `).join('');
+
   const tbody = document.querySelector('#vaultTable tbody');
   tbody.innerHTML = data.credentials.map(c => `
     <tr>
@@ -1592,6 +1634,32 @@ async function loadVault() {
       <td>${c.rotation_days}d</td>
     </tr>
   `).join('') || '<tr><td colspan="6" style="color:var(--text-muted)">No credentials stored</td></tr>';
+}
+
+async function storeVaultKey() {
+  const keyName = document.getElementById('vaultNewKey').value.trim();
+  const service = document.getElementById('vaultNewService').value.trim();
+  const value = document.getElementById('vaultNewValue').value.trim();
+  const resultEl = document.getElementById('vaultStoreResult');
+  if (!keyName || !value) {
+    resultEl.innerHTML = '<span style="color:var(--red)">Key name and value are required</span>';
+    return;
+  }
+  try {
+    const res = await fetch('/api/vault/store', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key_name: keyName, value: value, service: service})
+    });
+    const resp = await res.json();
+    resultEl.innerHTML = `<span style="color:var(--green)">&#10003; ${keyName} stored (${resp.total} total keys)</span>`;
+    document.getElementById('vaultNewKey').value = '';
+    document.getElementById('vaultNewService').value = '';
+    document.getElementById('vaultNewValue').value = '';
+    loadVault(); // Refresh the display
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:var(--red)">Error: ${e.message}</span>`;
+  }
 }
 
 // ---------------------------------------------------------------------------

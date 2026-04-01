@@ -265,10 +265,48 @@ def create_app() -> Flask:
                     "expires_at": m.expires_at,
                     "rotation_days": m.rotation_days,
                 })
+        # Build required keys list with status
+        required_keys = {
+            "NOTION_TOKEN": "notion", "NOTION_ROOT_PAGE_ID": "notion",
+            "GMAIL_APP_PASSWORD": "gmail",
+            "N8N_BASE_URL": "n8n", "N8N_API_KEY": "n8n",
+            "PLAID_CLIENT_ID": "plaid", "PLAID_SECRET": "plaid",
+            "ROCKET_MONEY_API_KEY": "rocket_money",
+            "EPIC_CLIENT_ID": "epic", "EPIC_FHIR_BASE_URL": "epic",
+            "CLOUDFLARE_API_TOKEN": "cloudflare", "GITHUB_TOKEN": "github",
+            "TWILIO_ACCOUNT_SID": "twilio", "TWILIO_AUTH_TOKEN": "twilio",
+            "NORDVPN_TOKEN": "nordvpn", "DELETEME_API_KEY": "deleteme",
+            "DOORDASH_DEVELOPER_ID": "doordash", "DOORDASH_KEY_ID": "doordash",
+            "DOORDASH_SIGNING_SECRET": "doordash",
+            "HUE_BRIDGE_API_KEY": "hue", "GOVEE_API_KEY": "govee",
+        }
+        key_status = []
+        stored_set = set(keys)
+        for k, svc in required_keys.items():
+            key_status.append({
+                "key_name": k,
+                "service": svc,
+                "configured": k in stored_set,
+            })
+
         return jsonify({
             "health": health,
             "credentials": meta,
+            "required_keys": key_status,
         })
+
+    @app.route("/api/vault/store", methods=["POST"])
+    def api_vault_store():
+        g = _get_guardian()
+        data = request.get_json() or {}
+        key_name = data.get("key_name", "").strip()
+        value = data.get("value", "").strip()
+        service = data.get("service", "").strip()
+        if not key_name or not value:
+            return jsonify({"error": "key_name and value required"}), 400
+        scope = "read"
+        g.vault.store(key_name, value, service=service, scope=scope)
+        return jsonify({"ok": True, "key_name": key_name, "total": len(g.vault.list_keys())})
 
     # ------------------------------------------------------------------
     # API — Registry

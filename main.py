@@ -317,6 +317,7 @@ def main() -> None:
     parser.add_argument("--vault-init", action="store_true", help="Import API keys from .env into encrypted vault")
     parser.add_argument("--vault-status", action="store_true", help="Show vault key inventory and health")
     parser.add_argument("--vault-store", nargs=2, metavar=("KEY", "VALUE"), help="Store a single key in vault")
+    parser.add_argument("--setup", action="store_true", help="Interactive setup wizard — configure all connections")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -550,6 +551,121 @@ def main() -> None:
             console.print("  [yellow]Vault is empty.[/yellow]")
             console.print("  Run: [cyan]python main.py --vault-init[/cyan] to import keys from .env")
             console.print("  Run: [cyan]python main.py --vault-store KEY VALUE[/cyan] to add individual keys\n")
+        return
+
+    if getattr(args, 'setup', False):
+        import os
+        from getpass import getpass
+        from rich.console import Console
+        from rich.table import Table
+        from guardian_one.homelink.vault import Vault
+
+        console = Console()
+        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "guardian2026")
+        vault_path = Path(config.data_dir) / "vault.enc"
+        vault = Vault(vault_path, passphrase=passphrase)
+
+        # All connections Guardian One needs, grouped by priority
+        connection_groups = [
+            ("CORE SERVICES", [
+                ("NOTION_TOKEN", "notion", "Internal integration secret (starts with ntn_)", "https://www.notion.so/my-integrations"),
+                ("NOTION_ROOT_PAGE_ID", "notion", "Page ID for dashboards (hex from URL)", ""),
+                ("GMAIL_APP_PASSWORD", "gmail", "Gmail app password", "https://myaccount.google.com/apppasswords"),
+                ("N8N_BASE_URL", "n8n", "n8n instance URL (e.g. http://localhost:5678)", ""),
+                ("N8N_API_KEY", "n8n", "n8n API key", ""),
+            ]),
+            ("FINANCIAL", [
+                ("PLAID_CLIENT_ID", "plaid", "Plaid client ID", "https://dashboard.plaid.com"),
+                ("PLAID_SECRET", "plaid", "Plaid secret key", ""),
+                ("ROCKET_MONEY_API_KEY", "rocket_money", "Rocket Money API key", ""),
+                ("EMPOWER_API_KEY", "empower", "Empower API key", ""),
+            ]),
+            ("EPIC / HEALTHCARE", [
+                ("EPIC_CLIENT_ID", "epic", "Epic App Orchard client ID", "https://appmarket.epic.com"),
+                ("EPIC_FHIR_BASE_URL", "epic", "Epic FHIR base URL", ""),
+            ]),
+            ("WEBSITES & INFRASTRUCTURE", [
+                ("CLOUDFLARE_API_TOKEN", "cloudflare", "Cloudflare API token", "https://dash.cloudflare.com/profile/api-tokens"),
+                ("GITHUB_TOKEN", "github", "GitHub personal access token", "https://github.com/settings/tokens"),
+            ]),
+            ("NOTIFICATIONS", [
+                ("TWILIO_ACCOUNT_SID", "twilio", "Twilio account SID", "https://console.twilio.com"),
+                ("TWILIO_AUTH_TOKEN", "twilio", "Twilio auth token", ""),
+                ("TWILIO_FROM_NUMBER", "twilio", "Twilio phone number (+1...)", ""),
+            ]),
+            ("SMART HOME", [
+                ("HUE_BRIDGE_API_KEY", "hue", "Philips Hue bridge API key", ""),
+                ("GOVEE_API_KEY", "govee", "Govee API key", "https://developer.govee.com"),
+                ("TPLINK_CLOUD_USER", "tplink", "TP-Link Kasa cloud username", ""),
+                ("TPLINK_CLOUD_PASS", "tplink", "TP-Link Kasa cloud password", ""),
+            ]),
+            ("PRIVACY & SECURITY", [
+                ("NORDVPN_TOKEN", "nordvpn", "NordVPN token", ""),
+                ("DELETEME_API_KEY", "deleteme", "DeleteMe API key", ""),
+            ]),
+            ("DELIVERY", [
+                ("DOORDASH_DEVELOPER_ID", "doordash", "DoorDash developer ID", "https://developer.doordash.com"),
+                ("DOORDASH_KEY_ID", "doordash", "DoorDash key ID", ""),
+                ("DOORDASH_SIGNING_SECRET", "doordash", "DoorDash signing secret", ""),
+            ]),
+        ]
+
+        console.print("\n  [bold]GUARDIAN ONE — CONNECTION SETUP WIZARD[/bold]")
+        console.print("  ═" * 25)
+        console.print("  Vault passphrase: [green]active[/green]")
+        console.print(f"  Current keys stored: {len(vault.list_keys())}\n")
+        console.print("  For each connection, enter the value or press Enter to skip.")
+        console.print("  Already-stored keys show [green]✓[/green] and can be skipped.\n")
+
+        total_stored = 0
+        total_skipped = 0
+        total_existing = 0
+
+        for group_name, keys in connection_groups:
+            console.print(f"\n  [bold cyan]── {group_name} ──[/bold cyan]")
+            for key_name, service, description, url in keys:
+                existing = vault.retrieve(key_name)
+                if existing:
+                    console.print(f"  [green]✓[/green] {key_name} — already stored")
+                    total_existing += 1
+                    continue
+
+                hint = f" → {url}" if url else ""
+                try:
+                    value = input(f"  {key_name} ({description}){hint}\n    > ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    console.print("\n\n  Setup interrupted. Progress saved.")
+                    break
+                if value:
+                    vault.store(key_name, value, service=service, scope="read")
+                    # Also write to .env for persistence
+                    env_path = Path(".env")
+                    if env_path.exists():
+                        env_content = env_path.read_text()
+                        if f"{key_name}=" in env_content:
+                            import re
+                            env_content = re.sub(
+                                rf"^{re.escape(key_name)}=.*$",
+                                f"{key_name}={value}",
+                                env_content,
+                                flags=re.MULTILINE,
+                            )
+                            env_path.write_text(env_content)
+                    console.print(f"    [green]✓[/green] Stored in vault + .env")
+                    total_stored += 1
+                else:
+                    total_skipped += 1
+            else:
+                continue
+            break  # Break outer loop if inner was interrupted
+
+        console.print(f"\n  [bold]Setup Complete[/bold]")
+        console.print(f"  New keys stored: {total_stored}")
+        console.print(f"  Already had:     {total_existing}")
+        console.print(f"  Skipped:         {total_skipped}")
+        console.print(f"  Total in vault:  {len(vault.list_keys())}")
+        console.print(f"\n  Check status:  [cyan]python main.py --vault-status[/cyan]")
+        console.print(f"  Launch panel:  [cyan]python main.py --devpanel[/cyan]\n")
         return
 
     if getattr(args, 'epic_status', False):
