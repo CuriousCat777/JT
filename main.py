@@ -36,6 +36,11 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --sentinel             # IoT Sentinel dashboard (network + security)
+    python main.py --sentinel-scan        # Run one-time network scan
+    python main.py --sentinel-monitor     # Start continuous network monitoring
+    python main.py --network-audit        # LAN security audit (VLAN, DNS, credentials)
+    python main.py --vpn-status           # Tailscale VPN status
 """
 
 from __future__ import annotations
@@ -295,6 +300,20 @@ def main() -> None:
                         help="Audit Claude connector/MCP attack surface")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
+    parser.add_argument("--sentinel", action="store_true",
+                        help="IoT Sentinel dashboard (network security + device control)")
+    parser.add_argument("--sentinel-scan", action="store_true",
+                        help="Run a one-time network scan and report anomalies")
+    parser.add_argument("--sentinel-monitor", action="store_true",
+                        help="Start continuous network monitoring")
+    parser.add_argument("--sentinel-approve", type=int, default=None,
+                        help="Approve a pending sentinel recommendation by index")
+    parser.add_argument("--sentinel-deny", type=int, default=None,
+                        help="Deny a pending sentinel recommendation by index")
+    parser.add_argument("--network-audit", action="store_true",
+                        help="LAN security audit (VLAN, DNS blocking, credentials)")
+    parser.add_argument("--vpn-status", action="store_true",
+                        help="Tailscale VPN connection status")
     parser.add_argument("--cfo-clean", action="store_true",
                         help="Clean ledger: strip sandbox data, RM goals, zero-balance dupes")
     parser.add_argument("--cfo-clean-dry", action="store_true",
@@ -614,6 +633,91 @@ def main() -> None:
                     print(f"    [!!] {alert}")
         else:
             print(dev_agent.dashboard_text())
+
+    elif (args.sentinel or args.sentinel_scan or args.sentinel_monitor
+          or args.sentinel_approve is not None or args.sentinel_deny is not None):
+        from guardian_one.agents.iot_sentinel import IoTSentinel
+
+        sentinel_cfg = config.agents.get(
+            "iot_sentinel", AgentConfig(name="iot_sentinel", enabled=True,
+                                        allowed_resources=["network", "devices", "mqtt", "security"]))
+        sentinel = IoTSentinel(config=sentinel_cfg, audit=guardian.audit)
+        sentinel.initialize()
+
+        if args.sentinel_scan:
+            report = sentinel.run()
+            print(sentinel.dashboard_text())
+            if report.recommendations:
+                print("  Recommendations:")
+                for rec in report.recommendations:
+                    print(f"    - {rec}")
+            if report.alerts:
+                print("\n  Alerts:")
+                for alert in report.alerts:
+                    print(f"    [!!] {alert}")
+
+        elif args.sentinel_monitor:
+            print("\n  Starting continuous network monitoring...")
+            print(f"  Subnet: {sentinel.scanner.subnet}")
+            print(f"  Interval: {sentinel.monitor.scan_interval}s")
+            print("  Press Ctrl+C to stop.\n")
+            sentinel.start_monitoring()
+            try:
+                import signal
+                signal.pause()
+            except (KeyboardInterrupt, AttributeError):
+                # AttributeError: signal.pause not available on Windows
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+            sentinel.stop_monitoring()
+            print("\n  Monitoring stopped.")
+            print(sentinel.monitor.summary_text())
+
+        elif args.sentinel_approve is not None:
+            if sentinel.approve_recommendation(args.sentinel_approve):
+                print(f"\n  Recommendation #{args.sentinel_approve} approved.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_approve}")
+                pending = sentinel.pending_approvals()
+                if pending:
+                    print("  Pending approvals:")
+                    for i, p in enumerate(pending):
+                        print(f"    [{i}] {p['action']}: {p['description']}")
+                else:
+                    print("  No pending approvals.")
+
+        elif args.sentinel_deny is not None:
+            if sentinel.deny_recommendation(args.sentinel_deny):
+                print(f"\n  Recommendation #{args.sentinel_deny} denied.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_deny}")
+
+        else:
+            # --sentinel: show dashboard
+            sentinel.run()  # Run a scan to populate data
+            print(sentinel.dashboard_text())
+
+    elif args.network_audit:
+        from guardian_one.homelink.lan_security import LanSecurityAuditor
+        from guardian_one.homelink.devices import DeviceRegistry
+
+        registry = DeviceRegistry()
+        registry.load_defaults()
+        auditor = LanSecurityAuditor(registry)
+        print(auditor.audit_text())
+
+    elif args.vpn_status:
+        from guardian_one.homelink.tailscale import TailscaleClient
+        client = TailscaleClient(audit=guardian.audit)
+        print(client.summary_text())
+        health = client.health_check()
+        if health["issues"]:
+            print("  Issues:")
+            for issue in health["issues"]:
+                print(f"    - {issue}")
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
