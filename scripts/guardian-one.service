@@ -1,0 +1,18 @@
+[Unit]
+Description=Guardian One — Multi-Agent Life Management System
+After=network.target
+
+[Service]
+Type=simple
+User=jeremy
+WorkingDirectory=/home/jeremy/JT
+Environment=GUARDIAN_MASTER_PASSPHRASE=
+EnvironmentFile=-/home/jeremy/JT/.env
+ExecStart=/usr/bin/python3 /home/jeremy/JT/main.py --daemon
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

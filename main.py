@@ -246,6 +246,7 @@ def _run_sync_loop(cfo: CFO, interval: int = 300, once: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
     parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
+    parser.add_argument("--daemon", action="store_true", help="Run scheduler in headless daemon mode (no interactive prompt)")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Generate CFO Excel dashboard")
     parser.add_argument("--dashboard-password", type=str, default=None, help="Password-protect the Excel dashboard")
@@ -310,6 +311,7 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--health-port", type=int, default=5200, help="Health endpoint port (default: 5200)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -517,6 +519,13 @@ def main() -> None:
             evaluator.start()
         else:
             print("  Sandbox deployment failed. Fix issues above before retrying.")
+        guardian.shutdown()
+        return
+
+    if args.daemon:
+        from guardian_one.core.scheduler import Scheduler
+        sched = Scheduler(guardian)
+        sched.start_daemon()
         guardian.shutdown()
         return
 

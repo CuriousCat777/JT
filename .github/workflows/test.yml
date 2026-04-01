@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GUARDIAN_MASTER_PASSPHRASE: ci-test-passphrase
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || pip install pyyaml cryptography python-dotenv schedule rich openpyxl flask pytest pytest-asyncio ollama anthropic httpx python-kasa
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short

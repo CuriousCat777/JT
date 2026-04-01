@@ -18,11 +18,14 @@ Commands (while running):
 
 from __future__ import annotations
 
+import json
+import os
 import signal
 import sys
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import schedule
@@ -261,7 +264,142 @@ class Scheduler:
         print()
 
     # ------------------------------------------------------------------
-    # Main entry point
+    # State persistence
+    # ------------------------------------------------------------------
+
+    def _state_path(self) -> Path:
+        """Return the path to the scheduler state file."""
+        data_dir = Path(self.guardian.config.data_dir) if hasattr(self.guardian.config, "data_dir") else Path("data")
+        return data_dir / "scheduler_state.json"
+
+    def _save_state(self) -> None:
+        """Persist last_run times to disk."""
+        path = self._state_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "w") as f:
+                json.dump({"last_run": self._last_run}, f, indent=2)
+        except OSError as exc:
+            print(f"  [daemon] Failed to save state: {exc}")
+
+    def _load_state(self) -> None:
+        """Restore last_run times from disk if available."""
+        path = self._state_path()
+        if not path.exists():
+            return
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            self._last_run.update(data.get("last_run", {}))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"  [daemon] Failed to load state: {exc}")
+
+    # ------------------------------------------------------------------
+    # Daemon mode
+    # ------------------------------------------------------------------
+
+    def start_daemon(self) -> None:
+        """Run the scheduler in headless daemon mode (no interactive prompt).
+
+        Designed for systemd / background operation:
+        - No interactive input() loop
+        - Handles SIGTERM + SIGINT for graceful shutdown
+        - Logs startup/shutdown to audit
+        - Persists agent state on shutdown
+        - Watchdog: restarts scheduler thread up to 3 times on crash
+        """
+        max_restarts = 3
+        restart_count = 0
+
+        def _shutdown_handler(signum, frame):
+            sig_name = signal.Signals(signum).name
+            print(f"\n  [daemon] Received {sig_name} — shutting down...")
+            self._stop_event.set()
+
+        signal.signal(signal.SIGTERM, _shutdown_handler)
+        signal.signal(signal.SIGINT, _shutdown_handler)
+
+        # Load persisted state from previous run
+        self._load_state()
+
+        # Register scheduled jobs
+        self._register_jobs()
+
+        print("\n  Guardian One Daemon — starting up")
+        print(f"  Owner: {self.guardian.config.owner}")
+        print(f"  Agents: {', '.join(self.guardian.list_agents())}")
+        print(f"  PID: {os.getpid()}")
+
+        self.guardian.audit.record(
+            agent="scheduler",
+            action="daemon_started",
+            severity=Severity.INFO,
+            details={"pid": os.getpid()},
+        )
+
+        # Run all agents once at startup
+        print("  Running initial cycle...")
+        reports = self.guardian.run_all()
+        for r in reports:
+            _print_report_brief(r.agent_name, r)
+            self._last_run[r.agent_name] = datetime.now(timezone.utc).isoformat()
+
+        print("\n  Daemon running. Send SIGTERM or SIGINT to stop.")
+
+        # Start scheduler thread with watchdog
+        def _start_scheduler_thread():
+            self._scheduler_thread = threading.Thread(
+                target=self._tick_loop, daemon=True, name="guardian-scheduler"
+            )
+            self._scheduler_thread.start()
+
+        _start_scheduler_thread()
+
+        # Main thread: block until stop event, with watchdog checks
+        while not self._stop_event.is_set():
+            self._stop_event.wait(timeout=5)
+
+            # Watchdog: check if scheduler thread is alive
+            if not self._stop_event.is_set() and self._scheduler_thread and not self._scheduler_thread.is_alive():
+                restart_count += 1
+                if restart_count <= max_restarts:
+                    print(f"  [daemon] Scheduler thread died — restarting ({restart_count}/{max_restarts})...")
+                    self.guardian.audit.record(
+                        agent="scheduler",
+                        action="daemon_watchdog_restart",
+                        severity=Severity.WARNING,
+                        details={"restart_count": restart_count},
+                    )
+                    _start_scheduler_thread()
+                else:
+                    print(f"  [daemon] Scheduler thread died {max_restarts} times — giving up.")
+                    self.guardian.audit.record(
+                        agent="scheduler",
+                        action="daemon_watchdog_exhausted",
+                        severity=Severity.ERROR,
+                        details={"max_restarts": max_restarts},
+                    )
+                    self._stop_event.set()
+
+        # Shutdown
+        self._stop_event.set()
+        if self._scheduler_thread and self._scheduler_thread.is_alive():
+            self._scheduler_thread.join(timeout=5)
+        schedule.clear()
+
+        # Persist state before exit
+        self._save_state()
+
+        self.guardian.audit.record(
+            agent="scheduler",
+            action="daemon_stopped",
+            severity=Severity.INFO,
+            details={"pid": os.getpid()},
+        )
+        print("\n  Daemon stopped. State saved.")
+
+    # ------------------------------------------------------------------
+    # Main entry point (interactive)
     # ------------------------------------------------------------------
 
     def start(self) -> None:
