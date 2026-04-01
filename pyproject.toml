@@ -24,6 +24,9 @@ dev = [
 [project.scripts]
 guardian = "main:main"
 
+[tool.setuptools.packages.find]
+include = ["guardian_one*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
