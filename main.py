@@ -310,6 +310,10 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--handoff", action="store_true", help="Generate session handoff brief (git + audit + vault backup)")
+    parser.add_argument("--handoff-history", action="store_true", help="List all stored handoffs from vault")
+    parser.add_argument("--handoff-restore", type=str, default=None, help="Restore a handoff by session ID")
+    parser.add_argument("--handoff-no-tests", action="store_true", help="Skip test run during handoff generation")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -435,6 +439,41 @@ def main() -> None:
         else:
             print("CFO agent not available.")
         guardian.shutdown()
+        return
+
+    if args.handoff or args.handoff_history or args.handoff_restore:
+        from guardian_one.core.handoff import HandoffTracker
+        tracker = HandoffTracker(
+            repo_root=Path.cwd(),
+            audit=guardian.audit,
+            vault=guardian.vault,
+        )
+        if args.handoff_history:
+            entries = tracker.list_handoffs()
+            if not entries:
+                print("\n  No handoffs stored in vault yet.\n")
+            else:
+                print(f"\n  === Stored Handoffs ({len(entries)}) ===\n")
+                for h in entries:
+                    print(f"  {h['timestamp']}  {h['session_id']}  {h['summary']}")
+                print()
+        elif args.handoff_restore:
+            entry = tracker.restore_handoff(args.handoff_restore)
+            if entry is None:
+                print(f"\n  Handoff {args.handoff_restore} not found in vault.\n")
+            else:
+                print(entry.to_markdown())
+        else:
+            print("\n  Generating session handoff...")
+            entry = tracker.generate(run_tests=not args.handoff_no_tests)
+            print(f"\n  === Handoff Generated ===")
+            print(f"  Session:  {entry.session_id}")
+            print(f"  Branch:   {entry.branch}")
+            print(f"  Commits:  {len(entry.commits)}")
+            print(f"  Files:    {len(entry.files_changed)}")
+            print(f"  Tests:    {entry.test_result}")
+            print(f"  Vault:    backed up as HANDOFF_{entry.session_id}")
+            print(f"  Markdown: handoffs-and-briefs/\n")
         return
 
     if args.devpanel:

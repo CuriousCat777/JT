@@ -984,6 +984,49 @@ def create_app() -> Flask:
     # API — Chat (AI Engine)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # API — Handoff Tracker
+    # ------------------------------------------------------------------
+
+    @app.route("/api/handoff", methods=["POST"])
+    def api_handoff_generate():
+        from guardian_one.core.handoff import HandoffTracker
+        g = _get_guardian()
+        tracker = HandoffTracker(
+            repo_root=Path(__file__).resolve().parent.parent.parent,
+            audit=g.audit,
+            vault=g.vault,
+        )
+        body = request.get_json(silent=True) or {}
+        run_tests = body.get("run_tests", False)
+        entry = tracker.generate(run_tests=run_tests)
+        return jsonify(entry.to_dict())
+
+    @app.route("/api/handoff/history")
+    def api_handoff_history():
+        from guardian_one.core.handoff import HandoffTracker
+        g = _get_guardian()
+        tracker = HandoffTracker(
+            repo_root=Path(__file__).resolve().parent.parent.parent,
+            audit=g.audit,
+            vault=g.vault,
+        )
+        return jsonify(tracker.list_handoffs())
+
+    @app.route("/api/handoff/<session_id>")
+    def api_handoff_restore(session_id: str):
+        from guardian_one.core.handoff import HandoffTracker
+        g = _get_guardian()
+        tracker = HandoffTracker(
+            repo_root=Path(__file__).resolve().parent.parent.parent,
+            audit=g.audit,
+            vault=g.vault,
+        )
+        entry = tracker.restore_handoff(session_id)
+        if entry is None:
+            return jsonify({"error": f"Handoff {session_id} not found"}), 404
+        return jsonify(entry.to_dict())
+
     @app.route("/api/chat", methods=["POST"])
     def api_chat():
         g = _get_guardian()
