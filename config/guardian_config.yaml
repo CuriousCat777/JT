@@ -359,69 +359,70 @@ agents:
   # Docker Compose stack: Home Assistant, Mosquitto, Node-RED, n8n, Zigbee2MQTT, Ollama, Tailscale
   iot_stack:
     enabled: true
-    stack_dir: "~/iot-stack"                   # Docker Compose root
-    subnet: "192.168.1.0/24"                   # LAN subnet for nmap scans
-    scan_interval_minutes: 5                   # Network scan frequency
-    zigbee_device: "/dev/ttyUSB0"              # Zigbee USB coordinator path
-    # VLAN segmentation
-    vlans:
-      core: 10        # Guardian host, NAS, router
-      iot: 20          # IoT devices (sensors, plugs, lights, cameras)
-      user: 30         # User devices (laptops, phones, tablets)
-    # Firewall policy
-    firewall:
-      deny_all_outbound_iot: true              # IoT VLAN blocked from internet
-      allow_iot_to_mqtt_only: true             # IoT can only reach MQTT broker
-      vpn_only_external_access: true           # Remote access via Tailscale only
-    # Services
-    services:
-      home_assistant:
-        enabled: true
-        port: 8123
-      mosquitto:
-        enabled: true
-        port: 1883
-        tls_port: 8883                         # Enable after initial setup
-        anonymous_access: false                # MUST be false in production
-      node_red:
-        enabled: true
-        port: 1880
-      n8n:
-        enabled: true
-        port: 5678
-      zigbee2mqtt:
-        enabled: true                          # Requires USB coordinator
-        frontend_port: 8080
-      ollama:
-        enabled: true
-        port: 11434
-      tailscale:
-        enabled: true
-    # AI agent workflows
-    ai_agents:
-      network_monitor:
-        enabled: true
-        scan_interval_minutes: 5
-        alert_on_unknown_device: true
-      risk_summarizer:
-        enabled: true
-        llm_provider: ollama                   # "ollama" or "openai"
-        model: "llama3"
-      recommendation_engine:
-        enabled: true
-        confidence_threshold: 0.7
-        execution_policy: "user_approval_required"
-    # Maintenance
-    maintenance:
-      config_backup_daily: true
-      health_summary_daily: true
-      integrity_report_weekly: true
-      update_review_monthly: true
-    # Security hardening (track completion)
-    hardening:
-      mqtt_auth_enabled: false                 # TODO: enable after initial setup
-      mqtt_tls_enabled: false                  # TODO: generate certs
-      ha_https_enabled: false                  # TODO: configure SSL
-      ufw_configured: false                    # TODO: restrict ports
-      image_versions_pinned: false             # TODO: pin after stable
-      zigbee_persistent_path: false            # TODO: use /dev/serial/by-id/
+    custom:
+      stack_dir: "~/iot-stack"                   # Docker Compose root
+      subnet: "192.168.1.0/24"                   # LAN subnet for nmap scans
+      scan_interval_minutes: 5                   # Network scan frequency
+      zigbee_device: "/dev/ttyUSB0"              # Zigbee USB coordinator path
+      # VLAN segmentation
+      vlans:
+        core: 10        # Guardian host, NAS, router
+        iot: 20          # IoT devices (sensors, plugs, lights, cameras)
+        user: 30         # User devices (laptops, phones, tablets)
+      # Firewall policy
+      firewall:
+        deny_all_outbound_iot: true              # IoT VLAN blocked from internet
+        allow_iot_to_mqtt_only: true             # IoT can only reach MQTT broker
+        vpn_only_external_access: true           # Remote access via Tailscale only
+      # Services
+      services:
+        home_assistant:
+          enabled: true
+          port: 8123
+        mosquitto:
+          enabled: true
+          port: 1883
+          tls_port: 8883                         # Enable after initial setup
+          anonymous_access: false                # MUST be false in production
+        node_red:
+          enabled: true
+          port: 1880
+        n8n:
+          enabled: true
+          port: 5678
+        zigbee2mqtt:
+          enabled: true                          # Requires USB coordinator
+          frontend_port: 8080
+        ollama:
+          enabled: true
+          port: 11434
+        tailscale:
+          enabled: true
+      # AI agent workflows
+      ai_agents:
+        network_monitor:
+          enabled: true
+          scan_interval_minutes: 5
+          alert_on_unknown_device: true
+        risk_summarizer:
+          enabled: true
+          llm_provider: ollama                   # "ollama" or "openai"
+          model: "llama3"
+        recommendation_engine:
+          enabled: true
+          confidence_threshold: 0.7
+          execution_policy: "user_approval_required"
+      # Maintenance
+      maintenance:
+        config_backup_daily: true
+        health_summary_daily: true
+        integrity_report_weekly: true
+        update_review_monthly: true
+      # Security hardening (track completion)
+      hardening:
+        mqtt_auth_enabled: false                 # TODO: enable after initial setup
+        mqtt_tls_enabled: false                  # TODO: generate certs
+        ha_https_enabled: false                  # TODO: configure SSL
+        ufw_configured: false                    # TODO: restrict ports
+        image_versions_pinned: false             # TODO: pin after stable
+        zigbee_persistent_path: false            # TODO: use /dev/serial/by-id/
