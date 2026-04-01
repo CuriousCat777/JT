@@ -56,8 +56,13 @@ class GuardianOne:
         # H.O.M.E. L.I.N.K. subsystems
         self.gateway = Gateway(audit=self.audit)
         passphrase = vault_passphrase or os.environ.get(
-            "GUARDIAN_MASTER_PASSPHRASE", "guardian-one-default-dev-passphrase"
+            "GUARDIAN_MASTER_PASSPHRASE", ""
         )
+        if not passphrase:
+            raise RuntimeError(
+                "Vault passphrase required: set GUARDIAN_MASTER_PASSPHRASE env var "
+                "or pass vault_passphrase to GuardianOne()"
+            )
         vault_path = Path(self.config.data_dir) / "vault.enc"
         self.vault = Vault(vault_path, passphrase=passphrase)
         self.registry = IntegrationRegistry()

@@ -458,7 +458,7 @@ def test_web_architect_in_guardian():
     from guardian_one.core.guardian import GuardianOne
 
     config = load_config()
-    guardian = GuardianOne(config=config)
+    guardian = GuardianOne(config=config, vault_passphrase="test-passphrase")
 
     cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     agent = WebArchitect(cfg, guardian.audit, FakeN8nProvider())

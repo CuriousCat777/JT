@@ -399,8 +399,20 @@ class LanSecurityAuditor:
 # ---------------------------------------------------------------------------
 
 def _dns_blocking_deployed() -> bool:
-    """Check if Pi-hole or NextDNS is deployed (placeholder)."""
-    # TODO: actual check — ping pihole.local or check DNS config
+    """Check if Pi-hole or NextDNS is deployed.
+
+    Probes pihole.local (the default Pi-hole hostname) via a quick TCP
+    connect on port 80.  Returns True if a DNS-blocking appliance
+    appears reachable on the LAN.
+    """
+    import socket
+
+    for host in ("pihole.local", "pi.hole"):
+        try:
+            with socket.create_connection((host, 80), timeout=2):
+                return True
+        except OSError:
+            continue
     return False
 
 
