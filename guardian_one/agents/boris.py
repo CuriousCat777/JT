@@ -235,18 +235,31 @@ class Boris(BaseAgent):
         """Build a catalog of MCP servers from known integrations."""
         servers: dict[str, dict[str, Any]] = {}
 
-        # Core integrations mapped from the registry
+        # Live MCP servers detected from the system
         known = {
-            "github": {"name": "GitHub", "tools_count": 45},
-            "gmail": {"name": "Gmail (MCP)", "tools_count": 7},
-            "google-workspace": {"name": "Google Workspace (Zapier)", "tools_count": 50},
-            "notion": {"name": "Notion", "tools_count": 20},
-            "notion-zapier": {"name": "Notion (Zapier)", "tools_count": 18},
-            "n8n": {"name": "n8n Workflow Automation", "tools_count": 12},
-            "cloudflare": {"name": "Cloudflare Workers/D1/R2", "tools_count": 20},
-            "figma": {"name": "Figma Design", "tools_count": 15},
-            "webflow": {"name": "Webflow", "tools_count": 25},
+            "github": {"name": "GitHub (mcp__github)", "tools_count": 48},
+            "gmail-api": {"name": "Gmail API", "tools_count": 7},
+            "gmail-zapier": {"name": "Gmail (Zapier)", "tools_count": 13},
+            "google-workspace": {"name": "Google Workspace (Zapier — Calendar, Drive, Sheets)", "tools_count": 50},
+            "notion-native": {"name": "Notion (Native MCP)", "tools_count": 18},
+            "notion-zapier": {"name": "Notion (Zapier)", "tools_count": 20},
+            "n8n": {"name": "n8n Workflow Automation", "tools_count": 14},
+            "cloudflare": {"name": "Cloudflare (Workers, D1, R2, KV, Hyperdrive)", "tools_count": 20},
+            "figma": {"name": "Figma Design + Code Connect", "tools_count": 16},
+            "webflow": {"name": "Webflow (Sites, CMS, Components, Elements)", "tools_count": 25},
             "microsoft-learn": {"name": "Microsoft Learn Docs", "tools_count": 3},
+            "microsoft-outlook": {"name": "Microsoft Outlook (Zapier)", "tools_count": 30},
+            "microsoft-excel": {"name": "Microsoft Excel (Zapier)", "tools_count": 18},
+            "lumin-pdf": {"name": "Lumin PDF (Sign, Upload, Convert)", "tools_count": 7},
+            "commonroom": {"name": "Common Room (Community Intel)", "tools_count": 3},
+            "zapier-tables": {"name": "Zapier Tables", "tools_count": 11},
+            "clinicaltrials": {"name": "ClinicalTrials.gov API", "tools_count": 6},
+            "biorxiv": {"name": "bioRxiv/medRxiv Preprints", "tools_count": 6},
+            "cms-coverage": {"name": "CMS Medicare Coverage API", "tools_count": 7},
+            "nppes-npi": {"name": "NPPES NPI Registry", "tools_count": 3},
+            "google-calendar": {"name": "Google Calendar (Native MCP)", "tools_count": 8},
+            "aws-marketplace": {"name": "AWS Marketplace", "tools_count": 5},
+            "flight-search": {"name": "Flight Search", "tools_count": 2},
         }
 
         # Check which servers are actually available by looking at
