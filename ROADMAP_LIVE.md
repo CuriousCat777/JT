@@ -7,18 +7,18 @@ that runs 24/7 and reliably manages Jeremy's life operations.
 
 ## 1. Persistent Background Service (Daemon Mode)
 
-**Status:** Not started
+**Status:** Complete
 **Why:** Right now Guardian One only runs when you manually invoke `python main.py`.
 For a live system, it needs to run continuously as a background service that
 survives reboots, crashes, and SSH disconnects.
 
 **Tasks:**
-- [ ] Create a systemd service unit (`guardian-one.service`) for Linux deployment
-- [ ] Add auto-restart on crash with backoff (`Restart=on-failure`)
-- [ ] Add a `--daemon` flag to `main.py` that runs the scheduler in headless mode
+- [x] Create a systemd service unit (`guardian-one.service`) for Linux deployment
+- [x] Add auto-restart on crash with backoff (`Restart=on-failure`)
+- [x] Add a `--daemon` flag to `main.py` that runs the scheduler in headless mode
       (no interactive prompt, just scheduled agent cycles + health endpoint)
-- [ ] Write a startup script that loads `.env`, checks dependencies, and launches
-- [ ] Add graceful shutdown with SIGTERM handling and state persistence
+- [x] Write a startup script that loads `.env`, checks dependencies, and launches
+- [x] Add graceful shutdown with SIGTERM handling and state persistence
 
 ---
 

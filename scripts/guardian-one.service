@@ -1,0 +1,72 @@
+# Guardian One — systemd service unit
+#
+# Install:
+#   sudo cp scripts/guardian-one.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable guardian-one    # start on boot
+#   sudo systemctl start guardian-one     # start now
+#
+# Manage:
+#   sudo systemctl status guardian-one    # check health
+#   sudo journalctl -u guardian-one -f    # tail logs
+#   sudo systemctl restart guardian-one   # restart
+#   sudo systemctl stop guardian-one      # graceful stop (SIGTERM)
+#
+# Security:
+#   - Runs as dedicated 'guardian' user (create with: sudo useradd -r -s /usr/sbin/nologin guardian)
+#   - Private /tmp, no privilege escalation, restricted filesystem
+#   - Credentials loaded from EnvironmentFile (.env), never in this unit
+
+[Unit]
+Description=Guardian One — Autonomous Life Management System
+Documentation=https://github.com/CuriousCat777/JT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+WorkingDirectory=/home/user/JT
+ExecStart=/home/user/JT/scripts/guardian_daemon.sh
+
+# ── Restart policy ──────────────────────────────────────────────────
+# Auto-restart on crash with exponential backoff (5s → 10s → 20s ...)
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# ── Graceful shutdown ───────────────────────────────────────────────
+# Send SIGTERM first, wait 30s for clean state persistence, then SIGKILL
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# ── Environment ─────────────────────────────────────────────────────
+# Secrets and API keys are loaded by the startup script from .env
+# but can also be set here for systemd-native credential management
+EnvironmentFile=-/home/user/JT/.env
+
+# ── Logging ─────────────────────────────────────────────────────────
+# stdout/stderr → journald (view with: journalctl -u guardian-one)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guardian-one
+
+# ── Security hardening ──────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/user/JT/data /home/user/JT/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=false
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,7 @@
 Usage:
     python main.py              # Run all agents once and print daily summary
     python main.py --schedule   # Start interactive scheduler (agents run on intervals)
+    python main.py --daemon     # Start scheduler headless (for systemd / 24-7 operation)
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --validate   # CFO validation report (detailed, for review)
@@ -246,6 +247,7 @@ def _run_sync_loop(cfo: CFO, interval: int = 300, once: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
     parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
+    parser.add_argument("--daemon", action="store_true", help="Start scheduler in headless daemon mode (for systemd)")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Generate CFO Excel dashboard")
     parser.add_argument("--dashboard-password", type=str, default=None, help="Password-protect the Excel dashboard")
@@ -520,9 +522,9 @@ def main() -> None:
         guardian.shutdown()
         return
 
-    if args.schedule:
+    if args.schedule or args.daemon:
         from guardian_one.core.scheduler import Scheduler
-        sched = Scheduler(guardian)
+        sched = Scheduler(guardian, daemon=args.daemon)
         sched.start()
         guardian.shutdown()
         return

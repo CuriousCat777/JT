@@ -34,10 +34,16 @@ if TYPE_CHECKING:
 
 
 class Scheduler:
-    """Interactive scheduler that runs agents on configured intervals."""
+    """Interactive scheduler that runs agents on configured intervals.
 
-    def __init__(self, guardian: GuardianOne) -> None:
+    When *daemon* is True the scheduler runs headless — no interactive
+    prompt, suitable for systemd / background service operation.  It
+    blocks on SIGTERM/SIGINT and shuts down cleanly.
+    """
+
+    def __init__(self, guardian: GuardianOne, *, daemon: bool = False) -> None:
         self.guardian = guardian
+        self.daemon = daemon
         self._paused: set[str] = set()
         self._stop_event = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
@@ -269,11 +275,13 @@ class Scheduler:
         # Handle Ctrl+C gracefully
         original_sigint = signal.getsignal(signal.SIGINT)
 
-        def _sigint_handler(signum, frame):
-            print("\n  Caught Ctrl+C — shutting down...")
+        def _shutdown_handler(signum, frame):
+            sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+            print(f"\n  Caught {sig_name} — shutting down...")
             self._stop_event.set()
 
-        signal.signal(signal.SIGINT, _sigint_handler)
+        signal.signal(signal.SIGINT, _shutdown_handler)
+        signal.signal(signal.SIGTERM, _shutdown_handler)
 
         self._register_jobs()
 
@@ -301,21 +309,29 @@ class Scheduler:
         )
         self._scheduler_thread.start()
 
-        print()
-        print("  Scheduler running. Type 'help' for commands, 'stop' to quit.")
-        print()
+        if self.daemon:
+            print()
+            print("  Scheduler running in daemon mode (headless). Send SIGTERM to stop.")
+            print()
 
-        # Interactive command loop (main thread)
-        try:
-            while not self._stop_event.is_set():
-                try:
-                    cmd = input("guardian> ")
-                except EOFError:
-                    break
-                if not self._handle_command(cmd):
-                    break
-        except KeyboardInterrupt:
-            pass
+            # Block until stop signal — no interactive prompt
+            self._stop_event.wait()
+        else:
+            print()
+            print("  Scheduler running. Type 'help' for commands, 'stop' to quit.")
+            print()
+
+            # Interactive command loop (main thread)
+            try:
+                while not self._stop_event.is_set():
+                    try:
+                        cmd = input("guardian> ")
+                    except EOFError:
+                        break
+                    if not self._handle_command(cmd):
+                        break
+            except KeyboardInterrupt:
+                pass
 
         # Shutdown
         self._stop_event.set()
