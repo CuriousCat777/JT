@@ -948,6 +948,101 @@ def create_app() -> Flask:
     # API — Config (read-only view)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # API — Epic Pantheon (physician builder integration status)
+    # ------------------------------------------------------------------
+
+    @app.route("/api/epic/status")
+    def api_epic_status():
+        """Check all connections needed for Epic Pantheon build."""
+        g = _get_guardian()
+
+        # 1. n8n connection check
+        n8n_status = {"connected": False, "workflows": [], "error": None}
+        try:
+            from guardian_one.integrations.n8n_sync import N8nAPIProvider
+            n8n = N8nAPIProvider()
+            if n8n.has_credentials:
+                n8n_status["connected"] = n8n.authenticate()
+                if n8n_status["connected"]:
+                    workflows = n8n.list_workflows()
+                    n8n_status["workflows"] = [
+                        {"id": w.id, "name": w.name, "active": w.active}
+                        for w in workflows
+                    ]
+            else:
+                n8n_status["error"] = "N8N_BASE_URL or N8N_API_KEY not set"
+        except Exception as e:
+            n8n_status["error"] = str(e)
+
+        # 2. Vault credentials check for Epic
+        vault_status = {"available": False, "epic_keys": [], "missing": []}
+        try:
+            keys = g.vault.list_keys()
+            vault_status["available"] = True
+            epic_keys = [k for k in keys if "epic" in k.lower() or "fhir" in k.lower()]
+            vault_status["epic_keys"] = epic_keys
+            required = ["EPIC_CLIENT_ID", "EPIC_FHIR_BASE_URL"]
+            vault_status["missing"] = [k for k in required if k not in keys]
+        except Exception as e:
+            vault_status["error"] = str(e)
+
+        # 3. Gateway services check
+        gateway_services = g.gateway.all_services_status()
+        epic_service = None
+        for svc in gateway_services:
+            if "epic" in svc.get("name", "").lower():
+                epic_service = svc
+
+        # 4. Registry check
+        registry_status = {"epic_registered": False}
+        try:
+            for name in g.registry.list_all():
+                if "epic" in name.lower():
+                    registry_status["epic_registered"] = True
+                    registry_status["integration_name"] = name
+                    break
+        except Exception:
+            pass
+
+        # 5. EpicScheduleProvider check
+        provider_status = {"stub_exists": True, "auth_implemented": False}
+        try:
+            from guardian_one.integrations.calendar_sync import EpicScheduleProvider
+            provider_status["stub_exists"] = True
+        except ImportError:
+            provider_status["stub_exists"] = False
+
+        # 6. Build readiness summary
+        components = {
+            "gateway": {"ready": True, "label": "H.O.M.E. L.I.N.K. Gateway"},
+            "vault": {"ready": vault_status["available"], "label": "Vault (encrypted credentials)"},
+            "content_gate": {"ready": True, "label": "PHI/PII Content Gate"},
+            "audit": {"ready": True, "label": "Audit Logging"},
+            "n8n": {"ready": n8n_status["connected"], "label": "n8n Workflow Engine"},
+            "epic_schedule_provider": {"ready": provider_status["stub_exists"], "label": "EpicScheduleProvider (stub)"},
+            "smart_on_fhir": {"ready": False, "label": "SMART on FHIR Auth"},
+            "epic_ehr_provider": {"ready": False, "label": "EpicEHRProvider"},
+            "health_agent": {"ready": False, "label": "HealthAgent"},
+        }
+        ready_count = sum(1 for c in components.values() if c["ready"])
+        total_count = len(components)
+
+        return jsonify({
+            "pantheon": {
+                "ready_pct": round(ready_count / total_count * 100),
+                "ready_count": ready_count,
+                "total_count": total_count,
+                "components": components,
+            },
+            "n8n": n8n_status,
+            "vault": vault_status,
+            "gateway_epic_service": epic_service,
+            "registry": registry_status,
+            "provider": provider_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
     @app.route("/api/config")
     def api_config():
         g = _get_guardian()

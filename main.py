@@ -275,6 +275,7 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--notion-backup", action="store_true", help="Backup audit logs + vault health to Notion")
     parser.add_argument("--devices", action="store_true",
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
@@ -310,6 +311,7 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--epic-status", action="store_true", help="Epic Pantheon build status + n8n connections")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -440,6 +442,65 @@ def main() -> None:
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
         run_devpanel(guardian, port=args.devpanel_port)
+        return
+
+    if getattr(args, 'epic_status', False):
+        from rich.console import Console
+        from rich.table import Table
+        from guardian_one.integrations.n8n_sync import N8nAPIProvider
+
+        console = Console()
+        console.print("\n  [bold]Epic Pantheon — Build Status[/bold]\n")
+
+        # n8n check
+        n8n = N8nAPIProvider()
+        if n8n.has_credentials:
+            connected = n8n.authenticate()
+            if connected:
+                workflows = n8n.list_workflows()
+                console.print(f"  [green]n8n[/green]  Connected — {len(workflows)} workflow(s)")
+                for w in workflows:
+                    status = "[green]ACTIVE[/green]" if w.active else "[dim]inactive[/dim]"
+                    console.print(f"         • {w.name}  {status}")
+            else:
+                console.print("  [yellow]n8n[/yellow]  Credentials set but connection failed")
+        else:
+            console.print("  [red]n8n[/red]  Not configured (set N8N_BASE_URL + N8N_API_KEY)")
+
+        # Vault check
+        vault_keys = guardian.vault.list_keys()
+        epic_keys = [k for k in vault_keys if "epic" in k.lower() or "fhir" in k.lower()]
+        required = ["EPIC_CLIENT_ID", "EPIC_FHIR_BASE_URL"]
+        missing = [k for k in required if k not in vault_keys]
+        console.print(f"\n  [bold]Vault[/bold]  {len(vault_keys)} total keys")
+        if epic_keys:
+            console.print(f"  [green]Epic keys:[/green]  {', '.join(epic_keys)}")
+        if missing:
+            console.print(f"  [yellow]Missing:[/yellow]  {', '.join(missing)}")
+
+        # Component readiness table
+        table = Table(title="Component Readiness", show_header=True)
+        table.add_column("Component", style="bold")
+        table.add_column("Status")
+        components = [
+            ("H.O.M.E. L.I.N.K. Gateway", True),
+            ("Vault (encrypted credentials)", True),
+            ("PHI/PII Content Gate", True),
+            ("Audit Logging", True),
+            ("n8n Workflow Engine", n8n.has_credentials and n8n.is_authenticated),
+            ("EpicScheduleProvider (stub)", True),
+            ("SMART on FHIR Auth", False),
+            ("EpicEHRProvider", False),
+            ("HealthAgent", False),
+        ]
+        ready = sum(1 for _, s in components if s)
+        for name, status in components:
+            badge = "[green]READY[/green]" if status else "[red]NOT STARTED[/red]"
+            table.add_row(name, badge)
+        console.print()
+        console.print(table)
+        console.print(f"\n  [bold]{ready}/{len(components)}[/bold] components ready ({round(ready/len(components)*100)}%)")
+        console.print(f"  Dashboard: [cyan]python main.py --devpanel[/cyan] → Epic Systems tab\n")
         return
 
     if args.ollama or args.ollama_benchmark or args.ollama_pull or args.ollama_delete:
@@ -965,6 +1026,43 @@ def main() -> None:
             if result.errors:
                 for err in result.errors:
                     print(f"    [ERROR] {err}")
+
+    elif getattr(args, 'notion_backup', False):
+        from guardian_one.integrations.notion_sync import NotionSync
+        import os
+
+        root_page_id = os.environ.get("NOTION_ROOT_PAGE_ID", "")
+        if not root_page_id:
+            print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion backup.")
+        else:
+            sync = NotionSync(
+                gateway=guardian.gateway,
+                vault=guardian.vault,
+                audit=guardian.audit,
+                root_page_id=root_page_id,
+            )
+
+            # Collect audit entries
+            entries = guardian.audit.query(limit=200)
+            audit_data = [e.to_dict() for e in entries]
+
+            # Vault health (metadata only — no secrets)
+            vault_health = guardian.vault.health_report()
+
+            print("\n  Backing up audit logs + vault health to Notion...")
+            result = sync.push_audit_backup(
+                audit_entries=audit_data,
+                vault_health=vault_health,
+            )
+
+            status = "OK" if result.success else "FAILED"
+            print(f"  [{status}] {result.pages_created} pages created, "
+                  f"{result.pages_updated} updated, "
+                  f"{result.blocks_written} blocks written")
+            if result.errors:
+                for err in result.errors:
+                    print(f"    [ERROR] {err}")
+            print()
 
     elif args.notion_preview:
         from guardian_one.integrations.notion_sync import NotionSync

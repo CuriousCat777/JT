@@ -839,6 +839,17 @@ tr:hover td { background: var(--bg-primary); }
         <p style="color: var(--text-muted); font-size: 13px;">Strategic business intelligence report &middot; April 2026</p>
       </div>
 
+      <!-- Pantheon Live Status -->
+      <div class="card" style="margin-bottom: 24px; border-left: 3px solid var(--purple);" id="pantheonStatus">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h4 style="font-weight: 700;">Pantheon Build Status</h4>
+          <button class="btn btn-sm" onclick="loadEpicStatus()">Check Connections</button>
+        </div>
+        <div id="pantheonContent" style="font-size: 12px; color: var(--text-muted);">
+          Click "Check Connections" to scan n8n, Vault, Gateway, and all Epic integration components.
+        </div>
+      </div>
+
       <!-- Key Metrics -->
       <div class="grid-3" style="margin-bottom: 24px;">
         <div class="stat-card">
@@ -1608,6 +1619,91 @@ async function loadSummary() {
 // ---------------------------------------------------------------------------
 // Loader map & init
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Epic Pantheon Status
+// ---------------------------------------------------------------------------
+async function loadEpicStatus() {
+  const el = document.getElementById('pantheonContent');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text-muted);">Scanning connections...</div>';
+
+  try {
+    const data = await api('/api/epic/status');
+    const p = data.pantheon;
+
+    // Progress bar color
+    const pct = p.ready_pct;
+    const barColor = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+
+    let html = `
+      <div style="margin-bottom: 14px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-weight:600;color:var(--text-primary);">Integration Readiness</span>
+          <span style="font-weight:700;color:${barColor};">${p.ready_count}/${p.total_count} components (${pct}%)</span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">`;
+
+    for (const [key, comp] of Object.entries(p.components)) {
+      const icon = comp.ready ? '&#10003;' : '&#10007;';
+      const color = comp.ready ? 'var(--green)' : 'var(--red)';
+      const bg = comp.ready ? 'var(--green-dim)' : 'var(--red-dim)';
+      html += `<div style="padding:8px 10px;background:${bg};border-radius:6px;font-size:11px;">
+        <span style="color:${color};font-weight:700;">${icon}</span> ${comp.label}
+      </div>`;
+    }
+    html += '</div>';
+
+    // n8n section
+    const n = data.n8n;
+    if (n.connected) {
+      html += `<div style="padding:10px 12px;background:var(--green-dim);border-radius:8px;margin-bottom:8px;">
+        <span style="color:var(--green);font-weight:700;">n8n Connected</span>
+        <span style="color:var(--text-muted);margin-left:8px;">${n.workflows.length} workflow(s)</span>`;
+      if (n.workflows.length > 0) {
+        html += '<div style="margin-top:6px;">';
+        for (const w of n.workflows) {
+          const badge = w.active
+            ? '<span style="color:var(--green);font-weight:600;">ACTIVE</span>'
+            : '<span style="color:var(--text-muted);">inactive</span>';
+          html += `<div style="font-size:11px;margin-top:2px;">&bull; ${w.name} ${badge}</div>`;
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    } else {
+      html += `<div style="padding:10px 12px;background:var(--yellow-dim);border-radius:8px;margin-bottom:8px;">
+        <span style="color:var(--yellow);font-weight:700;">n8n Not Connected</span>
+        <span style="color:var(--text-muted);margin-left:8px;">${n.error || 'Check N8N_BASE_URL and N8N_API_KEY'}</span>
+      </div>`;
+    }
+
+    // Vault section
+    const v = data.vault;
+    if (v.missing && v.missing.length > 0) {
+      html += `<div style="padding:10px 12px;background:var(--yellow-dim);border-radius:8px;margin-bottom:8px;">
+        <span style="color:var(--yellow);font-weight:700;">Vault — Missing Epic Keys:</span>
+        <span style="color:var(--text-secondary);margin-left:6px;">${v.missing.join(', ')}</span>
+      </div>`;
+    }
+    if (v.epic_keys && v.epic_keys.length > 0) {
+      html += `<div style="padding:10px 12px;background:var(--green-dim);border-radius:8px;margin-bottom:8px;">
+        <span style="color:var(--green);font-weight:700;">Vault — Epic Keys:</span>
+        <span style="color:var(--text-secondary);margin-left:6px;">${v.epic_keys.join(', ')}</span>
+      </div>`;
+    }
+
+    html += `<div style="margin-top:10px;font-size:11px;color:var(--text-muted);">Last checked: ${new Date(data.timestamp).toLocaleString()}</div>`;
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);">Error: ${e.message}. Is the devpanel API running?</div>`;
+  }
+}
+
 const loaders = {
   morning: loadMorning,
   dashboard: loadDashboard,
@@ -1620,7 +1716,7 @@ const loaders = {
   audit: loadAudit,
   config: loadConfig,
   summary: loadSummary,
-  epic: () => {},   // Static content — research report
+  epic: loadEpicStatus,
 };
 
 function updateClock() {

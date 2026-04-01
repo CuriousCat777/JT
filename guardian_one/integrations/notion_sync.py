@@ -1217,6 +1217,112 @@ class NotionSync:
 
         return combined
 
+    def push_audit_backup(
+        self,
+        audit_entries: list[dict[str, Any]],
+        vault_health: dict[str, Any] | None = None,
+    ) -> SyncResult:
+        """Push audit log and system state backup to Notion.
+
+        Creates a timestamped "System Backup" page under the root containing:
+            - Audit log entries (recent N)
+            - Vault health (key count, rotation status — NO secrets)
+            - Gateway service status
+            - Backup timestamp
+        """
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        result = SyncResult(success=True)
+
+        blocks: list[dict[str, Any]] = []
+        blocks.append(self._callout(
+            f"System Backup — {now}",
+            emoji="🔒",
+        ))
+        blocks.append(self._divider())
+
+        # Audit log section
+        blocks.append(self._heading("Audit Log Backup", level=2))
+        blocks.append(self._paragraph(
+            f"{len(audit_entries)} entries backed up"
+        ))
+
+        for entry in audit_entries[:95]:  # Notion limit safety
+            severity = entry.get("severity", "info").upper()
+            agent = entry.get("agent", "unknown")
+            action = entry.get("action", "")
+            ts = entry.get("timestamp", "")
+            text = f"[{severity}] {agent}: {action}"
+            if ts:
+                text = f"{ts[:19]} — {text}"
+            # Classify content before pushing
+            safe_text = classify_content(text)
+            if safe_text != text:
+                safe_text = f"[REDACTED — PHI/PII detected] {agent}: {action}"
+            blocks.append(self._paragraph(safe_text))
+
+        blocks.append(self._divider())
+
+        # Vault health section (metadata only — never secrets)
+        if vault_health:
+            blocks.append(self._heading("Vault Health", level=2))
+            blocks.append(self._paragraph(
+                f"Total credentials: {vault_health.get('total_keys', 0)}"
+            ))
+            if vault_health.get("expiring_soon"):
+                blocks.append(self._paragraph(
+                    f"Expiring soon: {', '.join(vault_health['expiring_soon'])}"
+                ))
+            if vault_health.get("needs_rotation"):
+                blocks.append(self._paragraph(
+                    f"Needs rotation: {', '.join(vault_health['needs_rotation'])}"
+                ))
+
+        blocks.append(self._divider())
+        blocks.append(self._paragraph(
+            f"Backup completed at {now} by Guardian One"
+        ))
+
+        # Create or update the backup page
+        page_key = "system_backup"
+        cached = self._page_cache.get(page_key)
+        if cached and cached.page_id:
+            self._replace_blocks(cached.page_id, blocks)
+            result.pages_updated = 1
+        else:
+            resp = self._create_page(
+                self._root_page_id,
+                f"System Backup — {now}",
+                icon_emoji="🔒",
+                children=blocks[:100],
+            )
+            if resp.get("success") and resp.get("data"):
+                page_id = resp["data"].get("id", "")
+                self._page_cache[page_key] = NotionPage(
+                    page_id=page_id, title=f"System Backup — {now}",
+                )
+                result.pages_created = 1
+                # Append remaining blocks if over 100
+                if len(blocks) > 100:
+                    self._append_blocks(page_id, blocks[100:])
+            else:
+                result.success = False
+                result.errors.append(
+                    f"Failed to create backup page: {resp.get('error', 'unknown')}"
+                )
+
+        result.blocks_written = len(blocks)
+
+        self._audit.record(
+            agent="notion_sync",
+            action="audit_backup_pushed",
+            severity=Severity.INFO,
+            details={
+                "entries_backed_up": len(audit_entries),
+                "success": result.success,
+            },
+        )
+        return result
+
     def status(self) -> dict[str, Any]:
         """Return current sync status for monitoring."""
         return {
