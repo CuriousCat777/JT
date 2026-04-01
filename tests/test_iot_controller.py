@@ -501,6 +501,22 @@ def test_recommendation_engine_custom_model():
     assert model_param["value"] == "mistral"
 
 
+def test_recommendation_engine_openai_provider():
+    """Recommendation engine uses OpenAI node when llm_provider='openai'."""
+    wf = recommendation_engine_workflow(llm_provider="openai")
+    llm_node = next(n for n in wf["nodes"] if n["name"] == "LLM Recommendation")
+    assert llm_node["type"] == "n8n-nodes-base.openAi"
+    assert len(wf["nodes"]) == 5
+
+
+def test_recommendation_engine_ollama_provider():
+    """Recommendation engine uses Ollama HTTP node when llm_provider='ollama'."""
+    wf = recommendation_engine_workflow(llm_provider="ollama")
+    llm_node = next(n for n in wf["nodes"] if n["name"] == "LLM Recommendation")
+    assert "ollama" in llm_node["parameters"]["url"]
+    assert llm_node["type"] == "n8n-nodes-base.httpRequest"
+
+
 # ========================================================================
 # IoT Stack — Node-RED flow templates
 # ========================================================================

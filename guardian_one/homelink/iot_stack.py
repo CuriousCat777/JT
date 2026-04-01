@@ -260,6 +260,57 @@ def recommendation_engine_workflow(
         3. Filter: only forward if confidence > threshold
         4. Send notification to Home Assistant
     """
+    rec_prompt = (
+        "You are a network security AI for a home IoT system. "
+        "Given the following anomaly, respond with ONLY a JSON object:\n"
+        '{"action": "block_device|isolate_vlan|ignore", '
+        '"confidence": 0.0-1.0, '
+        '"reason": "brief explanation"}\n\n'
+        "Anomaly:\n{{ $json.body ? JSON.stringify($json.body) : JSON.stringify($json) }}\n\n"
+        "Rules:\n"
+        "- block_device: device is actively malicious\n"
+        "- isolate_vlan: unknown or suspicious, needs investigation\n"
+        "- ignore: benign activity or known device\n"
+        "Respond with JSON only."
+    )
+
+    llm_node: dict[str, Any]
+    if llm_provider == "ollama":
+        llm_node = {
+            "parameters": {
+                "url": "http://ollama:11434/api/generate",
+                "method": "POST",
+                "sendBody": True,
+                "bodyParameters": {
+                    "parameters": [
+                        {"name": "model", "value": ollama_model},
+                        {"name": "prompt", "value": rec_prompt},
+                        {"name": "stream", "value": False},
+                    ],
+                },
+            },
+            "name": "LLM Recommendation",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [470, 300],
+        }
+    else:
+        llm_node = {
+            "parameters": {
+                "resource": "chat",
+                "model": "gpt-4o-mini",
+                "messages": {
+                    "values": [
+                        {"content": rec_prompt},
+                    ],
+                },
+            },
+            "name": "LLM Recommendation",
+            "type": "n8n-nodes-base.openAi",
+            "typeVersion": 1,
+            "position": [470, 300],
+        }
+
     return {
         "name": "Guardian IoT — Recommendation Engine",
         "nodes": [
@@ -273,39 +324,7 @@ def recommendation_engine_workflow(
                 "typeVersion": 2,
                 "position": [250, 300],
             },
-            {
-                "parameters": {
-                    "url": "http://ollama:11434/api/generate",
-                    "method": "POST",
-                    "sendBody": True,
-                    "bodyParameters": {
-                        "parameters": [
-                            {"name": "model", "value": ollama_model},
-                            {
-                                "name": "prompt",
-                                "value": (
-                                    "You are a network security AI for a home IoT system. "
-                                    "Given the following anomaly, respond with ONLY a JSON object:\n"
-                                    '{"action": "block_device|isolate_vlan|ignore", '
-                                    '"confidence": 0.0-1.0, '
-                                    '"reason": "brief explanation"}\n\n'
-                                    "Anomaly:\n{{ $json.body ? JSON.stringify($json.body) : JSON.stringify($json) }}\n\n"
-                                    "Rules:\n"
-                                    "- block_device: device is actively malicious\n"
-                                    "- isolate_vlan: unknown or suspicious, needs investigation\n"
-                                    "- ignore: benign activity or known device\n"
-                                    "Respond with JSON only."
-                                ),
-                            },
-                            {"name": "stream", "value": False},
-                        ],
-                    },
-                },
-                "name": "LLM Recommendation",
-                "type": "n8n-nodes-base.httpRequest",
-                "typeVersion": 4.2,
-                "position": [470, 300],
-            },
+            llm_node,
             {
                 "parameters": {
                     "jsCode": (
