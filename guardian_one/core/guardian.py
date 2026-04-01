@@ -160,7 +160,23 @@ class GuardianOne:
         """
         env_to_vault = [
             ("NOTION_TOKEN", "notion", "write"),
+            ("NOTION_ROOT_PAGE_ID", "notion", "read"),
             ("OLLAMA_API_KEY", "ollama", "read"),
+            ("GMAIL_APP_PASSWORD", "gmail", "write"),
+            ("EPIC_CLIENT_ID", "epic", "read"),
+            ("EPIC_FHIR_BASE_URL", "epic", "read"),
+            ("ROCKET_MONEY_API_KEY", "rocket_money", "read"),
+            ("PLAID_CLIENT_ID", "plaid", "read"),
+            ("PLAID_SECRET", "plaid", "read"),
+            ("NORDVPN_TOKEN", "nordvpn", "read"),
+            ("DELETEME_API_KEY", "deleteme", "read"),
+            ("DOORDASH_DEVELOPER_ID", "doordash", "read"),
+            ("DOORDASH_KEY_ID", "doordash", "read"),
+            ("DOORDASH_SIGNING_SECRET", "doordash", "write"),
+            ("TWILIO_ACCOUNT_SID", "twilio", "read"),
+            ("TWILIO_AUTH_TOKEN", "twilio", "write"),
+            ("N8N_API_KEY", "n8n", "read"),
+            ("N8N_BASE_URL", "n8n", "read"),
         ]
         for env_key, service, scope in env_to_vault:
             value = os.environ.get(env_key, "")

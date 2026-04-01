@@ -314,6 +314,9 @@ def main() -> None:
     parser.add_argument("--epic-status", action="store_true", help="Epic Pantheon build status + n8n connections")
     parser.add_argument("--epic-news", action="store_true", help="Refresh + display Epic intelligence feed")
     parser.add_argument("--epic-sql", type=str, default=None, help="Run SQL query against Epic intel database")
+    parser.add_argument("--vault-init", action="store_true", help="Import API keys from .env into encrypted vault")
+    parser.add_argument("--vault-status", action="store_true", help="Show vault key inventory and health")
+    parser.add_argument("--vault-store", nargs=2, metavar=("KEY", "VALUE"), help="Store a single key in vault")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -444,6 +447,109 @@ def main() -> None:
     if args.devpanel:
         from guardian_one.web.app import run_devpanel
         run_devpanel(guardian, port=args.devpanel_port)
+        return
+
+    if getattr(args, 'vault_init', False) or getattr(args, 'vault_status', False) or getattr(args, 'vault_store', None):
+        import os
+        from rich.console import Console
+        from rich.table import Table
+        from guardian_one.homelink.vault import Vault
+        from dotenv import dotenv_values
+
+        console = Console()
+        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "guardian2026")
+        vault_path = Path(config.data_dir) / "vault.enc"
+        vault = Vault(vault_path, passphrase=passphrase)
+
+        if getattr(args, 'vault_store', None):
+            key_name, value = args.vault_store
+            # Determine service from key name
+            service = key_name.split("_")[0].lower() if "_" in key_name else "general"
+            vault.store(key_name, value, service=service, scope="read")
+            console.print(f"\n  [green]✓[/green] Stored [bold]{key_name}[/bold] in vault (service: {service})")
+            console.print(f"  Total keys: {len(vault.list_keys())}\n")
+            return
+
+        if getattr(args, 'vault_init', False):
+            env_path = Path(".env")
+            if not env_path.exists():
+                console.print("\n  [red]✗[/red] No .env file found. Copy config/.env.example to .env and fill in values.")
+                return
+
+            env_vars = dotenv_values(env_path)
+            # Keys that should be imported (non-empty, actual secrets)
+            importable = {
+                "NOTION_TOKEN": "notion",
+                "NOTION_ROOT_PAGE_ID": "notion",
+                "GMAIL_APP_PASSWORD": "gmail",
+                "TWILIO_ACCOUNT_SID": "twilio",
+                "TWILIO_AUTH_TOKEN": "twilio",
+                "TWILIO_FROM_NUMBER": "twilio",
+                "EPIC_CLIENT_ID": "epic",
+                "EPIC_FHIR_BASE_URL": "epic",
+                "ROCKET_MONEY_API_KEY": "rocket_money",
+                "PLAID_CLIENT_ID": "plaid",
+                "PLAID_SECRET": "plaid",
+                "PLAID_ENV": "plaid",
+                "NORDVPN_TOKEN": "nordvpn",
+                "DELETEME_API_KEY": "deleteme",
+                "DOORDASH_DEVELOPER_ID": "doordash",
+                "DOORDASH_KEY_ID": "doordash",
+                "DOORDASH_SIGNING_SECRET": "doordash",
+                "N8N_API_KEY": "n8n",
+                "N8N_BASE_URL": "n8n",
+            }
+
+            imported = 0
+            skipped = 0
+            console.print("\n  [bold]Vault Import — .env → Encrypted Vault[/bold]\n")
+            for key, service in importable.items():
+                val = env_vars.get(key, "").strip()
+                if val and val not in ("changeme_use_a_strong_passphrase", ""):
+                    existing = vault.retrieve(key)
+                    if existing == val:
+                        console.print(f"  [dim]≡[/dim] {key} — already stored (unchanged)")
+                        skipped += 1
+                    else:
+                        vault.store(key, val, service=service, scope="read")
+                        console.print(f"  [green]✓[/green] {key} → vault (service: {service})")
+                        imported += 1
+                else:
+                    console.print(f"  [yellow]–[/yellow] {key} — empty, skipping")
+                    skipped += 1
+
+            console.print(f"\n  Imported: {imported} | Skipped: {skipped} | Total in vault: {len(vault.list_keys())}\n")
+            return
+
+        # vault_status
+        keys = vault.list_keys()
+        health = vault.health_report()
+        console.print(f"\n  [bold]Guardian One Vault — {vault_path}[/bold]\n")
+        console.print(f"  Passphrase: {'set' if passphrase else 'not set'}")
+        console.print(f"  Total keys: {health['total_credentials']}")
+        console.print(f"  Services:   {', '.join(health['services']) or 'none'}")
+        console.print(f"  Rotation due: {health['due_for_rotation']}")
+        console.print(f"  Expired:      {health['expired']}\n")
+
+        if keys:
+            table = Table(title="Stored Credentials")
+            table.add_column("Key", style="bold")
+            table.add_column("Service")
+            table.add_column("Scope")
+            table.add_column("Stored")
+            for k in sorted(keys):
+                meta = vault.get_meta(k)
+                table.add_row(
+                    k,
+                    meta.service if meta else "—",
+                    meta.scope if meta else "—",
+                    meta.created_at[:10] if meta and meta.created_at else "—",
+                )
+            console.print(table)
+        else:
+            console.print("  [yellow]Vault is empty.[/yellow]")
+            console.print("  Run: [cyan]python main.py --vault-init[/cyan] to import keys from .env")
+            console.print("  Run: [cyan]python main.py --vault-store KEY VALUE[/cyan] to add individual keys\n")
         return
 
     if getattr(args, 'epic_status', False):
