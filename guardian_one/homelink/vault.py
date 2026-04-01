@@ -71,18 +71,23 @@ class Vault:
         self._secrets: dict[str, str] = {}
         self._meta: dict[str, CredentialMeta] = {}
 
-        if self._path.exists():
-            raw = self._path.read_bytes()
-            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
-                offset = len(self._SALT_MARKER)
-                self._salt = raw[offset:offset + self._SALT_LENGTH]
+        try:
+            if self._path.exists():
+                raw = self._path.read_bytes()
+                if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                    offset = len(self._SALT_MARKER)
+                    self._salt = raw[offset:offset + self._SALT_LENGTH]
+                else:
+                    self._salt = self._LEGACY_SALT
+                self._fernet = self._derive_key(passphrase, self._salt)
+                self._load()
             else:
-                self._salt = self._LEGACY_SALT
-            self._fernet = self._derive_key(passphrase, self._salt)
-            self._load()
-        else:
-            self._salt = os.urandom(self._SALT_LENGTH)
-            self._fernet = self._derive_key(passphrase, self._salt)
+                self._salt = os.urandom(self._SALT_LENGTH)
+                self._fernet = self._derive_key(passphrase, self._salt)
+        except VaultError:
+            raise
+        except (OSError, IOError) as exc:
+            raise VaultError(f"Cannot access vault file: {exc}") from exc
 
     @staticmethod
     def _derive_key(passphrase: str, salt: bytes) -> Fernet:
@@ -189,7 +194,10 @@ class Vault:
 
     def get_meta(self, key_name: str) -> CredentialMeta | None:
         with self._lock:
-            return self._meta.get(key_name)
+            m = self._meta.get(key_name)
+            if m is None:
+                return None
+            return CredentialMeta(**asdict(m))
 
     # ------------------------------------------------------------------
     # Health checks
@@ -217,13 +225,22 @@ class Vault:
 
     def expired_credentials(self) -> list[CredentialMeta]:
         """Return credentials past their expiry date."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         with self._lock:
             meta_snapshot = list(self._meta.values())
-        return [
-            m for m in meta_snapshot
-            if m.expires_at and m.expires_at < now
-        ]
+        expired: list[CredentialMeta] = []
+        for m in meta_snapshot:
+            if not m.expires_at:
+                continue
+            try:
+                exp = datetime.fromisoformat(m.expires_at)
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                if exp < now:
+                    expired.append(m)
+            except (ValueError, TypeError):
+                continue
+        return expired
 
     def health_report(self) -> dict[str, Any]:
         with self._lock:
