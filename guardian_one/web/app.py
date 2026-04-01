@@ -50,11 +50,13 @@ def _build_agents(guardian: GuardianOne) -> None:
     from guardian_one.agents.gmail_agent import GmailAgent
     from guardian_one.agents.web_architect import WebArchitect
     from guardian_one.agents.device_agent import DeviceAgent
+    from guardian_one.agents.boris import Boris
 
     config = guardian.config
     for name, cls, kwargs in [
         ("chronos", Chronos, {}),
         ("archivist", Archivist, {}),
+        ("boris", Boris, {"data_dir": config.data_dir}),
         ("cfo", CFO, {"data_dir": config.data_dir}),
         ("doordash", DoorDashAgent, {}),
         ("gmail", GmailAgent, {"data_dir": config.data_dir}),
@@ -983,6 +985,89 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     # API — Chat (AI Engine)
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # API — Handoff Tracker
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # API — Boris (System Connectivity)
+    # ------------------------------------------------------------------
+
+    @app.route("/api/boris/status")
+    def api_boris_status():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        report = agent.run()
+        return jsonify({
+            "summary": report.summary,
+            "status": report.status,
+            "alerts": report.alerts,
+            "recommendations": report.recommendations,
+            "data": report.data,
+        })
+
+    @app.route("/api/boris/mcp")
+    def api_boris_mcp():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        agent._scan_mcp_connections()
+        return jsonify([c.to_dict() for c in agent.get_mcp_connections()])
+
+    @app.route("/api/boris/tokens")
+    def api_boris_tokens():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        agent._scan_tokens()
+        agent._check_token_alignment()
+        return jsonify({
+            "summary": agent.get_token_summary(),
+            "tokens": [t.to_dict() for t in agent.get_tokens()],
+        })
+
+    @app.route("/api/boris/repairs")
+    def api_boris_repairs():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        status_filter = request.args.get("status")
+        return jsonify([r.to_dict() for r in agent.get_repairs(status=status_filter)])
+
+    @app.route("/api/boris/repairs", methods=["POST"])
+    def api_boris_add_repair():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        body = request.get_json(silent=True) or {}
+        repair = agent.add_repair(
+            component=body.get("component", "unknown"),
+            issue=body.get("issue", ""),
+            severity=body.get("severity", "medium"),
+        )
+        return jsonify(repair.to_dict()), 201
+
+    @app.route("/api/boris/brief")
+    def api_boris_brief():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        agent.run()
+        return jsonify({"brief": agent.connectivity_brief()})
 
     # ------------------------------------------------------------------
     # API — Handoff Tracker

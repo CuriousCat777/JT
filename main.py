@@ -60,6 +60,7 @@ from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne
 from guardian_one.agents.chronos import Chronos
 from guardian_one.agents.archivist import Archivist
+from guardian_one.agents.boris import Boris
 from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
@@ -91,6 +92,12 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    boris_cfg = config.agents.get("boris", AgentConfig(name="boris"))
+    guardian.register_agent(Boris(
+        config=boris_cfg, audit=guardian.audit,
+        data_dir=config.data_dir,
+    ))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -310,6 +317,7 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--boris", action="store_true", help="Boris connectivity brief (MCP, tokens, repairs)")
     parser.add_argument("--handoff", action="store_true", help="Generate session handoff brief (git + audit + vault backup)")
     parser.add_argument("--handoff-history", action="store_true", help="List all stored handoffs from vault")
     parser.add_argument("--handoff-restore", type=str, default=None, help="Restore a handoff by session ID")
@@ -439,6 +447,16 @@ def main() -> None:
         else:
             print("CFO agent not available.")
         guardian.shutdown()
+        return
+
+    if args.boris:
+        boris_agent = guardian.get_agent("boris")
+        if boris_agent and isinstance(boris_agent, Boris):
+            boris_agent.initialize()
+            boris_agent.run()
+            print(boris_agent.connectivity_brief())
+        else:
+            print("Boris agent not available.")
         return
 
     if args.handoff or args.handoff_history or args.handoff_restore:
