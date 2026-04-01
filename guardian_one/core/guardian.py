@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from guardian_one.core.ai_engine import AIConfig, AIEngine, AIProvider
-from guardian_one.core.audit import AuditLog, Severity
+from guardian_one.core.audit import AuditLog, ChangeLogger, ChangeType, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig, GuardianConfig, load_config
 from guardian_one.core.mediator import Mediator
@@ -46,6 +46,7 @@ class GuardianOne:
     ) -> None:
         self.config = config or load_config()
         self.audit = AuditLog(log_dir=Path(self.config.log_dir))
+        self.changelog = ChangeLogger(log_dir=Path(self.config.log_dir))
         self.mediator = Mediator(audit=self.audit)
         self.access = AccessController()
         self._agents: dict[str, BaseAgent] = {}
@@ -95,6 +96,17 @@ class GuardianOne:
                 "ai_ollama": ai_status["ollama"]["available"],
                 "ai_anthropic": ai_status["anthropic"]["available"],
             },
+        )
+        self.changelog.load_from_disk()
+        self.changelog.record(
+            agent="guardian_one",
+            change_type=ChangeType.CONFIG,
+            title="System boot",
+            description=(
+                f"Guardian One started — AI: "
+                f"{ai_status['active_provider'] or 'offline'}, "
+                f"H.O.M.E. L.I.N.K.: active"
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -205,8 +217,9 @@ class GuardianOne:
         )
         self.access.register(policy)
 
-        # Inject AI engine into the agent
+        # Inject AI engine and change logger into the agent
         agent.set_ai_engine(self.ai_engine)
+        agent.set_changelog(self.changelog)
 
         self._agents[name] = agent
         self.audit.record(
@@ -221,6 +234,16 @@ class GuardianOne:
             agent="guardian_one",
             action=f"agent_initialized:{name}",
             severity=Severity.INFO,
+        )
+        self.changelog.record(
+            agent="guardian_one",
+            change_type=ChangeType.AGENT,
+            title=f"Agent registered: {name}",
+            description=(
+                f"Agent '{name}' registered and initialized "
+                f"(AI: {'enabled' if agent.ai_enabled else 'disabled'})"
+            ),
+            files_affected=[f"guardian_one/agents/{name}.py"],
         )
 
     def run_agent(self, name: str) -> AgentReport:
@@ -255,6 +278,14 @@ class GuardianOne:
                 details={"error": str(exc)},
                 requires_review=True,
             )
+            self.changelog.record(
+                agent=name,
+                change_type=ChangeType.BUGFIX,
+                title=f"Agent run error: {name}",
+                description=f"Agent '{name}' failed during run: {exc}",
+                requires_review=True,
+                metadata={"error": str(exc)},
+            )
             return AgentReport(
                 agent_name=name,
                 status=AgentStatus.ERROR.value,
@@ -274,6 +305,14 @@ class GuardianOne:
                 action=f"conflicts_detected:{len(conflicts)}",
                 severity=Severity.WARNING,
                 requires_review=True,
+            )
+            self.changelog.record(
+                agent="guardian_one",
+                change_type=ChangeType.AGENT,
+                title=f"Cross-agent conflicts detected: {len(conflicts)}",
+                description="Mediator found conflicts between agents during run_all cycle",
+                requires_review=True,
+                metadata={"conflict_count": len(conflicts)},
             )
         self.mediator.clear_pending()
         return reports
@@ -348,8 +387,43 @@ class GuardianOne:
             for entry in pending[:5]:
                 lines.append(f"  - [{entry.agent}] {entry.action}")
 
+        # Recent changes
+        lines.append("--- Recent Changes ---")
+        lines.append(self.changelog.summary(last_n=10))
+
         lines.append("\n" + self.audit.summary(last_n=10))
         return "\n".join(lines)
+
+    def changelog_summary(self, last_n: int = 20) -> str:
+        """Return a human-readable changelog summary."""
+        return self.changelog.summary(last_n=last_n)
+
+    def changelog_markdown(self, last_n: int = 50) -> str:
+        """Export recent changes as Markdown."""
+        return self.changelog.to_markdown(last_n=last_n)
+
+    def log_change(
+        self,
+        agent: str,
+        change_type: ChangeType,
+        title: str,
+        description: str,
+        files_affected: list[str] | None = None,
+        breaking: bool = False,
+        requires_review: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Public interface for agents/CLI to record a documented change."""
+        self.changelog.record(
+            agent=agent,
+            change_type=change_type,
+            title=title,
+            description=description,
+            files_affected=files_affected,
+            breaking=breaking,
+            requires_review=requires_review,
+            metadata=metadata,
+        )
 
     def ai_status(self) -> dict[str, Any]:
         """Get AI engine status."""

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from guardian_one.core.audit import AuditLog, Severity
+from guardian_one.core.audit import AuditLog, ChangeLogger, ChangeType, Severity
 from guardian_one.core.config import AgentConfig
 
 if TYPE_CHECKING:
@@ -116,6 +116,7 @@ class BaseAgent(abc.ABC):
         self.status = AgentStatus.IDLE
         self._name = config.name
         self._ai: AIEngine | None = None
+        self._changelog: ChangeLogger | None = None
 
     @property
     def name(self) -> str:
@@ -129,6 +130,10 @@ class BaseAgent(abc.ABC):
     def set_ai_engine(self, engine: AIEngine) -> None:
         """Inject the AI engine (called by GuardianOne after registration)."""
         self._ai = engine
+
+    def set_changelog(self, changelog: ChangeLogger) -> None:
+        """Inject the change logger (called by GuardianOne after registration)."""
+        self._changelog = changelog
 
     def think(
         self,
@@ -234,6 +239,30 @@ class BaseAgent(abc.ABC):
             severity=severity,
             details=details or {},
             requires_review=requires_review,
+        )
+
+    def log_change(
+        self,
+        change_type: ChangeType,
+        title: str,
+        description: str,
+        files_affected: list[str] | None = None,
+        breaking: bool = False,
+        requires_review: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Record a documented change from this agent."""
+        if self._changelog is None:
+            return
+        self._changelog.record(
+            agent=self.name,
+            change_type=change_type,
+            title=title,
+            description=description,
+            files_affected=files_affected,
+            breaking=breaking,
+            requires_review=requires_review,
+            metadata=metadata,
         )
 
     def _set_status(self, status: AgentStatus) -> None:

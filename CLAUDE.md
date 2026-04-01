@@ -123,6 +123,10 @@ python main.py --websites              # Website management
 python main.py --homelink              # H.O.M.E. L.I.N.K. status
 python main.py --brief                 # Weekly security brief
 python main.py --sandbox               # Sandbox deployment
+python main.py --changelog             # Recent change summary
+python main.py --changelog markdown    # Export changes as Markdown
+python main.py --changelog full        # Detailed change log
+python main.py --changelog --changelog-agent cfo  # Filter by agent
 ```
 
 ## Development Notes

@@ -36,6 +36,10 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --changelog             # Show recent change summary
+    python main.py --changelog markdown    # Export changes as Markdown
+    python main.py --changelog full        # Show all change details
+    python main.py --changelog --changelog-agent cfo  # Filter by agent
 """
 
 from __future__ import annotations
@@ -310,6 +314,10 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--changelog", nargs="?", const="summary", default=None,
+                        help="Show changelog: 'summary' (default), 'markdown', or 'full'")
+    parser.add_argument("--changelog-agent", type=str, default=None,
+                        help="Filter changelog by agent name")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -1194,6 +1202,41 @@ def main() -> None:
             # --websites: show status
             print(mgr.summary())
 
+    elif args.changelog is not None:
+        agent_filter = args.changelog_agent
+        if args.changelog == "markdown":
+            md = guardian.changelog.to_markdown(last_n=50)
+            if agent_filter:
+                # Filter markdown isn't practical — query then format
+                entries = guardian.changelog.query(agent=agent_filter, limit=50)
+                if not entries:
+                    print(f"No changelog entries for agent '{agent_filter}'.")
+                else:
+                    for e in entries:
+                        print(e.format_entry())
+                        print()
+            else:
+                print(md)
+        elif args.changelog == "full":
+            entries = guardian.changelog.query(agent=agent_filter, limit=100)
+            if not entries:
+                print("No changelog entries recorded yet.")
+            else:
+                for e in entries:
+                    print(e.format_entry())
+                    print()
+        else:
+            # summary (default)
+            if agent_filter:
+                entries = guardian.changelog.query(agent=agent_filter, limit=20)
+                if not entries:
+                    print(f"No changelog entries for agent '{agent_filter}'.")
+                else:
+                    for e in entries:
+                        print(e.format_entry())
+                        print()
+            else:
+                print(guardian.changelog_summary(last_n=20))
     elif args.summary:
         print(guardian.daily_summary())
     else:
