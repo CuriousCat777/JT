@@ -36,6 +36,14 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --iot                  # Sovereign IoT stack dashboard
+    python main.py --iot-scaffold         # Scaffold Docker Compose IoT stack
+    python main.py --iot-start            # Start IoT Docker Compose stack
+    python main.py --iot-stop             # Stop IoT Docker Compose stack
+    python main.py --iot-scan             # Scan LAN for devices (nmap)
+    python main.py --iot-scan 10.0.0.0/24 # Scan custom subnet
+    python main.py --iot-security         # IoT security checklist + VLAN policy
+    python main.py --iot-workflows ./out  # Export n8n + Node-RED workflow templates
 """
 
 from __future__ import annotations
@@ -308,6 +316,20 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--iot", action="store_true",
+                        help="Sovereign IoT stack dashboard (service status, network, health)")
+    parser.add_argument("--iot-scaffold", action="store_true",
+                        help="Scaffold IoT Docker Compose stack (creates dirs + configs)")
+    parser.add_argument("--iot-start", action="store_true",
+                        help="Start the IoT Docker Compose stack")
+    parser.add_argument("--iot-stop", action="store_true",
+                        help="Stop the IoT Docker Compose stack")
+    parser.add_argument("--iot-scan", nargs="?", const="192.168.1.0/24", default=None,
+                        help="Scan LAN for devices (default: 192.168.1.0/24)")
+    parser.add_argument("--iot-security", action="store_true",
+                        help="IoT security hardening checklist + VLAN policy")
+    parser.add_argument("--iot-workflows", type=str, default=None,
+                        help="Export n8n + Node-RED workflow templates to directory")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -434,6 +456,123 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.iot or args.iot_scaffold or args.iot_start or args.iot_stop or args.iot_scan is not None or args.iot_security or args.iot_workflows:
+        from guardian_one.homelink.iot_controller import IoTController
+
+        iot_cfg = config.agents.get("iot_stack", AgentConfig(name="iot_stack"))
+        custom = iot_cfg.custom if hasattr(iot_cfg, "custom") and iot_cfg.custom else {}
+        stack_dir = Path(custom.get("stack_dir", "~/iot-stack")).expanduser()
+        tz = config.timezone or "America/Chicago"
+
+        iot = IoTController(stack_dir=stack_dir, audit=guardian.audit, timezone=tz)
+        iot.initialize()
+
+        if args.iot_scaffold:
+            zigbee = custom.get("zigbee_device", "/dev/ttyUSB0")
+            print(f"\n  Scaffolding IoT stack at {stack_dir}...")
+            result = iot.scaffold_stack(zigbee_device=zigbee)
+            if result["success"]:
+                print(f"  [OK] Stack scaffolded: {result['stack_dir']}")
+                print(f"  Files created: {len(result['files_created'])}")
+                for f in result["files_created"]:
+                    print(f"    {f}")
+                print(f"\n  Next steps:")
+                for step in result["next_steps"]:
+                    print(f"    {step}")
+            else:
+                print(f"  [FAILED] {result.get('error', 'unknown')}")
+
+        elif args.iot_start:
+            print(f"\n  Starting IoT stack...")
+            result = iot.start_stack()
+            if result["success"]:
+                print(f"  [OK] Stack started.")
+                if result.get("output"):
+                    print(f"  {result['output'][:200]}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_stop:
+            print(f"\n  Stopping IoT stack...")
+            result = iot.stop_stack()
+            if result["success"]:
+                print(f"  [OK] Stack stopped.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_scan is not None:
+            subnet = args.iot_scan
+            print(f"\n  Scanning LAN: {subnet}...")
+            devices = iot.scan_network(subnet)
+            if not devices:
+                print("  No devices found (nmap may not be installed or scan failed).")
+            else:
+                print(f"  Found {len(devices)} device(s):\n")
+                print(f"  {'IP Address':15s} {'MAC Address':17s} {'Vendor':20s} {'Class':12s} {'Risk':4s}")
+                print("  " + "-" * 70)
+                for d in devices:
+                    print(
+                        f"  {d.ip_address:15s} {d.mac_address:17s} "
+                        f"{(d.vendor or 'unknown')[:20]:20s} "
+                        f"{d.device_class.value:12s} {d.risk_score}"
+                    )
+                unknown = iot.unknown_devices()
+                if unknown:
+                    print(f"\n  [!!] {len(unknown)} UNKNOWN device(s) detected!")
+                    print("  Run --iot-security for recommended actions.")
+
+        elif args.iot_security:
+            print("\n  H.O.M.E. L.I.N.K. — IoT SECURITY POSTURE")
+            print("  " + "=" * 50)
+
+            # Security checklist
+            checklist = iot.security_checklist()
+            print("\n  HARDENING CHECKLIST:")
+            for item in checklist:
+                prio = item["priority"].upper()
+                print(f"    [{prio:8s}] {item['item']}")
+                print(f"              {item['action']}")
+
+            # VLAN policy
+            policy = iot.vlan_policy()
+            print("\n  VLAN SEGMENTATION:")
+            for v in policy["vlans"]:
+                print(f"    VLAN {v['vlan_id']:2d} ({v['name']:6s}): {v['description']}")
+
+            print(f"\n  FIREWALL RULES:")
+            for rule in policy["firewall_rules"]:
+                print(f"    - {rule}")
+
+            print(f"\n  {policy['recommendation']}")
+            print()
+
+        elif args.iot_workflows:
+            from guardian_one.homelink.iot_stack import export_all_workflows
+            output_dir = args.iot_workflows
+            print(f"\n  Exporting IoT workflow templates to {output_dir}...")
+            files = export_all_workflows(output_dir)
+            print(f"  [OK] Exported {len(files)} workflow(s):")
+            for name, path in files.items():
+                print(f"    {name}: {path}")
+            print("\n  Import these into n8n and Node-RED via their respective UIs or APIs.")
+
+        else:
+            # --iot: full dashboard
+            print(iot.dashboard_text())
+
+            # Maintenance schedule
+            maint = iot.maintenance_schedule()
+            print("  MAINTENANCE:")
+            for task, freq in maint["automated"].items():
+                print(f"    {task:30s} {freq}")
+            print("\n  REQUIRES MANUAL APPROVAL:")
+            for task in maint["manual_approval_required"]:
+                print(f"    - {task}")
+            print()
+
         guardian.shutdown()
         return
 
