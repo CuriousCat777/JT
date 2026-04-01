@@ -369,6 +369,9 @@ class Teleprompter(BaseAgent):
         self._scripts.append(script)
         self._save_db()
         self.log("script_created", details={"title": title, "category": category})
+        self._log_to_guardian("script_created", event_data={
+            "script_id": script.script_id, "title": title, "category": category,
+        })
         return asdict(script)
 
     def update_script(self, script_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
@@ -381,6 +384,9 @@ class Teleprompter(BaseAgent):
                 s.updated_at = datetime.now(timezone.utc).isoformat()
                 self._save_db()
                 self.log("script_updated", details={"script_id": script_id})
+                self._log_to_guardian("script_updated", event_data={
+                    "script_id": script_id, "fields_updated": list(updates.keys()),
+                })
                 return asdict(s)
         return None
 
@@ -390,6 +396,9 @@ class Teleprompter(BaseAgent):
         if len(self._scripts) < before:
             self._save_db()
             self.log("script_deleted", details={"script_id": script_id})
+            self._log_to_guardian("script_deleted", event_data={
+                "script_id": script_id,
+            })
             return True
         return False
 
@@ -428,6 +437,10 @@ class Teleprompter(BaseAgent):
             "category": category,
             "ai_provider": response.provider,
         })
+        self._log_to_guardian("script_generated", event_data={
+            "script_id": script.script_id, "title": script.title,
+            "category": category, "ai_generated": True,
+        })
         return asdict(script)
 
     # ------------------------------------------------------------------
@@ -450,6 +463,9 @@ class Teleprompter(BaseAgent):
             "session_id": session.session_id,
             "script": script["title"],
         })
+        self._log_to_guardian("practice_started", event_data={
+            "script_id": script_id, "script_title": script["title"],
+        }, session_context={"session_id": session.session_id})
         return asdict(session)
 
     def complete_practice(
@@ -482,6 +498,11 @@ class Teleprompter(BaseAgent):
                     "rating": session.self_rating,
                     "duration": duration_seconds,
                 })
+                self._log_to_guardian("practice_completed", event_data={
+                    "script_id": session.script_id,
+                    "duration_seconds": duration_seconds,
+                    "self_rating": session.self_rating,
+                }, session_context={"session_id": session_id})
                 return asdict(session)
         return None
 
@@ -563,6 +584,9 @@ class Teleprompter(BaseAgent):
         )
         self._tips.append(tip)
         self._save_db()
+        self._log_to_guardian("advisory_requested", event_data={
+            "tip_id": tip.tip_id, "scenario": scenario,
+        })
 
         return {
             "tip_id": tip.tip_id,
@@ -665,6 +689,58 @@ class Teleprompter(BaseAgent):
         self.log("defaults_seeded", details={"count": len(DEFAULT_SCRIPTS)})
 
     # ------------------------------------------------------------------
+    # Guardian One activity logging
+    # ------------------------------------------------------------------
+
+    def _log_to_guardian(
+        self,
+        event_type: str,
+        event_data: dict[str, Any] | None = None,
+        session_context: dict[str, Any] | None = None,
+    ) -> None:
+        """Write a detailed activity log entry to the Guardian One activity log.
+
+        Each entry is a single JSON line appended to data/teleprompter_activity.log.
+        """
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_type": event_type,
+            "event_data": event_data or {},
+        }
+        if session_context:
+            entry["session_context"] = session_context
+
+        log_path = self._data_dir / "teleprompter_activity.log"
+        try:
+            with open(log_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except OSError:
+            pass  # Don't let logging failures break the agent
+
+    def get_activity_log(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Read and return recent activity log entries (most recent first)."""
+        log_path = self._data_dir / "teleprompter_activity.log"
+        if not log_path.exists():
+            return []
+
+        entries: list[dict[str, Any]] = []
+        try:
+            with open(log_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            return []
+
+        # Return most recent first, capped at limit
+        return list(reversed(entries[-limit:]))
+
+    # ------------------------------------------------------------------
     # Persistence (JSON, matching cfo_ledger.json pattern)
     # ------------------------------------------------------------------
 
@@ -695,3 +771,43 @@ class Teleprompter(BaseAgent):
             "tips": [asdict(t) for t in self._tips],
         }
         self._db_path.write_text(json.dumps(data, indent=2))
+        self._write_summary()
+
+    def _write_summary(self) -> None:
+        """Write a summary file readable by other Guardian One agents."""
+        completed = [s for s in self._sessions if s.completed]
+        ratings = [s.self_rating for s in completed if s.self_rating > 0]
+
+        # Category breakdown
+        category_counts: dict[str, int] = {}
+        for s in self._scripts:
+            cat = s.category
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
+        # Determine last activity timestamp
+        timestamps: list[str] = []
+        if self._scripts:
+            timestamps.extend(s.updated_at for s in self._scripts)
+        if completed:
+            timestamps.extend(s.completed_at for s in completed if s.completed_at)
+        if self._tips:
+            timestamps.extend(t.created_at for t in self._tips)
+
+        summary = {
+            "total_scripts": len(self._scripts),
+            "total_sessions": len(completed),
+            "total_practice_minutes": round(
+                sum(s.duration_seconds for s in completed) / 60, 2
+            ),
+            "average_rating": round(
+                sum(ratings) / len(ratings), 2
+            ) if ratings else 0.0,
+            "last_activity": max(timestamps) if timestamps else "",
+            "categories_breakdown": category_counts,
+        }
+
+        summary_path = self._data_dir / "teleprompter_summary.json"
+        try:
+            summary_path.write_text(json.dumps(summary, indent=2))
+        except OSError:
+            pass

@@ -393,6 +393,18 @@ def create_app(
         return jsonify(agent.get_tips(limit=limit))
 
     # ------------------------------------------------------------------
+    # Activity log
+    # ------------------------------------------------------------------
+    @app.route("/api/activity", methods=["GET"])
+    @require_auth
+    def activity_log():
+        err = _ensure_agent()
+        if err:
+            return err
+        limit = int(request.args.get("limit", "100"))
+        return jsonify(agent.get_activity_log(limit=limit))
+
+    # ------------------------------------------------------------------
     # PWA static files
     # ------------------------------------------------------------------
     @app.route("/")
