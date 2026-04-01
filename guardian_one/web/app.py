@@ -51,8 +51,15 @@ def _build_agents(guardian: GuardianOne) -> None:
     from guardian_one.agents.web_architect import WebArchitect
     from guardian_one.agents.device_agent import DeviceAgent
     from guardian_one.agents.boris import Boris
+    from guardian_one.agents.varys import Varys
 
     config = guardian.config
+
+    # Register Varys first so Boris can link to it
+    varys_cfg = config.agents.get("varys", AgentConfig(name="varys"))
+    varys = Varys(config=varys_cfg, audit=guardian.audit)
+    guardian.register_agent(varys)
+
     for name, cls, kwargs in [
         ("chronos", Chronos, {}),
         ("archivist", Archivist, {}),
@@ -65,6 +72,11 @@ def _build_agents(guardian: GuardianOne) -> None:
     ]:
         cfg = config.agents.get(name, AgentConfig(name=name))
         guardian.register_agent(cls(config=cfg, audit=guardian.audit, **kwargs))
+
+    # Link Boris → Varys
+    boris = guardian.get_agent("boris")
+    if boris and hasattr(boris, "set_varys"):
+        boris.set_varys(varys)
 
 
 def create_app() -> Flask:
@@ -1068,6 +1080,118 @@ def create_app() -> Flask:
         agent.initialize()
         agent.run()
         return jsonify({"brief": agent.connectivity_brief()})
+
+    @app.route("/api/boris/breaches")
+    def api_boris_breaches():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        return jsonify(agent.get_unresolved_breaches())
+
+    @app.route("/api/boris/scan", methods=["POST"])
+    def api_boris_scan():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        agent._scan_mcp_connections()
+        breaches = agent.scan_for_breaches()
+        return jsonify({"breaches": breaches, "count": len(breaches)})
+
+    @app.route("/api/boris/health")
+    def api_boris_health():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        return jsonify(agent.get_health_history(limit=20))
+
+    @app.route("/api/boris/sql")
+    def api_boris_sql_summary():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        return jsonify(agent.get_sql_summary())
+
+    @app.route("/api/boris/github")
+    def api_boris_github():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        return jsonify(agent.check_github_health())
+
+    @app.route("/api/boris/deps")
+    def api_boris_deps():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        return jsonify(agent.check_dependencies())
+
+    @app.route("/api/boris/daemon", methods=["POST"])
+    def api_boris_daemon():
+        g = _get_guardian()
+        agent = g.get_agent("boris")
+        if agent is None:
+            return jsonify({"error": "Boris agent not registered"}), 500
+        agent.initialize()
+        body = request.get_json(silent=True) or {}
+        action = body.get("action", "start")
+        if action == "start":
+            agent.start_daemon(interval=body.get("interval", 60))
+            return jsonify({"status": "daemon_started"})
+        else:
+            agent.stop_daemon()
+            return jsonify({"status": "daemon_stopped"})
+
+    # ------------------------------------------------------------------
+    # API — Varys (Intelligence Network)
+    # ------------------------------------------------------------------
+
+    @app.route("/api/varys/status")
+    def api_varys_status():
+        g = _get_guardian()
+        agent = g.get_agent("varys")
+        if agent is None:
+            return jsonify({"error": "Varys agent not registered"}), 500
+        agent.initialize()
+        report = agent.run()
+        return jsonify({
+            "summary": report.summary,
+            "status": report.status,
+            "alerts": report.alerts,
+            "data": report.data,
+        })
+
+    @app.route("/api/varys/intel")
+    def api_varys_intel():
+        g = _get_guardian()
+        agent = g.get_agent("varys")
+        if agent is None:
+            return jsonify({"error": "Varys agent not registered"}), 500
+        category = request.args.get("category")
+        severity = request.args.get("severity")
+        intel = agent.get_intel(category=category, severity=severity)
+        return jsonify([i.to_dict() for i in intel])
+
+    @app.route("/api/varys/brief")
+    def api_varys_brief():
+        g = _get_guardian()
+        agent = g.get_agent("varys")
+        if agent is None:
+            return jsonify({"error": "Varys agent not registered"}), 500
+        agent.initialize()
+        agent.run()
+        return jsonify({"brief": agent.daily_brief()})
 
     # ------------------------------------------------------------------
     # API — Handoff Tracker

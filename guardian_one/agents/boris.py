@@ -7,18 +7,26 @@ Responsibilities:
 - Monitor the design token inventory (--g1-* CSS tokens)
 - Catalog active component repairs and track resolution
 - Report MCP connection panel status
-- Surface connectivity anomalies for Varys and Guardian review
+- Detect breaches, memory leaks, disconnected/compromised machines
+- Run as background daemon with continuous monitoring
+- Log everything to self-enriching SQLite database
+- Report upstream to Varys intelligence network
+- GitHub repo health checks and open-source dependency audits
 """
 
 from __future__ import annotations
 
+import gc
 import json
+import os
 import re
 import subprocess
+import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import (
@@ -28,6 +36,10 @@ from guardian_one.core.base_agent import (
     BaseAgent,
 )
 from guardian_one.core.config import AgentConfig
+
+if TYPE_CHECKING:
+    from guardian_one.agents.varys import Varys
+    from guardian_one.core.boris_sql import BorisSQLStore
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +131,28 @@ class Boris(BaseAgent):
         self._repairs: list[ComponentRepair] = []
         self._last_report: AgentReport | None = None
 
+        # Varys uplink
+        self._varys: Varys | None = None
+
+        # SQL store (lazy init)
+        self._db: BorisSQLStore | None = None
+
+        # Daemon state
+        self._daemon_thread: threading.Thread | None = None
+        self._daemon_running = False
+        self._daemon_interval = 60  # seconds
+
+    def set_varys(self, varys: Varys) -> None:
+        """Connect Boris to the Varys intelligence network."""
+        self._varys = varys
+
+    def _get_db(self) -> BorisSQLStore:
+        """Lazy-init the SQL store."""
+        if self._db is None:
+            from guardian_one.core.boris_sql import BorisSQLStore
+            self._db = BorisSQLStore(self._data_dir / "boris.db")
+        return self._db
+
     # ------------------------------------------------------------------
     # BaseAgent contract
     # ------------------------------------------------------------------
@@ -134,7 +168,15 @@ class Boris(BaseAgent):
             self._scan_mcp_connections()
             self._scan_tokens()
             self._check_token_alignment()
+            self._check_system_health()
             self._save_repairs()
+
+            # SQL persistence + enrichment
+            db = self._get_db()
+            db.enrich()
+
+            # Report to Varys
+            self._report_to_varys()
 
             report = self._build_report()
             self._last_report = report
@@ -456,3 +498,459 @@ class Boris(BaseAgent):
 
         lines.append("")
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # System health monitoring (CPU, memory, disk, leaks)
+    # ------------------------------------------------------------------
+
+    def _check_system_health(self) -> None:
+        """Snapshot system resources and flag anomalies."""
+        health = self._collect_health_metrics()
+        alerts: list[str] = []
+
+        if health["memory_pct"] > 90:
+            alerts.append(f"CRITICAL: Memory at {health['memory_pct']:.1f}%")
+            self.log("memory_critical", severity=Severity.CRITICAL,
+                     details=health)
+        elif health["memory_pct"] > 80:
+            alerts.append(f"WARNING: Memory at {health['memory_pct']:.1f}%")
+            self.log("memory_warning", severity=Severity.WARNING,
+                     details=health)
+
+        if health["disk_pct"] > 90:
+            alerts.append(f"CRITICAL: Disk at {health['disk_pct']:.1f}%")
+
+        if health["cpu_pct"] > 95:
+            alerts.append(f"WARNING: CPU at {health['cpu_pct']:.1f}%")
+
+        # Python object growth (potential memory leak indicator)
+        if health["py_objects"] > 500_000:
+            alerts.append(f"Leak suspect: {health['py_objects']} Python objects tracked")
+
+        # Log to SQL
+        db = self._get_db()
+        db.log_health(
+            cpu_pct=health["cpu_pct"],
+            memory_pct=health["memory_pct"],
+            memory_mb=health["memory_mb"],
+            disk_pct=health["disk_pct"],
+            open_fds=health.get("open_fds", 0),
+            py_objects=health["py_objects"],
+            alerts=alerts,
+        )
+
+        # Create repairs for critical issues
+        for alert in alerts:
+            if "CRITICAL" in alert:
+                component = "system:memory" if "Memory" in alert else "system:disk"
+                existing = [r for r in self._repairs
+                            if r.component == component and r.status != "resolved"]
+                if not existing:
+                    self.add_repair(component, alert, severity="critical")
+
+    def _collect_health_metrics(self) -> dict[str, Any]:
+        """Collect system resource metrics."""
+        metrics: dict[str, Any] = {
+            "cpu_pct": 0.0,
+            "memory_pct": 0.0,
+            "memory_mb": 0.0,
+            "disk_pct": 0.0,
+            "open_fds": 0,
+            "py_objects": len(gc.get_objects()),
+        }
+        try:
+            import shutil
+            total, used, free = shutil.disk_usage("/")
+            metrics["disk_pct"] = (used / total) * 100 if total else 0
+        except Exception:
+            pass
+
+        # /proc-based memory (Linux)
+        try:
+            with open("/proc/meminfo") as f:
+                meminfo: dict[str, int] = {}
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        meminfo[parts[0].rstrip(":")] = int(parts[1])
+            total_kb = meminfo.get("MemTotal", 1)
+            avail_kb = meminfo.get("MemAvailable", total_kb)
+            used_kb = total_kb - avail_kb
+            metrics["memory_pct"] = (used_kb / total_kb) * 100
+            metrics["memory_mb"] = used_kb / 1024
+        except Exception:
+            pass
+
+        # CPU from /proc/stat (instant snapshot — not averaged)
+        try:
+            with open("/proc/stat") as f:
+                cpu_line = f.readline()
+            parts = cpu_line.split()[1:]  # skip 'cpu'
+            idle = int(parts[3])
+            total = sum(int(p) for p in parts)
+            if total > 0:
+                metrics["cpu_pct"] = 100.0 * (1 - idle / total)
+        except Exception:
+            pass
+
+        # Open file descriptors for this process
+        try:
+            metrics["open_fds"] = len(os.listdir(f"/proc/{os.getpid()}/fd"))
+        except Exception:
+            pass
+
+        return metrics
+
+    def get_health_history(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self._get_db().health_history(limit=limit)
+
+    # ------------------------------------------------------------------
+    # Breach / compromise detection
+    # ------------------------------------------------------------------
+
+    def scan_for_breaches(self) -> list[dict[str, Any]]:
+        """Scan for security anomalies on the network and system."""
+        breaches: list[dict[str, Any]] = []
+        db = self._get_db()
+
+        # 1. Check for unexpected listening ports
+        breaches.extend(self._check_listening_ports())
+
+        # 2. Check for SSH auth failures
+        breaches.extend(self._check_auth_failures())
+
+        # 3. Check MCP connection anomalies
+        breaches.extend(self._check_mcp_anomalies())
+
+        # Log breaches to SQL
+        for b in breaches:
+            db.log_breach(
+                breach_type=b["type"],
+                target=b["target"],
+                description=b["description"],
+                severity=b.get("severity", "high"),
+                evidence=b.get("evidence", {}),
+            )
+
+            # Report to Varys
+            if self._varys:
+                self._varys.receive_intel(
+                    source="boris",
+                    category="breach",
+                    severity=b.get("severity", "high"),
+                    title=f"[{b['type']}] {b['target']}",
+                    details=b,
+                )
+
+        return breaches
+
+    def _check_listening_ports(self) -> list[dict[str, Any]]:
+        """Detect unexpected listening ports."""
+        breaches: list[dict[str, Any]] = []
+        expected_ports = {22, 53, 80, 443, 5100, 8080, 8234}  # Known services
+
+        try:
+            result = subprocess.run(
+                ["ss", "-tlnp"], capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.splitlines()[1:]:  # skip header
+                parts = line.split()
+                if len(parts) >= 4:
+                    addr = parts[3]
+                    port_str = addr.rsplit(":", 1)[-1] if ":" in addr else ""
+                    try:
+                        port = int(port_str)
+                        if port not in expected_ports and port > 1024:
+                            breaches.append({
+                                "type": "unexpected_port",
+                                "target": f"localhost:{port}",
+                                "description": f"Unexpected service listening on port {port}",
+                                "severity": "medium",
+                                "evidence": {"line": line.strip()},
+                            })
+                    except ValueError:
+                        continue
+        except Exception:
+            pass
+        return breaches
+
+    def _check_auth_failures(self) -> list[dict[str, Any]]:
+        """Check for recent auth failures in system logs."""
+        breaches: list[dict[str, Any]] = []
+        try:
+            result = subprocess.run(
+                ["journalctl", "-u", "sshd", "--since", "1 hour ago",
+                 "--no-pager", "-q"],
+                capture_output=True, text=True, timeout=5,
+            )
+            failures = [l for l in result.stdout.splitlines()
+                        if "Failed" in l or "Invalid user" in l]
+            if len(failures) >= 5:
+                breaches.append({
+                    "type": "brute_force",
+                    "target": "sshd",
+                    "description": f"{len(failures)} SSH auth failures in last hour",
+                    "severity": "high",
+                    "evidence": {"count": len(failures), "sample": failures[:3]},
+                })
+        except Exception:
+            pass
+        return breaches
+
+    def _check_mcp_anomalies(self) -> list[dict[str, Any]]:
+        """Flag MCP connections that dropped or behave anomalously."""
+        breaches: list[dict[str, Any]] = []
+        for conn in self._mcp_connections:
+            if conn.status == "disconnected":
+                breaches.append({
+                    "type": "mcp_disconnect",
+                    "target": conn.name,
+                    "description": f"MCP server {conn.name} is disconnected",
+                    "severity": "medium",
+                    "evidence": conn.to_dict(),
+                })
+            elif conn.error:
+                breaches.append({
+                    "type": "mcp_error",
+                    "target": conn.name,
+                    "description": f"MCP server {conn.name} error: {conn.error}",
+                    "severity": "medium",
+                    "evidence": conn.to_dict(),
+                })
+        return breaches
+
+    def get_unresolved_breaches(self) -> list[dict[str, Any]]:
+        return self._get_db().unresolved_breaches()
+
+    # ------------------------------------------------------------------
+    # GitHub repo health check
+    # ------------------------------------------------------------------
+
+    def check_github_health(self, repo_root: Path | None = None) -> dict[str, Any]:
+        """Check GitHub repo health: uncommitted changes, branch status, remotes."""
+        root = repo_root or Path.cwd()
+        result: dict[str, Any] = {
+            "repo_root": str(root),
+            "clean": False,
+            "branch": "",
+            "ahead": 0,
+            "behind": 0,
+            "uncommitted_files": [],
+            "last_commit": "",
+            "remote_reachable": False,
+        }
+
+        try:
+            def _git(*args: str) -> str:
+                r = subprocess.run(
+                    ["git", "-C", str(root), *args],
+                    capture_output=True, text=True, timeout=10,
+                )
+                return r.stdout.strip()
+
+            result["branch"] = _git("rev-parse", "--abbrev-ref", "HEAD")
+            result["last_commit"] = _git("log", "-1", "--pretty=format:%h %s")
+
+            status = _git("status", "--porcelain")
+            result["uncommitted_files"] = [l.strip() for l in status.splitlines() if l.strip()]
+            result["clean"] = len(result["uncommitted_files"]) == 0
+
+            # Ahead/behind
+            try:
+                ab = _git("rev-list", "--left-right", "--count", f"HEAD...@{{upstream}}")
+                parts = ab.split()
+                if len(parts) == 2:
+                    result["ahead"] = int(parts[0])
+                    result["behind"] = int(parts[1])
+            except Exception:
+                pass
+
+            # Remote reachability
+            try:
+                subprocess.run(
+                    ["git", "-C", str(root), "ls-remote", "--exit-code", "-q", "origin"],
+                    capture_output=True, timeout=10,
+                )
+                result["remote_reachable"] = True
+            except Exception:
+                pass
+
+        except Exception as e:
+            result["error"] = str(e)
+
+        # Log to SQL
+        db = self._get_db()
+        db.log_event(
+            category="github_health",
+            title=f"Repo check: {'clean' if result['clean'] else 'dirty'} on {result['branch']}",
+            severity="info" if result["clean"] else "warning",
+            details=result,
+        )
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Open-source dependency audit
+    # ------------------------------------------------------------------
+
+    def check_dependencies(self, repo_root: Path | None = None) -> dict[str, Any]:
+        """Audit Python dependencies for known issues."""
+        root = repo_root or Path.cwd()
+        result: dict[str, Any] = {
+            "requirements_found": False,
+            "total_packages": 0,
+            "outdated": [],
+            "issues": [],
+        }
+
+        # Check for requirements files
+        for name in ("requirements.txt", "pyproject.toml", "setup.py"):
+            if (root / name).exists():
+                result["requirements_found"] = True
+                break
+
+        # pip list --outdated (fast check)
+        try:
+            r = subprocess.run(
+                ["pip", "list", "--outdated", "--format=json"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                outdated = json.loads(r.stdout)
+                result["outdated"] = [
+                    {"name": p["name"], "current": p["version"],
+                     "latest": p["latest_version"]}
+                    for p in outdated[:20]  # Cap at 20
+                ]
+        except Exception:
+            pass
+
+        # Count installed packages
+        try:
+            r = subprocess.run(
+                ["pip", "list", "--format=json"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                result["total_packages"] = len(json.loads(r.stdout))
+        except Exception:
+            pass
+
+        # pip check for broken dependencies
+        try:
+            r = subprocess.run(
+                ["pip", "check"], capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode != 0 and r.stdout.strip():
+                result["issues"] = [l.strip() for l in r.stdout.splitlines() if l.strip()][:10]
+        except Exception:
+            pass
+
+        db = self._get_db()
+        db.log_event(
+            category="dependency_audit",
+            title=f"Dep check: {result['total_packages']} pkgs, {len(result['outdated'])} outdated",
+            severity="info" if not result["issues"] else "warning",
+            details=result,
+        )
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Varys reporting pipeline
+    # ------------------------------------------------------------------
+
+    def _report_to_varys(self) -> None:
+        """Send intelligence digest to Varys."""
+        if self._varys is None:
+            return
+
+        # Connection status
+        for conn in self._mcp_connections:
+            if conn.status != "connected":
+                self._varys.receive_intel(
+                    source="boris",
+                    category="degradation",
+                    severity="medium",
+                    title=f"MCP {conn.name}: {conn.status}",
+                    details=conn.to_dict(),
+                )
+
+        # Open repairs
+        critical = [r for r in self._repairs
+                    if r.status == "open" and r.severity == "critical"]
+        if critical:
+            self._varys.receive_intel(
+                source="boris",
+                category="repair",
+                severity="critical",
+                title=f"{len(critical)} critical repairs open",
+                details={"repairs": [r.to_dict() for r in critical]},
+            )
+
+        # SQL enrichments
+        db = self._get_db()
+        enrichments = db.recent_enrichments(limit=5)
+        for e in enrichments:
+            self._varys.receive_intel(
+                source="boris",
+                category="anomaly",
+                severity=e.get("severity", "info"),
+                title=e.get("conclusion", "Enrichment alert"),
+                details=e,
+            )
+
+    def get_sql_summary(self) -> dict[str, Any]:
+        """Full SQL intelligence summary for API consumption."""
+        return self._get_db().intelligence_summary()
+
+    # ------------------------------------------------------------------
+    # Daemon mode (background continuous monitoring)
+    # ------------------------------------------------------------------
+
+    def start_daemon(self, interval: int = 60) -> None:
+        """Start Boris as a background daemon, running every `interval` seconds."""
+        if self._daemon_running:
+            return
+        self._daemon_interval = interval
+        self._daemon_running = True
+        self._daemon_thread = threading.Thread(
+            target=self._daemon_loop, daemon=True, name="boris-daemon"
+        )
+        self._daemon_thread.start()
+        self.log("daemon_started", details={"interval": interval})
+
+    def stop_daemon(self) -> None:
+        """Stop the background daemon."""
+        self._daemon_running = False
+        if self._daemon_thread:
+            self._daemon_thread.join(timeout=5)
+            self._daemon_thread = None
+        self.log("daemon_stopped")
+
+    @property
+    def daemon_running(self) -> bool:
+        return self._daemon_running
+
+    def _daemon_loop(self) -> None:
+        """Background loop: run checks, scan breaches, enrich SQL, report to Varys."""
+        while self._daemon_running:
+            try:
+                self.run()
+                self.scan_for_breaches()
+            except Exception as exc:
+                self.log("daemon_error", severity=Severity.ERROR,
+                         details={"error": str(exc)})
+            # Sleep in small increments so stop_daemon() is responsive
+            for _ in range(self._daemon_interval):
+                if not self._daemon_running:
+                    break
+                time.sleep(1)
+
+    def shutdown(self) -> None:
+        """Clean shutdown: stop daemon, close SQL, call super."""
+        self.stop_daemon()
+        if self._db:
+            self._db.close()
+            self._db = None
+        super().shutdown()

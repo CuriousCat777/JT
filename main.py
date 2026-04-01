@@ -61,6 +61,7 @@ from guardian_one.core.guardian import GuardianOne
 from guardian_one.agents.chronos import Chronos
 from guardian_one.agents.archivist import Archivist
 from guardian_one.agents.boris import Boris
+from guardian_one.agents.varys import Varys
 from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
@@ -93,11 +94,17 @@ def _build_agents(guardian: GuardianOne) -> None:
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
+    varys_cfg = config.agents.get("varys", AgentConfig(name="varys"))
+    varys = Varys(config=varys_cfg, audit=guardian.audit)
+    guardian.register_agent(varys)
+
     boris_cfg = config.agents.get("boris", AgentConfig(name="boris"))
-    guardian.register_agent(Boris(
+    boris = Boris(
         config=boris_cfg, audit=guardian.audit,
         data_dir=config.data_dir,
-    ))
+    )
+    boris.set_varys(varys)
+    guardian.register_agent(boris)
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -318,6 +325,10 @@ def main() -> None:
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--boris", action="store_true", help="Boris connectivity brief (MCP, tokens, repairs)")
+    parser.add_argument("--boris-daemon", action="store_true", help="Start Boris as background daemon")
+    parser.add_argument("--boris-scan", action="store_true", help="Boris breach & vulnerability scan")
+    parser.add_argument("--boris-deps", action="store_true", help="Boris dependency / open-source audit")
+    parser.add_argument("--boris-github", action="store_true", help="Boris GitHub repo health check")
     parser.add_argument("--handoff", action="store_true", help="Generate session handoff brief (git + audit + vault backup)")
     parser.add_argument("--handoff-history", action="store_true", help="List all stored handoffs from vault")
     parser.add_argument("--handoff-restore", type=str, default=None, help="Restore a handoff by session ID")
@@ -449,14 +460,69 @@ def main() -> None:
         guardian.shutdown()
         return
 
-    if args.boris:
+    if args.boris or args.boris_daemon or args.boris_scan or args.boris_deps or args.boris_github:
         boris_agent = guardian.get_agent("boris")
-        if boris_agent and isinstance(boris_agent, Boris):
-            boris_agent.initialize()
-            boris_agent.run()
-            print(boris_agent.connectivity_brief())
-        else:
+        if not boris_agent or not isinstance(boris_agent, Boris):
             print("Boris agent not available.")
+            return
+
+        boris_agent.initialize()
+
+        if args.boris_daemon:
+            print("\n  Boris daemon starting (Ctrl+C to stop)...")
+            boris_agent.start_daemon(interval=60)
+            try:
+                while boris_agent.daemon_running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                boris_agent.stop_daemon()
+                print("\n  Boris daemon stopped.")
+            return
+
+        if args.boris_scan:
+            boris_agent.run()
+            breaches = boris_agent.scan_for_breaches()
+            print(f"\n  === BORIS — Breach Scan ===")
+            if breaches:
+                for b in breaches:
+                    print(f"  [{b['severity'].upper()}] {b['type']}: {b['target']}")
+                    print(f"    {b['description']}")
+            else:
+                print("  All clear — no breaches detected.")
+            print()
+            return
+
+        if args.boris_deps:
+            result = boris_agent.check_dependencies()
+            print(f"\n  === BORIS — Dependency Audit ===")
+            print(f"  Packages: {result['total_packages']}")
+            print(f"  Outdated: {len(result['outdated'])}")
+            if result['issues']:
+                print(f"  Issues:   {len(result['issues'])}")
+                for issue in result['issues']:
+                    print(f"    - {issue}")
+            if result['outdated'][:10]:
+                print("  Top outdated:")
+                for p in result['outdated'][:10]:
+                    print(f"    {p['name']}: {p['current']} → {p['latest']}")
+            print()
+            return
+
+        if args.boris_github:
+            result = boris_agent.check_github_health()
+            print(f"\n  === BORIS — GitHub Health ===")
+            print(f"  Branch:     {result['branch']}")
+            print(f"  Clean:      {'Yes' if result['clean'] else 'No'}")
+            print(f"  Last:       {result['last_commit']}")
+            print(f"  Remote:     {'Reachable' if result['remote_reachable'] else 'Unreachable'}")
+            if result.get('uncommitted_files'):
+                print(f"  Uncommitted: {len(result['uncommitted_files'])} files")
+            print()
+            return
+
+        # Default: connectivity brief
+        boris_agent.run()
+        print(boris_agent.connectivity_brief())
         return
 
     if args.handoff or args.handoff_history or args.handoff_restore:
