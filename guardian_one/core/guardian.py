@@ -179,7 +179,7 @@ class GuardianOne:
             ("N8N_BASE_URL", "n8n", "read"),
         ]
         for env_key, service, scope in env_to_vault:
-            value = os.environ.get(env_key, "")
+            value = os.environ.get(env_key, "").strip()
             if value and not self.vault.retrieve(env_key):
                 self.vault.store(env_key, value, service=service, scope=scope)
                 self.audit.record(

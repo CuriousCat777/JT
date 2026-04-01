@@ -297,6 +297,7 @@ def create_app() -> Flask:
 
     @app.route("/api/vault/store", methods=["POST"])
     def api_vault_store():
+        from guardian_one.homelink.vault import VaultError
         g = _get_guardian()
         data = request.get_json() or {}
         key_name = data.get("key_name", "").strip()
@@ -304,8 +305,10 @@ def create_app() -> Flask:
         service = data.get("service", "").strip()
         if not key_name or not value:
             return jsonify({"error": "key_name and value required"}), 400
-        scope = "read"
-        g.vault.store(key_name, value, service=service, scope=scope)
+        try:
+            g.vault.store(key_name, value, service=service, scope="read")
+        except VaultError as exc:
+            return jsonify({"error": str(exc)}), 400
         return jsonify({"ok": True, "key_name": key_name, "total": len(g.vault.list_keys())})
 
     # ------------------------------------------------------------------
@@ -1049,6 +1052,9 @@ def create_app() -> Flask:
     def api_epic_star(article_id: int):
         """Toggle star on an article."""
         feed = _get_intel_feed()
+        row = feed.conn.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Article not found", "article_id": article_id}), 404
         feed.star_article(article_id)
         return jsonify({"success": True, "article_id": article_id})
 
@@ -1065,29 +1071,57 @@ def create_app() -> Flask:
         if not query:
             return jsonify({"error": "No query provided"}), 400
 
+        # Length limit
+        if len(query) > 4096:
+            return jsonify({"error": "Query too long (max 4096 chars)"}), 400
+
         # Security: only allow SELECT statements
         normalized = query.upper().lstrip()
         if not normalized.startswith("SELECT"):
             return jsonify({"error": "Only SELECT queries allowed"}), 403
 
-        # Block dangerous patterns
+        # Block dangerous keywords (word-boundary aware)
+        import re as _re
         dangerous = ["DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE",
                       "ATTACH", "DETACH", "PRAGMA", "VACUUM", "REINDEX"]
         for word in dangerous:
-            if word in normalized:
+            if _re.search(rf"\b{word}\b", normalized):
                 return jsonify({"error": f"Forbidden keyword: {word}"}), 403
+
+        # Block system table access and multi-statement tricks
+        blocked_patterns = [
+            r"\bSQLITE_MASTER\b", r"\bSQLITE_SCHEMA\b", r"\bSQLITE_TEMP_MASTER\b",
+            r"\bSQLITE_TEMP_SCHEMA\b", r"\bDBSTAT\b",
+        ]
+        for pat in blocked_patterns:
+            if _re.search(pat, normalized):
+                return jsonify({"error": "Access to system tables is not allowed"}), 403
+
+        # Block semicolons (multi-statement) and UNION-based injection
+        if ";" in query:
+            return jsonify({"error": "Multiple statements not allowed"}), 403
+
+        # Allowed tables whitelist
+        allowed_tables = {"articles", "market_data", "competitors", "feed_sources"}
+        # Extract table references (FROM/JOIN clauses)
+        table_refs = _re.findall(r"\bFROM\s+(\w+)|\bJOIN\s+(\w+)", normalized)
+        for match in table_refs:
+            table = (match[0] or match[1]).lower()
+            if table not in allowed_tables:
+                return jsonify({"error": f"Table not allowed: {table}"}), 403
 
         feed = _get_intel_feed()
         try:
-            rows = feed.conn.execute(query).fetchall()
-            columns = [desc[0] for desc in feed.conn.execute(query).description] if rows else []
+            cursor = feed.conn.execute(query)
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            rows = cursor.fetchall()
             return jsonify({
                 "columns": columns,
                 "rows": [dict(row) for row in rows],
                 "row_count": len(rows),
             })
-        except sqlite3.Error as e:
-            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": f"SQL error: {e}"}), 400
 
     @app.route("/api/epic/status")
     def api_epic_status():

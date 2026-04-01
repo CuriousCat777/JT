@@ -463,10 +463,14 @@ def main() -> None:
         vault = Vault(vault_path, passphrase=passphrase)
 
         if getattr(args, 'vault_store', None):
+            from guardian_one.homelink.vault import VaultError
             key_name, value = args.vault_store
-            # Determine service from key name
             service = key_name.split("_")[0].lower() if "_" in key_name else "general"
-            vault.store(key_name, value, service=service, scope="read")
+            try:
+                vault.store(key_name, value, service=service, scope="read")
+            except VaultError as exc:
+                console.print(f"\n  [red]✗[/red] {exc}")
+                return
             console.print(f"\n  [green]✓[/green] Stored [bold]{key_name}[/bold] in vault (service: {service})")
             console.print(f"  Total keys: {len(vault.list_keys())}\n")
             return
@@ -637,21 +641,38 @@ def main() -> None:
                     console.print("\n\n  Setup interrupted. Progress saved.")
                     break
                 if value:
-                    vault.store(key_name, value, service=service, scope="read")
+                    import re
+                    from guardian_one.homelink.vault import VaultError
+                    try:
+                        vault.store(key_name, value, service=service, scope="read")
+                    except VaultError as exc:
+                        console.print(f"    [red]✗[/red] Vault error: {exc}")
+                        total_skipped += 1
+                        continue
                     # Also write to .env for persistence
                     env_path = Path(".env")
+                    env_written = False
                     if env_path.exists():
                         env_content = env_path.read_text()
-                        if f"{key_name}=" in env_content:
-                            import re
+                        if re.search(rf"^{re.escape(key_name)}=", env_content, re.MULTILINE):
                             env_content = re.sub(
                                 rf"^{re.escape(key_name)}=.*$",
                                 f"{key_name}={value}",
                                 env_content,
+                                count=1,
                                 flags=re.MULTILINE,
                             )
                             env_path.write_text(env_content)
-                    console.print(f"    [green]✓[/green] Stored in vault + .env")
+                            env_written = True
+                        else:
+                            # Key not in .env template — append it
+                            with open(env_path, "a") as f:
+                                f.write(f"\n{key_name}={value}\n")
+                            env_written = True
+                    if env_written:
+                        console.print(f"    [green]✓[/green] Stored in vault + .env")
+                    else:
+                        console.print(f"    [green]✓[/green] Stored in vault (no .env file)")
                     total_stored += 1
                 else:
                     total_skipped += 1
@@ -727,7 +748,7 @@ def main() -> None:
         console.print(f"  Dashboard: [cyan]python main.py --devpanel[/cyan] → Epic Systems tab\n")
         return
 
-    if getattr(args, 'epic_news', False) or getattr(args, 'epic_sql', None):
+    if getattr(args, 'epic_news', False) or getattr(args, 'epic_sql', None) is not None:
         from rich.console import Console
         from rich.table import Table
         from guardian_one.integrations.epic_intel_feed import EpicIntelFeed
@@ -736,9 +757,12 @@ def main() -> None:
         db_path = Path(config.data_dir) / "epic_intel.db"
         feed = EpicIntelFeed(db_path=db_path)
 
-        if getattr(args, 'epic_sql', None):
+        if getattr(args, 'epic_sql', None) is not None:
             # SQL query mode
-            query = args.epic_sql
+            query = args.epic_sql.strip()
+            if not query:
+                console.print("  [red]Empty query. Usage: --epic-sql \"SELECT * FROM articles\"[/red]")
+                return
             normalized = query.upper().strip()
             if not normalized.startswith("SELECT"):
                 console.print("  [red]Only SELECT queries allowed.[/red]")

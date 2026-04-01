@@ -124,6 +124,9 @@ class Vault:
     # CRUD
     # ------------------------------------------------------------------
 
+    MAX_KEY_LENGTH = 256
+    MAX_VALUE_LENGTH = 65_536  # 64 KB
+
     def store(
         self,
         key_name: str,
@@ -134,6 +137,14 @@ class Vault:
         expires_at: str = "",
     ) -> None:
         """Store or overwrite a secret."""
+        if not key_name or not key_name.strip():
+            raise VaultError("key_name must not be empty")
+        if not value:
+            raise VaultError("value must not be empty")
+        if len(key_name) > self.MAX_KEY_LENGTH:
+            raise VaultError(f"key_name exceeds {self.MAX_KEY_LENGTH} characters")
+        if len(value) > self.MAX_VALUE_LENGTH:
+            raise VaultError(f"value exceeds {self.MAX_VALUE_LENGTH} characters")
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._secrets[key_name] = value
