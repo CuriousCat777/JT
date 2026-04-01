@@ -952,6 +952,105 @@ def create_app() -> Flask:
     # API — Epic Pantheon (physician builder integration status)
     # ------------------------------------------------------------------
 
+    _intel_feed = None
+
+    def _get_intel_feed():
+        nonlocal _intel_feed
+        if _intel_feed is None:
+            from guardian_one.integrations.epic_intel_feed import EpicIntelFeed
+            g = _get_guardian()
+            db_path = Path(g.config.data_dir) / "epic_intel.db"
+            _intel_feed = EpicIntelFeed(db_path=db_path)
+        return _intel_feed
+
+    @app.route("/api/epic/news")
+    def api_epic_news():
+        """Query the Epic intelligence feed."""
+        feed = _get_intel_feed()
+        category = request.args.get("category")
+        source = request.args.get("source")
+        search_q = request.args.get("q")
+        min_rel = float(request.args.get("min_relevance", 0))
+        starred = request.args.get("starred") == "1"
+        limit = min(int(request.args.get("limit", 25)), 100)
+        offset = int(request.args.get("offset", 0))
+
+        if search_q:
+            articles = feed.search(search_q, limit=limit)
+        else:
+            articles = feed.query_articles(
+                category=category, source=source,
+                min_relevance=min_rel, starred_only=starred,
+                limit=limit, offset=offset,
+            )
+        return jsonify({
+            "articles": articles,
+            "count": len(articles),
+            "stats": feed.stats(),
+        })
+
+    @app.route("/api/epic/news/refresh", methods=["POST"])
+    def api_epic_news_refresh():
+        """Fetch latest RSS feeds and store new articles."""
+        feed = _get_intel_feed()
+        result = feed.refresh(timeout=10)
+        return jsonify(result)
+
+    @app.route("/api/epic/market")
+    def api_epic_market():
+        """Query EHR market data."""
+        feed = _get_intel_feed()
+        vendor = request.args.get("vendor")
+        metric = request.args.get("metric")
+        return jsonify({
+            "market_data": feed.get_market_data(vendor=vendor, metric=metric),
+            "competitors": feed.get_competitors(),
+        })
+
+    @app.route("/api/epic/news/<int:article_id>/star", methods=["POST"])
+    def api_epic_star(article_id: int):
+        """Toggle star on an article."""
+        feed = _get_intel_feed()
+        feed.star_article(article_id)
+        return jsonify({"success": True, "article_id": article_id})
+
+    @app.route("/api/epic/sql", methods=["POST"])
+    def api_epic_sql():
+        """Execute a read-only SQL query against the intel database.
+
+        Only SELECT statements are allowed. This enables ad-hoc analysis
+        of the intelligence feed data.
+        """
+        body = request.get_json(silent=True) or {}
+        query = body.get("query", "").strip()
+
+        if not query:
+            return jsonify({"error": "No query provided"}), 400
+
+        # Security: only allow SELECT statements
+        normalized = query.upper().lstrip()
+        if not normalized.startswith("SELECT"):
+            return jsonify({"error": "Only SELECT queries allowed"}), 403
+
+        # Block dangerous patterns
+        dangerous = ["DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE",
+                      "ATTACH", "DETACH", "PRAGMA", "VACUUM", "REINDEX"]
+        for word in dangerous:
+            if word in normalized:
+                return jsonify({"error": f"Forbidden keyword: {word}"}), 403
+
+        feed = _get_intel_feed()
+        try:
+            rows = feed.conn.execute(query).fetchall()
+            columns = [desc[0] for desc in feed.conn.execute(query).description] if rows else []
+            return jsonify({
+                "columns": columns,
+                "rows": [dict(row) for row in rows],
+                "row_count": len(rows),
+            })
+        except sqlite3.Error as e:
+            return jsonify({"error": str(e)}), 400
+
     @app.route("/api/epic/status")
     def api_epic_status():
         """Check all connections needed for Epic Pantheon build."""

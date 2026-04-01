@@ -312,6 +312,8 @@ def main() -> None:
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--epic-status", action="store_true", help="Epic Pantheon build status + n8n connections")
+    parser.add_argument("--epic-news", action="store_true", help="Refresh + display Epic intelligence feed")
+    parser.add_argument("--epic-sql", type=str, default=None, help="Run SQL query against Epic intel database")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -501,6 +503,79 @@ def main() -> None:
         console.print(table)
         console.print(f"\n  [bold]{ready}/{len(components)}[/bold] components ready ({round(ready/len(components)*100)}%)")
         console.print(f"  Dashboard: [cyan]python main.py --devpanel[/cyan] → Epic Systems tab\n")
+        return
+
+    if getattr(args, 'epic_news', False) or getattr(args, 'epic_sql', None):
+        from rich.console import Console
+        from rich.table import Table
+        from guardian_one.integrations.epic_intel_feed import EpicIntelFeed
+
+        console = Console()
+        db_path = Path(config.data_dir) / "epic_intel.db"
+        feed = EpicIntelFeed(db_path=db_path)
+
+        if getattr(args, 'epic_sql', None):
+            # SQL query mode
+            query = args.epic_sql
+            normalized = query.upper().strip()
+            if not normalized.startswith("SELECT"):
+                console.print("  [red]Only SELECT queries allowed.[/red]")
+                return
+
+            try:
+                rows = feed.conn.execute(query).fetchall()
+                if not rows:
+                    console.print("  No results.")
+                    return
+                columns = list(rows[0].keys())
+                table = Table(title="Query Results")
+                for col in columns:
+                    table.add_column(col)
+                for row in rows[:50]:
+                    table.add_row(*[str(row[c])[:80] for c in columns])
+                console.print(table)
+                console.print(f"  {len(rows)} row(s)")
+            except Exception as e:
+                console.print(f"  [red]SQL error: {e}[/red]")
+            return
+
+        # News feed mode
+        console.print("\n  [bold]Epic Intelligence Feed[/bold]\n")
+        console.print("  Fetching RSS feeds...")
+        stats = feed.refresh(timeout=10)
+        console.print(f"  Feeds checked: {stats['feeds_checked']} | "
+                       f"New articles: {stats['new_articles']} | "
+                       f"Errors: {stats['errors']}")
+
+        articles = feed.query_articles(limit=15)
+        if not articles:
+            console.print("\n  No articles found.")
+            return
+
+        table = Table(title=f"Top {len(articles)} Articles")
+        table.add_column("Rel", style="bold", width=4)
+        table.add_column("Source", width=20)
+        table.add_column("Title", width=60)
+        table.add_column("Category", width=12)
+
+        for a in articles:
+            rel = f"{int(a['relevance_score'] * 100)}%"
+            rel_style = "green" if a["relevance_score"] >= 0.5 else "yellow" if a["relevance_score"] > 0 else "dim"
+            table.add_row(
+                f"[{rel_style}]{rel}[/{rel_style}]",
+                a["source"][:20],
+                a["title"][:60],
+                a["category"],
+            )
+
+        console.print()
+        console.print(table)
+
+        s = feed.stats()
+        console.print(f"\n  Total: {s['total_articles']} articles | "
+                       f"High relevance: {s['high_relevance']} | "
+                       f"DB: {s['db_path']}")
+        console.print(f"  SQL: [cyan]python main.py --epic-sql \"SELECT * FROM articles WHERE relevance_score > 0.5\"[/cyan]\n")
         return
 
     if args.ollama or args.ollama_benchmark or args.ollama_pull or args.ollama_delete:

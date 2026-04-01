@@ -850,6 +850,42 @@ tr:hover td { background: var(--bg-primary); }
         </div>
       </div>
 
+      <!-- Intel Feed / News Board -->
+      <div class="card" style="margin-bottom: 24px; border-left: 3px solid var(--cyan);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h4 style="font-weight: 700;">Intelligence Feed</h4>
+          <div style="display:flex;gap:8px;">
+            <select id="newsCategoryFilter" style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);">
+              <option value="">All Categories</option>
+              <option value="ehr">EHR</option>
+              <option value="ai_health">AI Health</option>
+              <option value="regulatory">Regulatory</option>
+              <option value="epic">Epic</option>
+              <option value="financial">Financial</option>
+            </select>
+            <button class="btn btn-sm" onclick="refreshIntelFeed()">Fetch Latest</button>
+            <button class="btn btn-sm" onclick="loadIntelFeed()">Refresh</button>
+          </div>
+        </div>
+        <div id="intelFeedStats" style="font-size:11px;color:var(--text-muted);margin-bottom:10px;"></div>
+        <div id="intelFeedContent" style="font-size: 12px; color: var(--text-muted);">
+          Loading intelligence feed...
+        </div>
+        <!-- SQL Query Box -->
+        <details style="margin-top:14px;">
+          <summary style="font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;">SQL Query Console</summary>
+          <div style="margin-top:8px;">
+            <textarea id="sqlQuery" rows="3" style="width:100%;font-family:var(--font-mono);font-size:11px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card-hover);resize:vertical;"
+              placeholder="SELECT title, relevance_score, source FROM articles WHERE relevance_score > 0.5 ORDER BY published DESC LIMIT 10"></textarea>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button class="btn btn-sm btn-primary" onclick="runSqlQuery()">Run Query</button>
+              <span style="font-size:10px;color:var(--text-muted);line-height:28px;">Tables: articles, market_data, competitors, feed_sources</span>
+            </div>
+            <div id="sqlResult" style="margin-top:8px;"></div>
+          </div>
+        </details>
+      </div>
+
       <!-- Key Metrics -->
       <div class="grid-3" style="margin-bottom: 24px;">
         <div class="stat-card">
@@ -1701,6 +1737,123 @@ async function loadSummary() {
 // Loader map & init
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
+// Epic Intel Feed
+// ---------------------------------------------------------------------------
+async function loadIntelFeed() {
+  const el = document.getElementById('intelFeedContent');
+  const statsEl = document.getElementById('intelFeedStats');
+  if (!el) return;
+
+  const category = document.getElementById('newsCategoryFilter')?.value || '';
+  const qs = category ? `?category=${category}&limit=15` : '?limit=15';
+
+  try {
+    const data = await api(`/api/epic/news${qs}`);
+    const s = data.stats;
+
+    if (statsEl) {
+      statsEl.innerHTML = `${s.total_articles} articles · ${s.high_relevance} high relevance · ${s.starred} starred · ${s.active_sources} sources · <code style="font-size:10px;color:var(--text-muted);">${s.db_path}</code>`;
+    }
+
+    if (!data.articles.length) {
+      el.innerHTML = '<div style="padding:12px;color:var(--text-muted);">No articles yet. Click "Fetch Latest" to pull RSS feeds.</div>';
+      return;
+    }
+
+    let html = '<div style="max-height:400px;overflow-y:auto;">';
+    for (const a of data.articles) {
+      const relPct = Math.round((a.relevance_score || 0) * 100);
+      const relColor = relPct >= 50 ? 'var(--green)' : relPct > 0 ? 'var(--yellow)' : 'var(--text-muted)';
+      const starIcon = a.starred ? '&#9733;' : '&#9734;';
+      const starColor = a.starred ? 'var(--yellow)' : 'var(--text-muted)';
+      const catBadge = a.category ? `<span style="font-size:10px;padding:1px 6px;background:var(--accent-glow);border-radius:3px;color:var(--accent);">${a.category}</span>` : '';
+
+      html += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);">
+        <div style="display:flex;justify-content:space-between;align-items:start;">
+          <div style="flex:1;">
+            <a href="${a.url}" target="_blank" style="color:var(--text-primary);font-weight:600;text-decoration:none;font-size:12px;">${a.title}</a>
+            <div style="margin-top:3px;font-size:11px;color:var(--text-muted);">
+              ${a.source} ${catBadge}
+              <span style="color:${relColor};font-weight:600;margin-left:6px;">${relPct}% relevant</span>
+            </div>
+            ${a.summary ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);line-height:1.5;">${a.summary.substring(0, 200)}${a.summary.length > 200 ? '...' : ''}</div>` : ''}
+          </div>
+          <span style="cursor:pointer;font-size:16px;color:${starColor};margin-left:8px;" onclick="starArticle(${a.id})">${starIcon}</span>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);">Feed error: ${e.message}</div>`;
+  }
+}
+
+async function refreshIntelFeed() {
+  const el = document.getElementById('intelFeedContent');
+  if (el) el.innerHTML = '<div style="color:var(--text-muted);">Fetching RSS feeds...</div>';
+  try {
+    const result = await api('/api/epic/news/refresh', { method: 'POST' });
+    toast(`Feeds checked: ${result.feeds_checked}, New articles: ${result.new_articles}, Errors: ${result.errors}`);
+    loadIntelFeed();
+  } catch (e) {
+    toast('Feed refresh failed: ' + e.message);
+    loadIntelFeed();
+  }
+}
+
+async function starArticle(id) {
+  await api(`/api/epic/news/${id}/star`, { method: 'POST' });
+  loadIntelFeed();
+}
+
+async function runSqlQuery() {
+  const query = document.getElementById('sqlQuery')?.value;
+  const el = document.getElementById('sqlResult');
+  if (!query || !el) return;
+
+  try {
+    const resp = await fetch('/api/epic/sql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      el.innerHTML = `<div style="color:var(--red);font-size:11px;padding:8px;background:var(--red-dim);border-radius:4px;">${data.error}</div>`;
+      return;
+    }
+
+    if (!data.rows.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:8px;">No results.</div>';
+      return;
+    }
+
+    let html = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${data.row_count} rows</div>`;
+    html += '<div style="overflow-x:auto;max-height:300px;"><table style="width:100%;font-size:11px;border-collapse:collapse;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--bg-card);">';
+    for (const col of data.columns) {
+      html += `<th style="padding:4px 8px;text-align:left;white-space:nowrap;">${col}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    for (const row of data.rows) {
+      html += '<tr style="border-bottom:1px solid var(--border-subtle);">';
+      for (const col of data.columns) {
+        let val = row[col] ?? '';
+        if (typeof val === 'string' && val.length > 80) val = val.substring(0, 80) + '...';
+        html += `<td style="padding:4px 8px;white-space:nowrap;">${val}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:11px;">${e.message}</div>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Epic Pantheon Status
 // ---------------------------------------------------------------------------
 async function loadEpicStatus() {
@@ -1797,7 +1950,7 @@ const loaders = {
   audit: loadAudit,
   config: loadConfig,
   summary: loadSummary,
-  epic: loadEpicStatus,
+  epic: () => { loadEpicStatus(); loadIntelFeed(); },
 };
 
 function updateClock() {
