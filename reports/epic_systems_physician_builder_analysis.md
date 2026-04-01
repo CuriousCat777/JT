@@ -335,6 +335,58 @@ Notion Sync / Dashboard (sanitized operational data only)
 
 ---
 
+## 8. GitHub Open-Source Solutions Reference
+
+Key open-source projects that align with the physician builder strategy. These can accelerate development, serve as reference implementations, or be integrated directly.
+
+### Tier 1 — Core Libraries (Use Directly)
+
+| Repository | Stars | Language | Why It Matters |
+|-----------|-------|----------|----------------|
+| [smart-on-fhir/client-py](https://github.com/smart-on-fhir/client-py) | 679 | Python | **Official SMART on FHIR Python client.** Handles OAuth2 auth, FHIR resource fetching. Direct dependency for Guardian One's EpicScheduleProvider/EpicEHRProvider. |
+| [nazrulworld/fhir.resources](https://github.com/nazrulworld/fhir.resources) | 514 | Python | **Pydantic-based FHIR R4 resource models.** Type-safe Patient, Observation, Condition, MedicationRequest models. Use as data layer for EpicEHRProvider. |
+| [google/fhir-py](https://github.com/google/fhir-py) | 100 | Python | **Google's FHIR Python utilities.** BigQuery integration for analytics. Useful for Cosmos-scale data analysis. |
+| [UMEssen/FHIR-PYrate](https://github.com/UMEssen/FHIR-PYrate) | 77 | Python | **High-level FHIR query → pandas DataFrames.** Ideal for building clinical analytics dashboards from Epic data. |
+
+### Tier 2 — Reference Implementations (Learn From)
+
+| Repository | Stars | Language | Why It Matters |
+|-----------|-------|----------|----------------|
+| [dotimplement/HealthChain](https://github.com/dotimplement/HealthChain) | 187 | Python | **Healthcare AI SDK with FHIR endpoints + CDS Hooks.** Closest open-source analog to what Guardian One's Epic integration needs. Has prior authorization, EHR integration patterns. |
+| [jmandel/health-skillz](https://github.com/jmandel/health-skillz) | 57 | TypeScript | **Claude Skill for SMART on FHIR health records.** Built by Josh Mandel (SMART on FHIR co-creator). Shows AI + FHIR integration pattern directly relevant to our approach. |
+| [cds-hooks/docs](https://github.com/cds-hooks/docs) | 178 | — | **CDS Hooks specification.** The standard for real-time clinical decision support within Epic. Essential reference for building CDS tools. |
+| [Project-MONAI/monai-deploy](https://github.com/Project-MONAI/monai-deploy) | 116 | Python | **Medical AI deployment framework.** DICOM + FHIR. If building radiology/imaging AI tools for Epic. |
+
+### Tier 3 — Ecosystem & Integration Tools
+
+| Repository | Stars | Language | Why It Matters |
+|-----------|-------|----------|----------------|
+| [VorroBG/n8n-nodes-bridgegate](https://github.com/VorroBG/n8n-nodes-bridgegate) | 2 | TypeScript | **n8n node for EMR/EHR integration** — supports Epic, Cerner, Athena. Directly relevant for Guardian One's n8n + Epic workflow. |
+| [rsanandres/atlas](https://github.com/rsanandres/atlas) | 1 | Python | **Multi-agent RAG over FHIR patient data.** Uses LangChain, FastAPI, Ollama. Architectural parallel to Guardian One (multi-agent + FHIR + local AI). |
+| [leksval/fhirflame](https://github.com/leksval/fhirflame) | 1 | Python | **Dockerized medical AI toolkit** — FHIR R4/R5, NLP, multi-agent workflows, live dashboard. Another architectural reference. |
+| [fhirpack/fhirpack](https://github.com/fhirpack/fhirpack) | 49 | Python | **FHIR → pandas ETL client.** Functional syntax for EHR data analysis pipelines. |
+| [queelius/chartfold](https://github.com/queelius/chartfold) | 1 | Python | **Patient-facing health data consolidation** from Epic/MEDITECH into SQLite. Data sovereignty approach similar to Guardian One. |
+| [mabdulre9/ai-enabled-healthcare-system](https://github.com/mabdulre9/ai-enabled-healthcare-system) | 0 | Python | **100% private EMR with offline Ollama AI.** Flask + FHIR R4. Closest philosophy match to Guardian One (data sovereignty, local AI, no cloud). |
+
+### Tier 4 — Standards & Learning
+
+| Repository | Stars | Language | Why It Matters |
+|-----------|-------|----------|----------------|
+| [HL7/smart-app-launch](https://github.com/HL7/smart-app-launch) | 31 | — | **Official SMART App Launch Protocol spec.** Required reading for Epic App Market certification. |
+| [cerner/smart-on-fhir-tutorial](https://github.com/cerner/smart-on-fhir-tutorial) | 194 | JavaScript | **Step-by-step SMART on FHIR tutorial.** 4,400+ forks. Best beginner resource for building EHR-integrated apps. |
+| [NIH-NCPI/fhir-101](https://github.com/NIH-NCPI/fhir-101) | 42 | Jupyter | **Practical FHIR guide** with Jupyter notebooks. Good for learning FHIR resource structure. |
+| [AHRQ-CDS/AHRQ-CDS-Connect-CQL-SERVICES](https://github.com/AHRQ-CDS/AHRQ-CDS-Connect-CQL-SERVICES) | 28 | JavaScript | **AHRQ Clinical Decision Support** — CDS Hooks + CQL. Government-backed reference for evidence-based CDS. |
+
+### Recommended Integration Path
+
+1. **`pip install fhirclient`** — [smart-on-fhir/client-py](https://github.com/smart-on-fhir/client-py) for SMART auth + FHIR resource access
+2. **`pip install fhir.resources`** — [nazrulworld/fhir.resources](https://github.com/nazrulworld/fhir.resources) for Pydantic FHIR models
+3. **Study** [HealthChain](https://github.com/dotimplement/HealthChain) for CDS Hooks + prior auth patterns
+4. **Reference** [health-skillz](https://github.com/jmandel/health-skillz) for AI + FHIR integration approach
+5. **Install** [n8n-nodes-bridgegate](https://github.com/VorroBG/n8n-nodes-bridgegate) for n8n → Epic workflow automation
+
+---
+
 ## Sources
 
 ### Financials & Corporate

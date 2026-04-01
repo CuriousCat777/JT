@@ -988,11 +988,15 @@ def create_app() -> Flask:
             vault_status["error"] = str(e)
 
         # 3. Gateway services check
-        gateway_services = g.gateway.all_services_status()
         epic_service = None
-        for svc in gateway_services:
-            if "epic" in svc.get("name", "").lower():
-                epic_service = svc
+        try:
+            gateway_services = g.gateway.all_services_status()
+            for svc in gateway_services:
+                name = svc.get("name", svc) if isinstance(svc, dict) else str(svc)
+                if "epic" in name.lower():
+                    epic_service = svc if isinstance(svc, dict) else {"name": name}
+        except Exception:
+            pass
 
         # 4. Registry check
         registry_status = {"epic_registered": False}
