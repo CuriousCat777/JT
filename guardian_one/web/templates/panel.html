@@ -510,6 +510,12 @@ tr:hover td { background: var(--bg-primary); }
       </div>
     </div>
     <div class="nav-section">
+      <div class="nav-label">Research</div>
+      <div class="nav-item" data-panel="epic">
+        <span class="nav-icon">&#9879;</span> Epic Systems
+      </div>
+    </div>
+    <div class="nav-section">
       <div class="nav-label">System</div>
       <div class="nav-item" data-panel="audit">
         <span class="nav-icon">&#9998;</span> Audit Log
@@ -824,6 +830,293 @@ tr:hover td { background: var(--bg-primary); }
         <button class="btn" onclick="loadSummary()">Refresh</button>
       </div>
       <div id="summaryView"></div>
+    </div>
+
+    <!-- Epic Systems Panel -->
+    <div id="panel-epic" class="panel">
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Epic Systems — Physician Builder Analysis</h2>
+        <p style="color: var(--text-muted); font-size: 13px;">Strategic business intelligence report &middot; April 2026</p>
+      </div>
+
+      <!-- Key Metrics -->
+      <div class="grid-3" style="margin-bottom: 24px;">
+        <div class="stat-card">
+          <div class="stat-label">Revenue (2024)</div>
+          <div class="stat-value" style="color:var(--green)">$5.7B</div>
+          <div class="stat-sub">+16% YoY &middot; zero debt</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Hospital Market Share</div>
+          <div class="stat-value" style="color:var(--accent)">42.3%</div>
+          <div class="stat-sub">3,620 hospitals &middot; 325M patient records</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Bed Market Share</div>
+          <div class="stat-value" style="color:var(--accent)">54.9%</div>
+          <div class="stat-sub">~$2,800 recurring revenue per bed/year</div>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-bottom: 24px;">
+        <div class="stat-card">
+          <div class="stat-label">Physician Builder Avg Salary</div>
+          <div class="stat-value" style="color:var(--green)">$203K</div>
+          <div class="stat-sub">Range: $99K — $300K</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">AI Projects Active</div>
+          <div class="stat-value" style="color:var(--purple)">160-200</div>
+          <div class="stat-sub">85% of customers live with GenAI</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">App Market Apps</div>
+          <div class="stat-value" style="color:var(--cyan)">1,000+</div>
+          <div class="stat-sub">$500/yr entry &middot; 8B+ FHIR API calls</div>
+        </div>
+      </div>
+
+      <!-- Company Profile -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Company Profile</h4>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>Founded:</strong> 1979 by Judith Faulkner &middot; <strong>HQ:</strong> Verona, Wisconsin</div>
+          <div><strong>Ownership:</strong> Private — Judy Faulkner (~43% stake, net worth ~$7.8B), no outside investors</div>
+          <div><strong>Employees:</strong> 13,000+ &middot; <strong>Debt:</strong> Zero (self-funded since $70K founding)</div>
+          <div><strong>Customer Retention:</strong> Near 100% &middot; <strong>New Contracts (2024):</strong> 70% of all hospital EHR decisions</div>
+        </div>
+      </div>
+
+      <!-- Revenue Trajectory -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Revenue Trajectory</h4>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px;">
+          <div style="padding: 8px 16px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="color: var(--text-muted);">1993</div><div style="font-weight: 700;">$20M</div>
+          </div>
+          <div style="padding: 8px 16px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="color: var(--text-muted);">2003</div><div style="font-weight: 700;">$200M</div>
+          </div>
+          <div style="padding: 8px 16px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="color: var(--text-muted);">2013</div><div style="font-weight: 700;">$1.5B</div>
+          </div>
+          <div style="padding: 8px 16px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="color: var(--text-muted);">2022</div><div style="font-weight: 700;">$4.6B</div>
+          </div>
+          <div style="padding: 8px 16px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="color: var(--text-muted);">2023</div><div style="font-weight: 700;">$4.9B</div>
+          </div>
+          <div style="padding: 8px 16px; background: var(--accent-glow); border: 1px solid var(--accent); border-radius: 8px; text-align: center;">
+            <div style="color: var(--accent);">2024</div><div style="font-weight: 700; color: var(--accent);">$5.7B</div>
+          </div>
+        </div>
+        <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted);">EBITDA margins estimated &gt;30%</div>
+      </div>
+
+      <!-- Tax Filings & Nonprofit Entities -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Tax Filings &amp; Nonprofit Entities</h4>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>Epic Systems Corp:</strong> Private C-corp — no public SEC/tax filings required</div>
+          <div><strong>Epic Foundation:</strong> Form 990 filings on <a href="https://projects.propublica.org/nonprofits/organizations/371192771" target="_blank" style="color: var(--accent);">ProPublica Nonprofit Explorer</a> (2020, 2022, 2024, 2025)</div>
+          <div><strong>Roots &amp; Wings Foundation:</strong> $287.6M in assets (2022); $67M distributed in 2024; goal: $100M/yr by 2027</div>
+          <div><strong>Epic Heritage Foundation:</strong> Will inherit Faulkner's shares — ensures Epic stays private permanently</div>
+          <div style="color: var(--text-muted); margin-top: 4px;">Faulkner signed The Giving Pledge (2015) — committing 99% of wealth to philanthropy</div>
+        </div>
+      </div>
+
+      <!-- Market Share -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">EHR Market Share (End of 2024, KLAS Research)</h4>
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border); text-align: left;">
+              <th style="padding: 8px 12px;">Vendor</th>
+              <th style="padding: 8px 12px;">Hospital Share</th>
+              <th style="padding: 8px 12px;">Bed Share</th>
+              <th style="padding: 8px 12px;">Net Change (2024)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid var(--border-subtle); background: var(--accent-glow);">
+              <td style="padding: 8px 12px; font-weight: 700;">Epic Systems</td>
+              <td style="padding: 8px 12px; font-weight: 700; color: var(--accent);">42.3%</td>
+              <td style="padding: 8px 12px; font-weight: 700; color: var(--accent);">54.9%</td>
+              <td style="padding: 8px 12px; color: var(--green); font-weight: 600;">+176 hospitals</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 8px 12px;">Oracle Health (Cerner)</td>
+              <td style="padding: 8px 12px;">22.9%</td>
+              <td style="padding: 8px 12px;">22.1%</td>
+              <td style="padding: 8px 12px; color: var(--red);">-74 hospitals</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 8px 12px;">MEDITECH</td>
+              <td style="padding: 8px 12px;">14.8%</td>
+              <td style="padding: 8px 12px;">12.7%</td>
+              <td style="padding: 8px 12px; color: var(--red);">-57 hospitals</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 8px 12px;">TruBridge</td>
+              <td style="padding: 8px 12px;">7.6%</td>
+              <td style="padding: 8px 12px;">2.4%</td>
+              <td style="padding: 8px 12px; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 12px;">Altera Digital Health</td>
+              <td style="padding: 8px 12px;">3.0%</td>
+              <td style="padding: 8px 12px;">3.0%</td>
+              <td style="padding: 8px 12px; color: var(--text-muted);">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- AI Ecosystem -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Epic AI Ecosystem (2025-2026)</h4>
+        <div class="grid-3" style="margin-bottom: 12px;">
+          <div style="padding: 12px; background: var(--bg-card-hover); border-radius: 8px;">
+            <div style="font-weight: 700; font-size: 14px; color: var(--purple); margin-bottom: 4px;">Art</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Clinician AI — ambient scribe, patient summaries, diagnostic insights, Cosmos similar-patient matching</div>
+          </div>
+          <div style="padding: 12px; background: var(--bg-card-hover); border-radius: 8px;">
+            <div style="font-weight: 700; font-size: 14px; color: var(--green); margin-bottom: 4px;">Emmie</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Patient AI — MyChart conversational assistant for scheduling, billing, payments</div>
+          </div>
+          <div style="padding: 12px; background: var(--bg-card-hover); border-radius: 8px;">
+            <div style="font-weight: 700; font-size: 14px; color: var(--orange); margin-bottom: 4px;">Penny</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Revenue cycle AI — automated billing coding (200+ orgs), 20%+ fewer coding denials</div>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>CoMET Foundation Model:</strong> Pre-trained on 300M patient records &amp; 16B medical events (with Microsoft Research + Yale)</div>
+          <div><strong>Ambient AI Charting:</strong> Built with Microsoft/Dragon; 62% of Epic customers live with ambient scribe by June 2025</div>
+          <div><strong>2026 Roadmap:</strong> Autonomous ED/Radiology coding, automated claims follow-up, discharge planning agent, pre-surgical risk calculator</div>
+          <div><strong>Third-Party AI:</strong> Microsoft (primary partner), Abridge, Nuance, Press Ganey, Ambience via Epic Workshop program</div>
+          <div><strong>Investment:</strong> $1.6B invested in ambient AI companies by investors in 2025</div>
+        </div>
+      </div>
+
+      <!-- Physician Builder Opportunity -->
+      <div class="card" style="margin-bottom: 16px; border-left: 3px solid var(--accent);">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Physician Builder Opportunity</h4>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>What:</strong> Physicians trained to configure, customize, and build tools within Epic's EHR</div>
+          <div><strong>Compensation:</strong> Average $203K/yr (range $99K-$300K) &middot; 3,000+ jobs on LinkedIn</div>
+          <div><strong>Training:</strong> CLN150 (basic build), CLN145 (SmartPhrases), CLN155 (orders/CDS), CLN176 (analytics)</div>
+          <div><strong>Leading Programs:</strong> Vanderbilt (91 builders — largest per capita), UNC, UMass informatics fellowships</div>
+        </div>
+        <h5 style="margin: 14px 0 8px; font-weight: 600; font-size: 13px;">Developer Ecosystem</h5>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>open.epic.com:</strong> 750+ free APIs &middot; <strong>fhir.epic.com:</strong> FHIR R4 sandbox for testing</div>
+          <div><strong>Epic Showroom:</strong> $500/yr Connection Hub &middot; 1,000+ live apps &middot; 800 patient-facing apps</div>
+          <div><strong>Standards:</strong> SMART on FHIR (in-app launch), CDS Hooks (real-time decision support)</div>
+          <div><strong>New in 2025-26:</strong> DICOM APIs, radiation oncology APIs, prior auth APIs (Feb 2026), USCDI v5, 2,000+ hospitals on TEFCA</div>
+        </div>
+      </div>
+
+      <!-- Regulatory Environment -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Regulatory Tailwinds</h4>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+          <div><strong>21st Century Cures Act (2016, enforced 2020+):</strong> Information blocking illegal since April 2021. FHIR R4 mandated. Patients get all EHI electronically, free of charge.</div>
+          <div><strong>EHI Expansion (Oct 2022):</strong> Definition expanded to all electronic protected health information (ePHI)</div>
+          <div><strong>HTI-5 Proposed Rule (Dec 2025):</strong> Explicitly allows autonomous AI systems to access health data. Removes 50%+ of legacy certification, focuses on FHIR APIs. Closes information blocking loopholes.</div>
+          <div style="margin-top: 6px; padding: 8px 12px; background: var(--green-dim); border-radius: 6px; color: var(--green); font-weight: 500;">Regulatory environment actively forces the Epic ecosystem open — FHIR apps have legal backing for data access.</div>
+        </div>
+      </div>
+
+      <!-- Guardian One Integration Readiness -->
+      <div class="card" style="margin-bottom: 16px; border-left: 3px solid var(--green);">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Guardian One Integration Readiness</h4>
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border); text-align: left;">
+              <th style="padding: 6px 10px;">Component</th>
+              <th style="padding: 6px 10px;">Epic Use</th>
+              <th style="padding: 6px 10px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 6px 10px; font-weight: 600;">Gateway</td>
+              <td style="padding: 6px 10px;">FHIR R4 API routing, rate limiting, circuit breakers</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--green); font-weight: 600;">Ready</span></td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 6px 10px; font-weight: 600;">Vault</td>
+              <td style="padding: 6px 10px;">EPIC_CLIENT_ID, FHIR tokens, SMART on FHIR credentials</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--green); font-weight: 600;">Ready</span></td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 6px 10px; font-weight: 600;">Content Gate</td>
+              <td style="padding: 6px 10px;">PHI/PII blocking for Epic data sync</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--green); font-weight: 600;">Ready</span></td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 6px 10px; font-weight: 600;">EpicScheduleProvider</td>
+              <td style="padding: 6px 10px;">FHIR R4 appointment/scheduling</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--yellow); font-weight: 600;">Stub — needs SMART auth</span></td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+              <td style="padding: 6px 10px; font-weight: 600;">Chronos Pre-charting</td>
+              <td style="padding: 6px 10px;">Epic-style pre-chart checklist</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--green); font-weight: 600;">Implemented</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 10px; font-weight: 600;">EpicEHRProvider</td>
+              <td style="padding: 6px 10px;">Patient, labs, meds, problems via FHIR R4</td>
+              <td style="padding: 6px 10px;"><span style="color: var(--red); font-weight: 600;">Not started</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Strategic Assessment -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Strategic Assessment</h4>
+        <div class="grid-2">
+          <div>
+            <h5 style="font-size: 12px; font-weight: 600; color: var(--green); margin-bottom: 8px;">Strengths</h5>
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+              <div>&#10003; 54.9% of US hospital beds — massive addressable market</div>
+              <div>&#10003; MD + AI expertise is a rare moat</div>
+              <div>&#10003; Cures Act + HTI-5 mandate open APIs</div>
+              <div>&#10003; Guardian One has 80% of needed infrastructure</div>
+              <div>&#10003; Near-100% customer retention — tools stay deployed</div>
+              <div>&#10003; $500/yr App Market entry — low barrier</div>
+            </div>
+          </div>
+          <div>
+            <h5 style="font-size: 12px; font-weight: 600; color: var(--red); margin-bottom: 8px;">Risks</h5>
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 2;">
+              <div>&#9888; Epic can build competing features (ambient scribe already threatens Abridge/Nuance)</div>
+              <div>&#9888; App Market subject to Epic's rules</div>
+              <div>&#9888; Market saturation possible in general EHR tools</div>
+              <div>&#9888; Certification requirements for advanced integrations</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Next Steps -->
+      <div class="card" style="border-left: 3px solid var(--purple);">
+        <h4 style="margin-bottom: 12px; font-weight: 700;">Recommended Next Steps</h4>
+        <div style="font-size: 12px; color: var(--text-secondary); line-height: 2.2;">
+          <div>1. Register as Epic developer at <a href="https://open.epic.com" target="_blank" style="color: var(--accent);">open.epic.com</a> — access sandbox &amp; FHIR docs</div>
+          <div>2. Complete EpicScheduleProvider — SMART on FHIR auth + appointment CRUD</div>
+          <div>3. Build EpicEHRProvider — Patient, labs, meds, problems via FHIR R4</div>
+          <div>4. Prototype physician builder tool — pre-charting automation or CDS</div>
+          <div>5. Attend Epic UGM / Open@Epic — network with developer community</div>
+          <div>6. Evaluate App Market listing — certification, revenue sharing model</div>
+          <div>7. Position JTMD AI — market physician builder services through jtmdai.com</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px; font-size: 11px; color: var(--text-muted); text-align: center;">
+        Report generated by Guardian One CFO Intelligence Module &middot; Data Sovereignty Enforced &middot; Full report: reports/epic_systems_physician_builder_analysis.md
+      </div>
     </div>
 
   </main>
@@ -1327,6 +1620,7 @@ const loaders = {
   audit: loadAudit,
   config: loadConfig,
   summary: loadSummary,
+  epic: () => {},   // Static content — research report
 };
 
 function updateClock() {
