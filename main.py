@@ -7,8 +7,11 @@ Usage:
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --validate   # CFO validation report (detailed, for review)
-    python main.py --sync       # Continuous sync loop (Plaid + Empower + Rocket Money)
+    python main.py --sync       # Continuous sync loop (Teller + Plaid + Empower + Rocket Money)
     python main.py --connect    # Connect bank accounts via Plaid (read-only)
+    python main.py --teller-status       # Show Teller.io connection status
+    python main.py --import-csv FILE     # Import any bank's CSV export
+    python main.py --import-ofx FILE     # Import OFX/QFX bank export
     python main.py --agent NAME # Run a single agent
     python main.py --brief      # H.O.M.E. L.I.N.K. weekly security brief
     python main.py --homelink   # H.O.M.E. L.I.N.K. service status
@@ -310,6 +313,18 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--import-csv", type=str, default=None,
+                        help="Import bank CSV (any bank: Chase, BofA, etc.)")
+    parser.add_argument("--import-ofx", type=str, default=None,
+                        help="Import OFX/QFX file (standard bank export format)")
+    parser.add_argument("--import-institution", type=str, default="",
+                        help="Bank name for CSV import (auto-detected if omitted)")
+    parser.add_argument("--import-account", type=str, default="",
+                        help="Account name for CSV import (auto-generated if omitted)")
+    parser.add_argument("--import-type", type=str, default="checking",
+                        help="Account type for CSV import: checking, savings, credit_card, loan, investment, retirement")
+    parser.add_argument("--teller-status", action="store_true",
+                        help="Show Teller.io connection status")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -652,6 +667,56 @@ def main() -> None:
             print(f"\n  Totals: {result['total_accounts']} accounts, {result['total_transactions']} transactions")
             print(f"  Net worth: ${cfo.net_worth():,.2f}")
             print(f"  Ledger saved.")
+        else:
+            print("CFO agent not available.")
+    elif args.import_csv:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            print(f"\n  Importing bank CSV: {args.import_csv}")
+            result = cfo.import_bank_csv(
+                args.import_csv,
+                institution=args.import_institution,
+                account_name=args.import_account,
+                account_type=args.import_type,
+            )
+            print(f"  Accounts added: {result['accounts_added']}")
+            print(f"  Accounts updated: {result['accounts_updated']}")
+            print(f"  Transactions added: {result['transactions_added']}")
+            print(f"\n  Net worth: ${cfo.net_worth():,.2f}")
+            print(f"  Total accounts: {len(cfo._accounts)}")
+            print(f"  Total transactions: {len(cfo._transactions)}")
+        else:
+            print("CFO agent not available.")
+    elif args.import_ofx:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            print(f"\n  Importing OFX/QFX: {args.import_ofx}")
+            result = cfo.import_ofx(args.import_ofx)
+            print(f"  Accounts added: {result['accounts_added']}")
+            print(f"  Accounts updated: {result['accounts_updated']}")
+            print(f"  Transactions added: {result['transactions_added']}")
+            print(f"\n  Net worth: ${cfo.net_worth():,.2f}")
+            print(f"  Total accounts: {len(cfo._accounts)}")
+            print(f"  Total transactions: {len(cfo._transactions)}")
+        else:
+            print("CFO agent not available.")
+    elif args.teller_status:
+        cfo = guardian.get_agent("cfo")
+        if cfo and isinstance(cfo, CFO):
+            status = cfo.teller_status()
+            print(f"\n  Teller.io Status")
+            print(f"  {'─' * 40}")
+            print(f"  Connected:    {status.get('connected', False)}")
+            print(f"  Environment:  {status.get('environment', 'n/a')}")
+            print(f"  Enrollments:  {status.get('enrollments', 0)}")
+            institutions = status.get('institutions', [])
+            if institutions:
+                print(f"  Banks:        {', '.join(institutions)}")
+            if status.get('last_error'):
+                print(f"  Last error:   {status['last_error']}")
+            if not status.get('has_credentials'):
+                print(f"\n  To connect: Set TELLER_ACCESS_TOKEN in .env")
+                print(f"  Sign up at teller.io — free tier, no Plaid widget needed")
         else:
             print("CFO agent not available.")
     elif args.notify or args.notify_test:

@@ -1,7 +1,8 @@
 """CFO — Financial Management Agent.
 
 Responsibilities:
-- Sync with Rocket Money (account unification via API or CSV)
+- Multi-provider financial sync (Teller, Plaid, Empower, Rocket Money)
+- File import: generic bank CSV, OFX/QFX, Rocket Money CSV/XLSX
 - Dashboard: income, expenses, loans, savings
 - Bill alerts and payment confirmations
 - Tax optimisation (retirement, charitable giving)
@@ -27,6 +28,9 @@ from guardian_one.integrations.financial_sync import (
     RocketMoneyProvider,
     SyncedAccount,
     SyncedTransaction,
+    TellerProvider,
+    parse_bank_csv,
+    parse_ofx,
 )
 
 
@@ -122,6 +126,7 @@ class CFO(BaseAgent):
         data_dir: Path | str = "data",
         rocket_money: RocketMoneyProvider | None = None,
         plaid: PlaidProvider | None = None,
+        teller: TellerProvider | None = None,
     ) -> None:
         super().__init__(config, audit)
         self._accounts: dict[str, Account] = {}
@@ -140,6 +145,8 @@ class CFO(BaseAgent):
             token_store_path=self._data_dir / "plaid_tokens.json",
         )
         self._plaid_connected = False
+        self._teller = teller or TellerProvider()
+        self._teller_connected = False
         self._last_sync: str = ""
 
     def initialize(self) -> None:
@@ -164,6 +171,12 @@ class CFO(BaseAgent):
         else:
             self._plaid_connected = False
 
+        # Attempt Teller connection
+        if self._teller.has_credentials:
+            self._teller_connected = self._teller.authenticate()
+        else:
+            self._teller_connected = False
+
         self.log("initialized", details={
             "accounts": len(self._accounts),
             "transactions": len(self._transactions),
@@ -175,6 +188,8 @@ class CFO(BaseAgent):
             "empower_has_key": self._empower.has_credentials,
             "plaid_connected": self._plaid_connected,
             "plaid_institutions": len(self._plaid.connected_institutions),
+            "teller_connected": self._teller_connected,
+            "teller_institutions": len(self._teller.connected_institutions),
         })
 
     # ------------------------------------------------------------------
@@ -1478,6 +1493,209 @@ class CFO(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Teller sync (direct bank API — no aggregator middleman)
+    # ------------------------------------------------------------------
+
+    @property
+    def teller(self) -> TellerProvider:
+        return self._teller
+
+    def sync_teller(self) -> dict[str, Any]:
+        """Pull accounts and transactions from Teller-connected banks.
+
+        Teller connects directly to bank APIs (BofA, Chase, Wells Fargo,
+        Capital One, etc.) without Plaid's browser widget overhead.
+        """
+        if not self._teller_connected:
+            return {
+                "source": "teller",
+                "connected": False,
+                "error": self._teller.last_error or "Not connected",
+            }
+
+        synced_accounts = self._teller.fetch_accounts()
+        now = datetime.now(timezone.utc)
+        start = (now - timedelta(days=90)).isoformat()[:10]
+        end = now.isoformat()[:10]
+        synced_transactions = self._teller.fetch_transactions(start, end)
+
+        # Merge accounts
+        accounts_added = 0
+        accounts_updated = 0
+        for sa in synced_accounts:
+            existing = self._accounts.get(sa.name)
+            if existing:
+                existing.balance = sa.balance
+                existing.last_synced = sa.last_updated
+                accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(sa.account_type)
+                except ValueError:
+                    acct_type = AccountType.CHECKING
+                self._accounts[sa.name] = Account(
+                    name=sa.name,
+                    account_type=acct_type,
+                    balance=sa.balance,
+                    institution=sa.institution,
+                    last_synced=sa.last_updated,
+                )
+                accounts_added += 1
+
+        # Merge transactions (deduplicate)
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+        tx_added = 0
+        for st in synced_transactions:
+            key = (st.date, st.description, st.amount)
+            if key not in existing_keys:
+                try:
+                    cat = TransactionCategory(st.category)
+                except ValueError:
+                    cat = TransactionCategory.OTHER
+                self._transactions.append(Transaction(
+                    date=st.date,
+                    description=st.description,
+                    amount=st.amount,
+                    category=cat,
+                    account=st.account,
+                    metadata={"source": "teller"},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        if accounts_added or accounts_updated or tx_added:
+            self.save_ledger()
+
+        result = {
+            "source": "teller",
+            "connected": True,
+            "institutions": self._teller.connected_institutions,
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "transactions_added": tx_added,
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.log("teller_sync", details=result)
+        return result
+
+    def teller_status(self) -> dict[str, Any]:
+        """Current Teller connection status."""
+        return {
+            **self._teller.status(),
+            "connected": self._teller_connected,
+        }
+
+    # ------------------------------------------------------------------
+    # File imports (CSV, OFX — no API needed)
+    # ------------------------------------------------------------------
+
+    def import_bank_csv(
+        self,
+        csv_path: str | Path,
+        institution: str = "",
+        account_name: str = "",
+        account_type: str = "checking",
+    ) -> dict[str, Any]:
+        """Import transactions from any bank's CSV export.
+
+        Works with BofA, Chase, Wells Fargo, Capital One, Citi, and most
+        others.  Auto-detects column names.
+
+        Usage:
+            python main.py --import-csv path/to/chase_transactions.csv
+            python main.py --import-csv path/to/bofa_checking.csv --import-institution "Bank of America"
+        """
+        accounts, transactions = parse_bank_csv(
+            csv_path,
+            institution=institution,
+            account_name=account_name,
+            account_type=account_type,
+        )
+        return self._merge_imported(accounts, transactions, source="bank_csv", path=str(csv_path))
+
+    def import_ofx(self, ofx_path: str | Path) -> dict[str, Any]:
+        """Import transactions from an OFX/QFX file.
+
+        OFX is the standard bank export format.  Download from your bank's
+        website under "Download transactions" → "Quicken (QFX)" or "OFX".
+
+        Usage:
+            python main.py --import-ofx path/to/download.ofx
+            python main.py --import-ofx path/to/statement.qfx
+        """
+        accounts, transactions = parse_ofx(ofx_path)
+        return self._merge_imported(accounts, transactions, source="ofx", path=str(ofx_path))
+
+    def _merge_imported(
+        self,
+        synced_accounts: list[SyncedAccount],
+        synced_transactions: list[SyncedTransaction],
+        source: str,
+        path: str,
+    ) -> dict[str, Any]:
+        """Merge imported accounts/transactions into the ledger (shared logic)."""
+        accounts_added = 0
+        accounts_updated = 0
+        for sa in synced_accounts:
+            existing = self._accounts.get(sa.name)
+            if existing:
+                if sa.balance != 0.0:
+                    existing.balance = sa.balance
+                existing.last_synced = sa.last_updated
+                accounts_updated += 1
+            else:
+                try:
+                    acct_type = AccountType(sa.account_type)
+                except ValueError:
+                    acct_type = AccountType.CHECKING
+                self._accounts[sa.name] = Account(
+                    name=sa.name,
+                    account_type=acct_type,
+                    balance=sa.balance,
+                    institution=sa.institution,
+                    last_synced=sa.last_updated,
+                )
+                accounts_added += 1
+
+        existing_keys = {
+            (tx.date, tx.description, tx.amount) for tx in self._transactions
+        }
+        tx_added = 0
+        for st in synced_transactions:
+            key = (st.date, st.description, st.amount)
+            if key not in existing_keys:
+                try:
+                    cat = TransactionCategory(st.category)
+                except ValueError:
+                    cat = TransactionCategory.OTHER
+                self._transactions.append(Transaction(
+                    date=st.date,
+                    description=st.description,
+                    amount=st.amount,
+                    category=cat,
+                    account=st.account,
+                    metadata={"source": source},
+                ))
+                existing_keys.add(key)
+                tx_added += 1
+
+        if accounts_added or accounts_updated or tx_added:
+            self.save_ledger()
+
+        result = {
+            "source": source,
+            "path": path,
+            "accounts_added": accounts_added,
+            "accounts_updated": accounts_updated,
+            "transactions_added": tx_added,
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.log(f"{source}_import", details=result)
+        return result
+
+    # ------------------------------------------------------------------
     # Dashboard
     # ------------------------------------------------------------------
 
@@ -1506,6 +1724,7 @@ class CFO(BaseAgent):
             "net_worth_trend": self.net_worth_trend(months=6),
             "rocket_money": self.rocket_money_status(),
             "plaid": self.plaid_status(),
+            "teller": self.teller_status(),
         }
 
     def generate_excel(
@@ -1575,16 +1794,20 @@ class CFO(BaseAgent):
             "rocket_money": self.rocket_money_status(),
             "empower": self.empower_status(),
             "plaid": self.plaid_status(),
+            "teller": self.teller_status(),
             "ledger_path": str(self._ledger_path),
         }
 
     def sync_all(self) -> dict[str, Any]:
-        """Run a full sync cycle — Plaid + Empower + Rocket Money — and return results."""
+        """Run a full sync cycle — Teller + Plaid + Empower + Rocket Money — and return results."""
         results: dict[str, Any] = {
             "synced_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        # Plaid (direct bank connections — primary source)
+        # Teller (direct bank API — preferred, no aggregator)
+        results["teller"] = self.sync_teller()
+
+        # Plaid (bank aggregator — fallback if Teller not configured)
         results["plaid"] = self.sync_plaid()
 
         # Empower (retirement accounts)
@@ -1670,6 +1893,19 @@ class CFO(BaseAgent):
             recommendations.append(
                 "Set PLAID_CLIENT_ID and PLAID_SECRET in .env, then run "
                 "'python main.py --connect' to link bank accounts (read-only)."
+            )
+
+        # Teller sync (direct bank API — no aggregator)
+        if self._teller_connected:
+            teller_sync = self.sync_teller()
+            actions.append(
+                f"Teller sync: {teller_sync.get('accounts_added', 0)} new accounts, "
+                f"{teller_sync.get('transactions_added', 0)} new transactions."
+            )
+        elif not self._teller.has_credentials:
+            recommendations.append(
+                "Set TELLER_ACCESS_TOKEN in .env for direct bank connections "
+                "(no Plaid browser widget needed). Sign up at teller.io."
             )
 
         # Bill checks

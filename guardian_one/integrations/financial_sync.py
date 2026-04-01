@@ -1,13 +1,20 @@
-"""Financial integration — Rocket Money and Plaid providers.
+"""Financial integration — multi-provider data pipeline.
 
 Providers auto-detect credentials from environment variables.
 When credentials are absent they operate in offline mode.
 
-Rocket Money data paths:
-1. API sync (ROCKET_MONEY_API_KEY) — real-time account/transaction pull
-2. CSV import — Gmail agent downloads CSVs, CFO ingests them via sync_from_csv()
+Provider hierarchy (sync_all order):
+1. Teller    — direct bank API, certificate-based auth, no browser widget
+2. Plaid     — bank aggregator with Link UI (browser OAuth)
+3. Empower   — retirement accounts (API key or session auth)
+4. Rocket Money — aggregator fallback (API or CSV import)
 
-Both paths merge into the CFO ledger.
+File import paths (no API needed):
+- Generic bank CSV  — any bank's transaction export
+- OFX/QFX files     — standard Open Financial Exchange format
+- Rocket Money CSV  — RM-specific export format
+
+All paths merge into the CFO ledger via SyncedAccount/SyncedTransaction.
 """
 
 from __future__ import annotations
@@ -17,8 +24,10 @@ import csv
 import io
 import json
 import os
+import re
 import urllib.request
 import urllib.error
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1148,3 +1157,665 @@ def _map_plaid_category(plaid_category: str) -> str:
         "transfer": "savings",
     }
     return mapping.get(plaid_category, "other")
+
+
+# ---------------------------------------------------------------------------
+# Teller — direct bank API (no aggregator middleman)
+# ---------------------------------------------------------------------------
+
+class TellerProvider(FinancialProvider):
+    """Teller.io integration — direct, read-only bank connections.
+
+    Teller connects directly to banks via their internal APIs, bypassing
+    aggregator middlemen like Plaid.  It uses certificate-based auth
+    (mTLS) or API token auth for simpler setups.
+
+    Advantages over Plaid:
+    - No browser widget / Link UI required
+    - Simpler onboarding (sign up → get token → done)
+    - Free tier: 1000 enrolled accounts
+    - Direct bank connection, not screen scraping
+
+    Supported banks: BofA, Chase, Wells Fargo, Capital One, Citi,
+    US Bank, PNC, TD Bank, and 5000+ others.
+
+    Credentials:
+    - ``TELLER_ACCESS_TOKEN`` — API token from teller.io dashboard
+    - ``TELLER_ENVIRONMENT`` — sandbox | development | production
+
+    Connection flow:
+    1. Sign up at teller.io and create an application
+    2. Enroll accounts via Teller Connect (browser) or API
+    3. Copy your access token → set TELLER_ACCESS_TOKEN in .env
+    4. Guardian One pulls balances + transactions automatically
+    """
+
+    VALID_ENVS = ("sandbox", "development", "production")
+
+    _ENV_HOSTS = {
+        "sandbox": "https://api.teller.io",
+        "development": "https://api.teller.io",
+        "production": "https://api.teller.io",
+    }
+
+    def __init__(
+        self,
+        access_token: str | None = None,
+        env: str | None = None,
+    ) -> None:
+        self._access_token = access_token or os.environ.get("TELLER_ACCESS_TOKEN", "")
+        self._env = env or os.environ.get("TELLER_ENVIRONMENT", "sandbox")
+        self._base_url = self._ENV_HOSTS.get(self._env, self._ENV_HOSTS["sandbox"])
+        self._authenticated = False
+        self._last_error: str = ""
+        self._enrollments: list[dict[str, Any]] = []
+
+    @property
+    def provider_name(self) -> str:
+        return "teller"
+
+    @property
+    def has_credentials(self) -> bool:
+        return bool(self._access_token)
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._authenticated
+
+    @property
+    def last_error(self) -> str:
+        return self._last_error
+
+    @property
+    def connected_institutions(self) -> list[str]:
+        """List of enrolled institution names."""
+        return [e.get("institution", {}).get("name", "") for e in self._enrollments]
+
+    def authenticate(self) -> bool:
+        """Validate Teller access token by listing accounts."""
+        if not self.has_credentials:
+            self._last_error = "Missing TELLER_ACCESS_TOKEN env var."
+            self._authenticated = False
+            return False
+
+        result = self._request("GET", "/accounts")
+        if result is not None and isinstance(result, list):
+            self._authenticated = True
+            self._last_error = ""
+            # Extract unique enrollments
+            seen: set[str] = set()
+            for acct in result:
+                enrollment = acct.get("enrollment_id", "")
+                if enrollment and enrollment not in seen:
+                    seen.add(enrollment)
+                    self._enrollments.append({
+                        "enrollment_id": enrollment,
+                        "institution": acct.get("institution", {}),
+                    })
+            return True
+        elif isinstance(result, dict) and result.get("error"):
+            self._last_error = f"Teller auth failed: {result.get('error', {}).get('message', 'unknown')}"
+        else:
+            self._last_error = "Teller auth failed: no response"
+        self._authenticated = False
+        return False
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+    ) -> Any:
+        """Make an authenticated request to the Teller API.
+
+        Teller uses HTTP Basic Auth with token as username, empty password.
+        """
+        url = f"{self._base_url}{path}"
+        data = json.dumps(body).encode() if body else None
+
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method=method,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+
+        # Basic Auth: token as username, empty password
+        import base64
+        credentials = base64.b64encode(f"{self._access_token}:".encode()).decode()
+        req.add_header("Authorization", f"Basic {credentials}")
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode() if e.fp else ""
+            try:
+                return json.loads(error_body)
+            except (json.JSONDecodeError, ValueError):
+                return {"error": {"message": error_body or f"HTTP {e.code}"}}
+        except urllib.error.URLError as exc:
+            return {"error": {"message": f"Network error: {exc}"}}
+
+    def fetch_accounts(self) -> list[SyncedAccount]:
+        """Fetch all accounts from Teller."""
+        if not self._authenticated:
+            return []
+
+        result = self._request("GET", "/accounts")
+        if not isinstance(result, list):
+            return []
+
+        now = datetime.now(timezone.utc).isoformat()
+        accounts = []
+        for item in result:
+            # Teller balance is in "balances" sub-object
+            balances = item.get("balances", {})
+            balance = float(balances.get("current", balances.get("available", 0)) or 0)
+
+            acct_type = _map_teller_account_type(
+                item.get("type", ""), item.get("subtype", "")
+            )
+
+            institution = item.get("institution", {})
+            inst_name = institution.get("name", "") if isinstance(institution, dict) else str(institution)
+
+            accounts.append(SyncedAccount(
+                name=item.get("name", ""),
+                account_type=acct_type,
+                balance=balance,
+                institution=inst_name,
+                last_updated=now,
+                raw=item,
+            ))
+        return accounts
+
+    def fetch_transactions(self, start_date: str, end_date: str) -> list[SyncedTransaction]:
+        """Fetch transactions from all Teller-connected accounts."""
+        if not self._authenticated:
+            return []
+
+        # First get account list to iterate
+        accounts_result = self._request("GET", "/accounts")
+        if not isinstance(accounts_result, list):
+            return []
+
+        all_transactions: list[SyncedTransaction] = []
+        for acct in accounts_result:
+            acct_id = acct.get("id", "")
+            acct_name = acct.get("name", "")
+            if not acct_id:
+                continue
+
+            result = self._request("GET", f"/accounts/{acct_id}/transactions")
+            if not isinstance(result, list):
+                continue
+
+            for tx in result:
+                tx_date = tx.get("date", "")
+                if tx_date < start_date or tx_date > end_date:
+                    continue
+
+                amount = float(tx.get("amount", 0))
+                # Teller: negative = debit (outflow), positive = credit (inflow)
+                # CFO convention matches this
+
+                category = _map_teller_category(tx.get("type", ""))
+
+                all_transactions.append(SyncedTransaction(
+                    date=tx_date,
+                    description=tx.get("description", ""),
+                    amount=amount,
+                    category=category,
+                    account=acct_name,
+                    raw=tx,
+                ))
+
+        return all_transactions
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider_name,
+            "has_credentials": self.has_credentials,
+            "authenticated": self._authenticated,
+            "environment": self._env,
+            "enrollments": len(self._enrollments),
+            "institutions": self.connected_institutions,
+            "last_error": self._last_error,
+        }
+
+
+def _map_teller_account_type(acct_type: str, subtype: str = "") -> str:
+    """Map Teller account type/subtype to CFO AccountType."""
+    mapping = {
+        "depository": "checking",
+        "credit": "credit_card",
+        "loan": "loan",
+        "investment": "investment",
+    }
+    subtype_mapping = {
+        "checking": "checking",
+        "savings": "savings",
+        "money_market": "savings",
+        "cd": "savings",
+        "credit_card": "credit_card",
+        "mortgage": "loan",
+        "student": "loan",
+        "auto": "loan",
+        "401k": "retirement",
+        "401a": "retirement",
+        "ira": "retirement",
+        "roth": "retirement",
+        "roth_401k": "retirement",
+        "brokerage": "investment",
+    }
+    if subtype and subtype.lower() in subtype_mapping:
+        return subtype_mapping[subtype.lower()]
+    return mapping.get(acct_type.lower(), "checking")
+
+
+def _map_teller_category(tx_type: str) -> str:
+    """Map Teller transaction type to CFO TransactionCategory."""
+    mapping = {
+        "ach": "other",
+        "atm": "other",
+        "card_payment": "other",
+        "check": "other",
+        "deposit": "income",
+        "digital_payment": "other",
+        "fee": "other",
+        "interest": "income",
+        "transfer": "savings",
+        "wire": "other",
+    }
+    return mapping.get(tx_type.lower(), "other")
+
+
+# ---------------------------------------------------------------------------
+# Generic bank CSV importer
+# ---------------------------------------------------------------------------
+
+# Common column name aliases across banks
+_CSV_DATE_COLS = ("date", "posting date", "posted date", "transaction date", "trans date", "post date")
+_CSV_DESC_COLS = ("description", "memo", "narrative", "payee", "name", "details", "transaction description")
+_CSV_AMOUNT_COLS = ("amount", "transaction amount", "value")
+_CSV_DEBIT_COLS = ("debit", "withdrawals", "withdrawal", "debit amount")
+_CSV_CREDIT_COLS = ("credit", "deposits", "deposit", "credit amount")
+_CSV_CATEGORY_COLS = ("category", "type", "transaction type", "trans type")
+
+
+def _find_column(headers: list[str], aliases: tuple[str, ...]) -> str | None:
+    """Find a column name in headers by matching known aliases (case-insensitive)."""
+    lower_headers = {h.lower().strip(): h for h in headers}
+    for alias in aliases:
+        if alias in lower_headers:
+            return lower_headers[alias]
+    return None
+
+
+def parse_bank_csv(
+    csv_path: str | Path,
+    institution: str = "",
+    account_name: str = "",
+    account_type: str = "checking",
+) -> tuple[list[SyncedAccount], list[SyncedTransaction]]:
+    """Parse a generic bank CSV export into SyncedAccount + SyncedTransaction lists.
+
+    Works with exports from BofA, Chase, Wells Fargo, Capital One, Citi,
+    US Bank, and most other banks.  Auto-detects column names by matching
+    common aliases.
+
+    Args:
+        csv_path:      Path to the CSV file.
+        institution:   Bank name (e.g. "Bank of America"). Inferred from filename if empty.
+        account_name:  Account label. Inferred from filename if empty.
+        account_type:  One of: checking, savings, credit_card, loan, investment, retirement.
+
+    Returns:
+        Tuple of (accounts, transactions).
+    """
+    path = Path(csv_path)
+    if not path.exists():
+        return [], []
+
+    # Infer institution/account from filename if not provided
+    stem = path.stem.lower().replace("_", " ").replace("-", " ")
+    if not institution:
+        for bank in ("chase", "bofa", "bank of america", "wells fargo",
+                     "capital one", "citi", "us bank", "pnc", "td bank",
+                     "ally", "discover", "amex", "american express"):
+            if bank in stem:
+                institution = bank.title()
+                break
+        if not institution:
+            institution = "Bank"
+    if not account_name:
+        account_name = f"{institution} {account_type.replace('_', ' ').title()}"
+
+    text = path.read_text(encoding="utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return [], []
+
+    headers = list(rows[0].keys())
+
+    # Auto-detect columns
+    date_col = _find_column(headers, _CSV_DATE_COLS)
+    desc_col = _find_column(headers, _CSV_DESC_COLS)
+    amount_col = _find_column(headers, _CSV_AMOUNT_COLS)
+    debit_col = _find_column(headers, _CSV_DEBIT_COLS)
+    credit_col = _find_column(headers, _CSV_CREDIT_COLS)
+    category_col = _find_column(headers, _CSV_CATEGORY_COLS)
+
+    if not date_col:
+        return [], []  # Can't parse without a date column
+
+    now = datetime.now(timezone.utc).isoformat()
+    transactions: list[SyncedTransaction] = []
+    running_balance = 0.0
+
+    for row in rows:
+        # Parse date
+        date_val = row.get(date_col, "").strip()
+        if not date_val:
+            continue
+        # Normalize date to ISO format
+        date_val = _normalize_date(date_val)
+
+        # Parse amount
+        if amount_col:
+            amount = _parse_amount(row.get(amount_col, "0"))
+        elif debit_col or credit_col:
+            debit = _parse_amount(row.get(debit_col, "0")) if debit_col else 0.0
+            credit = _parse_amount(row.get(credit_col, "0")) if credit_col else 0.0
+            # Debits are outflows (negative), credits are inflows (positive)
+            amount = credit - debit
+        else:
+            continue  # Can't determine amount
+
+        running_balance += amount
+
+        # Description
+        desc = row.get(desc_col, "") if desc_col else ""
+        desc = desc.strip()
+
+        # Category
+        cat_raw = row.get(category_col, "") if category_col else ""
+        category = map_rocket_money_category(cat_raw) if cat_raw else "other"
+
+        transactions.append(SyncedTransaction(
+            date=date_val,
+            description=desc,
+            amount=amount,
+            category=category,
+            account=account_name,
+            raw=dict(row),
+        ))
+
+    account = SyncedAccount(
+        name=account_name,
+        account_type=account_type,
+        balance=running_balance,
+        institution=institution,
+        last_updated=now,
+    )
+    return [account], transactions
+
+
+def _normalize_date(date_str: str) -> str:
+    """Attempt to normalize various date formats to ISO YYYY-MM-DD."""
+    date_str = date_str.strip()
+    # Already ISO
+    if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+        return date_str[:10]
+    # MM/DD/YYYY or M/D/YYYY
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", date_str)
+    if m:
+        return f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    # MM/DD/YY
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{2})", date_str)
+    if m:
+        year = int(m.group(3))
+        full_year = 2000 + year if year < 70 else 1900 + year
+        return f"{full_year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    # DD-Mon-YYYY (e.g. 15-Jan-2026)
+    m = re.match(r"(\d{1,2})-(\w{3})-(\d{4})", date_str)
+    if m:
+        try:
+            dt = datetime.strptime(date_str, "%d-%b-%Y")
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    # Fallback: return as-is
+    return date_str
+
+
+def _parse_amount(val: str) -> float:
+    """Parse an amount string, handling $, commas, parentheses (negative)."""
+    if not val or not val.strip():
+        return 0.0
+    val = val.strip()
+    negative = val.startswith("(") and val.endswith(")")
+    val = val.replace("$", "").replace(",", "").replace("(", "").replace(")", "")
+    try:
+        result = float(val)
+        return -result if negative else result
+    except ValueError:
+        return 0.0
+
+
+# ---------------------------------------------------------------------------
+# OFX / QFX file importer
+# ---------------------------------------------------------------------------
+
+def parse_ofx(
+    ofx_path: str | Path,
+) -> tuple[list[SyncedAccount], list[SyncedTransaction]]:
+    """Parse an OFX/QFX file (Open Financial Exchange) into Guardian One format.
+
+    OFX is the standard bank export format supported by virtually every bank.
+    Most banks offer "Download transactions" → "Quicken (QFX)" or "OFX" format.
+
+    Handles both SGML-style OFX (v1.x) and XML-style OFX (v2.x).
+
+    Returns:
+        Tuple of (accounts, transactions).
+    """
+    path = Path(ofx_path)
+    if not path.exists():
+        return [], []
+
+    raw = path.read_text(encoding="utf-8-sig", errors="replace")
+
+    # OFX v1.x uses SGML (not valid XML) — convert to XML
+    if "<OFX>" in raw and "<?xml" not in raw:
+        raw = _sgml_ofx_to_xml(raw)
+
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        return [], []
+
+    now = datetime.now(timezone.utc).isoformat()
+    accounts: list[SyncedAccount] = []
+    transactions: list[SyncedTransaction] = []
+
+    # Find all statement responses (banking + credit card)
+    for stmt_tag in ("STMTTRNRS", "CCSTMTTRNRS"):
+        for stmt_wrapper in root.iter(stmt_tag):
+            stmt = (
+                stmt_wrapper.find(".//STMTRS")
+                or stmt_wrapper.find(".//CCSTMTRS")
+            )
+            if stmt is None:
+                continue
+
+            # Account info
+            acct_from = stmt.find("BANKACCTFROM") or stmt.find("CCACCTFROM")
+            acct_id = ""
+            acct_type = "checking"
+            institution = ""
+
+            if acct_from is not None:
+                acct_id_el = acct_from.find("ACCTID")
+                acct_id = acct_id_el.text.strip() if acct_id_el is not None and acct_id_el.text else ""
+                # Mask account number for display
+                masked_id = f"***{acct_id[-4:]}" if len(acct_id) >= 4 else acct_id
+
+                type_el = acct_from.find("ACCTTYPE")
+                if type_el is not None and type_el.text:
+                    acct_type = _map_ofx_account_type(type_el.text.strip())
+                elif stmt_tag == "CCSTMTTRNRS":
+                    acct_type = "credit_card"
+
+                bank_id_el = acct_from.find("BANKID")
+                institution = bank_id_el.text.strip() if bank_id_el is not None and bank_id_el.text else "Bank"
+
+            # Balance
+            balance = 0.0
+            bal_el = stmt.find(".//BALAMT") or stmt.find(".//LEDGERBAL/BALAMT")
+            if bal_el is not None and bal_el.text:
+                try:
+                    balance = float(bal_el.text.strip())
+                except ValueError:
+                    pass
+
+            acct_label = f"{institution} {acct_type.replace('_', ' ').title()} {masked_id}"
+            accounts.append(SyncedAccount(
+                name=acct_label,
+                account_type=acct_type,
+                balance=balance,
+                institution=institution,
+                last_updated=now,
+            ))
+
+            # Transactions
+            tx_list = stmt.find("BANKTRANLIST") or stmt.find("CCSTMTRS")
+            if tx_list is None:
+                tx_list = stmt  # fallback: search within stmt directly
+            for stmttrn in tx_list.iter("STMTTRN"):
+                tx_date = ""
+                dt_el = stmttrn.find("DTPOSTED")
+                if dt_el is not None and dt_el.text:
+                    tx_date = _parse_ofx_date(dt_el.text.strip())
+
+                amount = 0.0
+                amt_el = stmttrn.find("TRNAMT")
+                if amt_el is not None and amt_el.text:
+                    try:
+                        amount = float(amt_el.text.strip())
+                    except ValueError:
+                        pass
+
+                desc = ""
+                for desc_tag in ("NAME", "MEMO", "PAYEE"):
+                    desc_el = stmttrn.find(desc_tag)
+                    if desc_el is not None and desc_el.text:
+                        desc = desc_el.text.strip()
+                        break
+
+                tx_type_el = stmttrn.find("TRNTYPE")
+                tx_type = tx_type_el.text.strip().lower() if tx_type_el is not None and tx_type_el.text else ""
+                category = _map_ofx_tx_type(tx_type)
+
+                transactions.append(SyncedTransaction(
+                    date=tx_date,
+                    description=desc,
+                    amount=amount,
+                    category=category,
+                    account=acct_label,
+                ))
+
+    return accounts, transactions
+
+
+def _sgml_ofx_to_xml(raw: str) -> str:
+    """Convert SGML-style OFX v1.x to valid XML for parsing.
+
+    OFX v1.x uses SGML with unclosed tags like <TRNAMT>123.45
+    This converts them to <TRNAMT>123.45</TRNAMT>.
+    """
+    # Strip the header (everything before <OFX>)
+    idx = raw.find("<OFX>")
+    if idx == -1:
+        return raw
+    body = raw[idx:]
+
+    # Self-closing elements that contain data (not containers)
+    data_tags = {
+        "DTSERVER", "LANGUAGE", "ORG", "FID", "TRNUID", "CODE",
+        "SEVERITY", "MESSAGE", "BANKID", "ACCTID", "ACCTTYPE",
+        "DTSTART", "DTEND", "TRNTYPE", "DTPOSTED", "DTUSER",
+        "TRNAMT", "FITID", "CHECKNUM", "NAME", "MEMO", "PAYEE",
+        "BALAMT", "DTASOF", "CURDEF", "SIC",
+    }
+
+    lines = body.split("\n")
+    result: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Match <TAG>value (no closing tag)
+        m = re.match(r"<(\w+)>(.+)", stripped)
+        if m:
+            tag = m.group(1)
+            value = m.group(2).strip()
+            if tag.upper() in data_tags and not value.startswith("<"):
+                result.append(f"<{tag}>{value}</{tag}>")
+                continue
+        result.append(stripped)
+
+    xml_str = "\n".join(result)
+    # Wrap in XML declaration
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+
+
+def _parse_ofx_date(date_str: str) -> str:
+    """Parse OFX date format (YYYYMMDDHHMMSS or YYYYMMDD) to ISO date."""
+    # Strip timezone info like [0:GMT] or [-5:EST]
+    date_str = re.sub(r"\[.*?\]", "", date_str).strip()
+    if len(date_str) >= 8:
+        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+    return date_str
+
+
+def _map_ofx_account_type(ofx_type: str) -> str:
+    """Map OFX account type to CFO AccountType."""
+    mapping = {
+        "CHECKING": "checking",
+        "SAVINGS": "savings",
+        "MONEYMRKT": "savings",
+        "CREDITLINE": "credit_card",
+        "CREDITCARD": "credit_card",
+        "CD": "savings",
+    }
+    return mapping.get(ofx_type.upper(), "checking")
+
+
+def _map_ofx_tx_type(tx_type: str) -> str:
+    """Map OFX transaction type to CFO TransactionCategory."""
+    mapping = {
+        "credit": "income",
+        "debit": "other",
+        "int": "income",
+        "div": "income",
+        "fee": "other",
+        "srvchg": "other",
+        "dep": "income",
+        "atm": "other",
+        "pos": "other",
+        "xfer": "savings",
+        "check": "other",
+        "payment": "other",
+        "cash": "other",
+        "directdep": "income",
+        "directdebit": "other",
+        "repeatpmt": "other",
+        "other": "other",
+    }
+    return mapping.get(tx_type.lower(), "other")
