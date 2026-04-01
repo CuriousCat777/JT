@@ -57,11 +57,12 @@ class ConflictRecord:
 class Mediator:
     """Cross-agent conflict resolution engine."""
 
-    def __init__(self, audit: AuditLog) -> None:
+    def __init__(self, audit: AuditLog, budget_limit: float = 0.0) -> None:
         self._audit = audit
         self._history: list[ConflictRecord] = []
         self._pending_proposals: list[Proposal] = []
         self._lock = threading.Lock()
+        self._budget_limit = budget_limit
 
     def submit_proposal(self, proposal: Proposal) -> None:
         with self._lock:
@@ -87,6 +88,16 @@ class Mediator:
                     if a.time_start < b.time_end and b.time_start < a.time_end:
                         record = self._resolve_time_conflict(a, b)
                         conflicts.append(record)
+
+                # Budget exceeded check
+                if (
+                    self._budget_limit > 0
+                    and a.cost is not None
+                    and b.cost is not None
+                    and a.cost + b.cost > self._budget_limit
+                ):
+                    record = self._resolve_budget_conflict(a, b)
+                    conflicts.append(record)
 
                 # Same resource contention
                 if a.resource == b.resource and a.agent != b.agent:
@@ -124,6 +135,52 @@ class Mediator:
             action="conflict_resolved:time_overlap",
             severity=Severity.WARNING,
             details={"rationale": rationale},
+            requires_review=(resolution == Resolution.DEFER_TO_OWNER),
+        )
+        return record
+
+    def _resolve_budget_conflict(self, a: Proposal, b: Proposal) -> ConflictRecord:
+        """Approve the lower-cost proposal; defer to owner if costs are equal."""
+        cost_a = a.cost or 0.0
+        cost_b = b.cost or 0.0
+
+        if cost_a < cost_b:
+            resolution = Resolution.APPROVE_FIRST
+            rationale = (
+                f"{a.agent} (${cost_a:,.2f}) is cheaper than "
+                f"{b.agent} (${cost_b:,.2f}). Combined ${cost_a + cost_b:,.2f} "
+                f"exceeds budget ${self._budget_limit:,.2f}."
+            )
+        elif cost_b < cost_a:
+            resolution = Resolution.APPROVE_SECOND
+            rationale = (
+                f"{b.agent} (${cost_b:,.2f}) is cheaper than "
+                f"{a.agent} (${cost_a:,.2f}). Combined ${cost_a + cost_b:,.2f} "
+                f"exceeds budget ${self._budget_limit:,.2f}."
+            )
+        else:
+            resolution = Resolution.DEFER_TO_OWNER
+            rationale = (
+                f"Both proposals cost ${cost_a:,.2f}. Combined ${cost_a + cost_b:,.2f} "
+                f"exceeds budget ${self._budget_limit:,.2f}. Deferring to Jeremy."
+            )
+
+        record = ConflictRecord(
+            conflict_type=ConflictType.BUDGET_EXCEEDED,
+            proposals=[a, b],
+            resolution=resolution,
+            rationale=rationale,
+        )
+        self._audit.record(
+            agent="mediator",
+            action="conflict_resolved:budget_exceeded",
+            severity=Severity.WARNING,
+            details={
+                "rationale": rationale,
+                "cost_a": cost_a,
+                "cost_b": cost_b,
+                "budget_limit": self._budget_limit,
+            },
             requires_review=(resolution == Resolution.DEFER_TO_OWNER),
         )
         return record
