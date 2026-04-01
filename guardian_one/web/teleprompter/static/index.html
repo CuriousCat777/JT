@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>TelePrompter</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+  <!-- ======================== SCRIPTS VIEW ======================== -->
+  <div id="scripts-view" class="view active">
+    <div class="view-header">Scripts</div>
+    <div class="view-sub">Tap a script to start the teleprompter</div>
+    <div id="scripts-list">
+      <div class="loading"><div class="spinner"></div> Loading...</div>
+    </div>
+  </div>
+
+  <!-- ======================== GENERATE VIEW ======================== -->
+  <div id="generate-view" class="view">
+    <div class="view-header">Generate</div>
+    <div class="view-sub">AI-powered script creation for clinical scenarios</div>
+
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select id="gen-category" class="form-select">
+        <option value="admission">Admission</option>
+        <option value="discharge">Discharge</option>
+        <option value="consult">Consultation</option>
+        <option value="handoff">Handoff (SBAR)</option>
+        <option value="bad_news">Difficult News (SPIKES)</option>
+        <option value="family">Family Meeting</option>
+        <option value="informed_consent">Informed Consent</option>
+        <option value="code">Code / Rapid Response</option>
+        <option value="cross_cover">Cross-Cover</option>
+        <option value="general" selected>General</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Chief Complaint</label>
+      <input id="gen-complaint" class="form-input" placeholder="e.g., chest pain, COPD exacerbation">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Patient Age</label>
+      <input id="gen-age" class="form-input" type="number" placeholder="e.g., 72">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Setting / Context</label>
+      <input id="gen-setting" class="form-input" placeholder="e.g., ICU step-down, night shift">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Scenario Description (optional)</label>
+      <textarea id="gen-scenario" class="form-textarea" placeholder="Describe the clinical scenario in detail..."></textarea>
+    </div>
+
+    <button id="gen-btn" class="btn" onclick="window.app.generateScript()">Generate Script</button>
+  </div>
+
+  <!-- ======================== PRACTICE VIEW ======================== -->
+  <div id="practice-view" class="view">
+    <div class="view-header">Practice</div>
+    <div class="view-sub">Track your communication skills over time</div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-sessions">--</div>
+        <div class="stat-label">Total Sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-rating">--</div>
+        <div class="stat-label">Avg Rating</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-minutes">--</div>
+        <div class="stat-label">Minutes Practiced</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-week">--</div>
+        <div class="stat-label">This Week</div>
+      </div>
+    </div>
+
+    <div style="padding:0 16px;margin-bottom:8px;">
+      <div style="font-size:16px;font-weight:600;">Session History</div>
+    </div>
+    <div id="sessions-list">
+      <div class="empty">No practice sessions yet.</div>
+    </div>
+  </div>
+
+  <!-- ======================== ADVISORY VIEW ======================== -->
+  <div id="advisory-view" class="view">
+    <div class="view-header">Advisory</div>
+    <div class="view-sub">AI coaching for patient communication</div>
+
+    <div class="form-group">
+      <label class="form-label">Describe a scenario for coaching</label>
+      <textarea id="advisory-input" class="form-textarea" placeholder="e.g., Patient is anxious about diagnosis, family wants aggressive care but patient has expressed DNR wishes..."></textarea>
+    </div>
+    <button id="advisory-btn" class="btn" onclick="window.app.askAdvisory()">Get Advice</button>
+
+    <div style="padding:12px 16px 4px;font-size:16px;font-weight:600;">Recent Tips</div>
+    <div id="tips-list">
+      <div class="empty"><div class="empty-icon">💡</div>No tips yet.</div>
+    </div>
+  </div>
+
+  <!-- ======================== PROMPTER VIEW ======================== -->
+  <div id="prompter-view" class="view">
+    <div class="prompter-container">
+      <div class="prompter-header">
+        <button class="prompter-back" onclick="window.app.exitPrompter()">← Done</button>
+        <div class="prompter-title" id="prompter-script-title">Script</div>
+      </div>
+      <div class="prompter-scroll" id="prompter-text"></div>
+      <div class="prompter-controls">
+        <button onclick="document.getElementById('prompter-text').scrollTop -= 200">↑</button>
+        <button id="play-btn" class="play-btn" onclick="window.app.toggleScrolling()">▶</button>
+        <button onclick="document.getElementById('prompter-text').scrollTop += 200">↓</button>
+        <input type="range" class="speed-slider" id="speed-slider" min="1" max="10" value="3"
+               oninput="window.app.updateSpeed(this.value)">
+        <span class="speed-display" id="speed-display">3x</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== COMPLETE PRACTICE MODAL ======================== -->
+  <div id="complete-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">Rate Your Practice</div>
+      <p style="text-align:center;color:var(--text-secondary);font-size:14px;margin-bottom:12px;">
+        How did that session feel?
+      </p>
+      <div class="rating" id="rating-stars">
+        <button onclick="window.app.setRating(1)">★</button>
+        <button onclick="window.app.setRating(2)">★</button>
+        <button onclick="window.app.setRating(3)">★</button>
+        <button onclick="window.app.setRating(4)">★</button>
+        <button onclick="window.app.setRating(5)">★</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <textarea id="practice-notes" class="form-textarea" placeholder="What went well? What to improve?"></textarea>
+      </div>
+      <button class="btn" onclick="window.app.submitPractice()">Submit & Get AI Feedback</button>
+      <button class="btn btn-secondary" onclick="window.app.cancelComplete()">Skip</button>
+    </div>
+  </div>
+
+  <!-- ======================== BOTTOM NAV ======================== -->
+  <nav id="main-nav" class="nav">
+    <button class="nav-btn active" data-view="scripts-view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      Scripts
+    </button>
+    <button class="nav-btn" data-view="generate-view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      Generate
+    </button>
+    <button class="nav-btn" data-view="practice-view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      Practice
+    </button>
+    <button class="nav-btn" data-view="advisory-view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Advisory
+    </button>
+  </nav>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

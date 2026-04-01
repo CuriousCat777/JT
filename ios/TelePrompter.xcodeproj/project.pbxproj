@@ -1,0 +1,26 @@
+// !$*UTF8*$!
+// TelePrompter Xcode Project
+// Generated for Guardian One — Dr. Jeremy Tabernero
+//
+// To open: Open this .xcodeproj in Xcode on your Mac.
+// Minimum deployment target: iOS 17.0
+// Swift version: 5.9+
+//
+// IMPORTANT: This is a placeholder project file.
+// For full Xcode project generation, run:
+//   1. Open Xcode
+//   2. File → New → Project → iOS → App
+//   3. Product Name: TelePrompter
+//   4. Team: Your Apple Developer Team
+//   5. Bundle ID: com.guardianone.teleprompter
+//   6. Interface: SwiftUI, Language: Swift
+//   7. Copy all files from ios/TelePrompter/ into the project
+//
+// Dependencies to add via Swift Package Manager:
+//   - GRDB (https://github.com/groue/GRDB.swift) for encrypted SQLite
+//   - Optional: SQLCipher via GRDB for HIPAA-grade encryption
+//
+// Build Settings:
+//   - Deployment Target: iOS 17.0
+//   - Swift Language Version: 5.9
+//   - Code Sign: Automatic (your team)

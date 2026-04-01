@@ -225,6 +225,29 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
+  teleprompter:
+    enabled: true
+    schedule_interval_minutes: 120
+    allowed_resources:
+      - scripts
+      - practice_sessions
+      - advisory
+    custom:
+      server_port: 5200
+      default_scroll_speed: 3
+      practice_goal_weekly: 3        # Target practice sessions per week
+      script_categories:
+        - admission
+        - discharge
+        - consult
+        - code
+        - handoff
+        - family
+        - bad_news
+        - informed_consent
+        - cross_cover
+        - general
+
   device_agent:
     enabled: true
     schedule_interval_minutes: 15
