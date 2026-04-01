@@ -225,6 +225,23 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
+  input_cortex:
+    enabled: true
+    schedule_interval_minutes: 5
+    allowed_resources:
+      - keystroke_stream
+      - context_index
+      - behavioral_digest
+    custom:
+      session_timeout_seconds: 300     # Flush session after 5 min idle
+      min_words_to_store: 3            # Skip very short input
+      daemon_mode: both                # listener + watcher
+      listener_port: 9473              # HTTP endpoint for phone payloads
+      phi_scrub_enabled: true          # Always scrub PHI/PII
+      credential_redact: true          # Never store password entries
+      daily_digest_hour: 23            # Generate digest at 11 PM
+      retention_days: 90               # Keep processed sessions for 90 days
+
   device_agent:
     enabled: true
     schedule_interval_minutes: 15

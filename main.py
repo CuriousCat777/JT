@@ -36,6 +36,12 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --cortex               # InputCortex status — keystroke intelligence
+    python main.py --cortex-daemon        # Start InputCortex daemon (listener+watcher)
+    python main.py --cortex-daemon listener  # HTTP-only mode
+    python main.py --cortex-digest        # Today's behavioral digest
+    python main.py --cortex-query search  # Query context blocks by category
+    python main.py --cortex-pattern 7     # Behavioral pattern analysis (N days)
 """
 
 from __future__ import annotations
@@ -64,6 +70,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.input_cortex import InputCortex
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -91,6 +98,11 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    cortex_cfg = config.agents.get("input_cortex", AgentConfig(name="input_cortex"))
+    guardian.register_agent(InputCortex(
+        config=cortex_cfg, audit=guardian.audit, data_dir=config.data_dir,
+    ))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -293,6 +305,18 @@ def main() -> None:
                         help="Push remediation status to Notion")
     parser.add_argument("--connector-audit", action="store_true",
                         help="Audit Claude connector/MCP attack surface")
+    parser.add_argument("--cortex", action="store_true",
+                        help="InputCortex status — keystroke intelligence agent")
+    parser.add_argument("--cortex-daemon", nargs="?", const="both", default=None,
+                        help="Start InputCortex daemon (listener|watcher|both)")
+    parser.add_argument("--cortex-port", type=int, default=9473,
+                        help="InputCortex listener port (default: 9473)")
+    parser.add_argument("--cortex-digest", nargs="?", const="today", default=None,
+                        help="Generate InputCortex daily digest (date or 'today')")
+    parser.add_argument("--cortex-query", type=str, default=None,
+                        help="Query InputCortex context (category filter)")
+    parser.add_argument("--cortex-pattern", type=int, default=None,
+                        help="InputCortex behavioral pattern analysis (N days)")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
     parser.add_argument("--cfo-clean", action="store_true",
@@ -614,6 +638,94 @@ def main() -> None:
                     print(f"    [!!] {alert}")
         else:
             print(dev_agent.dashboard_text())
+
+    elif args.cortex or args.cortex_daemon or args.cortex_digest or args.cortex_query is not None or args.cortex_pattern is not None:
+        cortex = guardian.get_agent("input_cortex")
+        if not cortex or not isinstance(cortex, InputCortex):
+            print("InputCortex agent not available.")
+            guardian.shutdown()
+            return
+        cortex.initialize()
+
+        if args.cortex_daemon:
+            mode = args.cortex_daemon
+            port = args.cortex_port
+            print(f"\n  InputCortex daemon starting (mode={mode}, port={port})")
+            print(f"  Endpoints:")
+            print(f"    POST http://localhost:{port}/input   — single payload")
+            print(f"    POST http://localhost:{port}/batch   — batch payloads")
+            print(f"    GET  http://localhost:{port}/status  — agent status")
+            print(f"    GET  http://localhost:{port}/query   — query context")
+            print(f"  Drop dir: {cortex._drop_dir}")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            cortex.start_daemon(mode=mode, port=port)
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\n  Stopping daemon...")
+                cortex.stop_daemon()
+
+        elif args.cortex_digest:
+            date_arg = args.cortex_digest
+            date = None if date_arg == "today" else date_arg
+            digest = cortex.daily_digest(date)
+            print("\n  INPUT CORTEX — DAILY DIGEST")
+            print("  " + "=" * 40)
+            print(f"  Date: {digest['date']}")
+            print(f"  Sessions: {digest['total_sessions']}")
+            print(f"  Total words: {digest['total_words']}")
+            if digest.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in digest["category_distribution"].items():
+                    print(f"    {cat:<16} {count} sessions")
+            if digest.get("app_usage"):
+                print(f"\n  App usage (by words):")
+                for app, words in list(digest["app_usage"].items())[:10]:
+                    print(f"    {app:<24} {words:,} words")
+            print()
+
+        elif args.cortex_query is not None:
+            results = cortex.query_context(category=args.cortex_query or None, limit=20)
+            print(f"\n  INPUT CORTEX — QUERY RESULTS ({len(results)} matches)")
+            print("  " + "=" * 50)
+            for e in results:
+                apps = ", ".join(e.get("apps", []))
+                print(f"  [{e.get('started', '?')[:16]}] {e.get('category', '?'):<12} "
+                      f"{e.get('words', 0):>5}w  {apps}")
+            print()
+
+        elif args.cortex_pattern is not None:
+            pattern = cortex.behavioral_pattern(days=args.cortex_pattern)
+            print(f"\n  INPUT CORTEX — BEHAVIORAL PATTERN ({pattern['period_days']} days)")
+            print("  " + "=" * 50)
+            print(f"  Avg words/day: {pattern['avg_words_per_day']:,}")
+            if pattern.get("top_apps"):
+                print(f"\n  Top apps:")
+                for app, freq in pattern["top_apps"].items():
+                    print(f"    {app:<24} {freq} sessions")
+            if pattern.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in pattern["category_distribution"].items():
+                    print(f"    {cat:<16} {count}")
+            print()
+
+        else:
+            report = cortex.report()
+            print("\n  INPUT CORTEX — STATUS")
+            print("  " + "=" * 40)
+            print(f"  Status: {report.status}")
+            print(f"  {report.summary}")
+            if report.data.get("open_sessions"):
+                print(f"\n  Open sessions:")
+                for s in report.data["open_sessions"]:
+                    print(f"    {s['session_id'][:12]}  {s['blocks']} blocks  {s.get('words', 0)} words")
+            # Print skill manifest
+            manifest = InputCortex.skill_manifest()
+            print(f"\n  Available skills:")
+            for skill in manifest["skills"]:
+                print(f"    {skill['name']:<24} {skill['description']}")
+            print()
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
