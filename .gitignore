@@ -69,3 +69,6 @@ data/*.xlsx
 data/*.csv
 data/*.png
 data/homelink-reference/
+data/epic_intel.db
+data/epic_intel.db-shm
+data/epic_intel.db-wal
