@@ -14,8 +14,16 @@ APIs directly. Import them via the respective UIs or API.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
+
+
+def _validate_subnet(subnet: str) -> str:
+    """Validate and return a safe CIDR subnet string."""
+    if not re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", subnet):
+        raise ValueError(f"Invalid subnet format: {subnet!r}")
+    return subnet
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +42,7 @@ def network_monitor_workflow(
         3. Compare against previous device list
         4. Output: "new device detected" alert
     """
+    subnet = _validate_subnet(subnet)
     return {
         "name": "Guardian IoT — Network Monitor",
         "nodes": [
@@ -328,7 +337,9 @@ def recommendation_engine_workflow(
             {
                 "parameters": {
                     "jsCode": (
-                        "const raw = $input.first().json.response || '';\n"
+                        "// Handle both Ollama (.response) and OpenAI (.choices[0].message.content) output shapes\n"
+                        "const item = $input.first().json;\n"
+                        "const raw = item.response || (item.choices && item.choices[0] && item.choices[0].message && item.choices[0].message.content) || '';\n"
                         "let rec;\n"
                         "try {\n"
                         "  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n"

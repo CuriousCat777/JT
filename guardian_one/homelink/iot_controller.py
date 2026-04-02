@@ -287,11 +287,29 @@ class IoTController:
     # ------------------------------------------------------------------
 
     def docker_available(self) -> bool:
-        """Check if Docker and docker-compose are available."""
-        return (
-            shutil.which("docker") is not None
-            and shutil.which("docker-compose") is not None
-        )
+        """Check if Docker and a Compose implementation are available.
+
+        Accepts either legacy docker-compose binary or Docker Compose v2
+        via ``docker compose``.
+        """
+        docker_path = shutil.which("docker")
+        if docker_path is None:
+            return False
+
+        if shutil.which("docker-compose") is not None:
+            return True
+
+        # Fallback: check for Docker Compose v2
+        try:
+            result = subprocess.run(
+                [docker_path, "compose", "version"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            return result.returncode == 0
+        except OSError:
+            return False
 
     def generate_compose(self, zigbee_device: str = "/dev/ttyUSB0",
                          tailscale_authkey: str = "") -> str:
@@ -389,10 +407,13 @@ class IoTController:
         # Mosquitto config
         mosquitto_conf = self._stack_dir / "mosquitto" / "mosquitto.conf"
         mosquitto_conf.write_text(
+            "# Secure-by-default Mosquitto configuration\n"
             "listener 1883\n"
-            "allow_anonymous true\n"
-            "# NOTE: Disable anonymous access after initial setup\n"
-            "# and configure user/password authentication.\n"
+            "allow_anonymous false\n"
+            "password_file /mosquitto/config/passwords\n"
+            "# To create the password file, run:\n"
+            "#   docker exec -it mosquitto mosquitto_passwd -c /mosquitto/config/passwords <username>\n"
+            "# Then restart the Mosquitto container to apply changes.\n"
         )
         created.append(str(mosquitto_conf))
 
@@ -646,7 +667,11 @@ class IoTController:
                     dev.first_seen = now
                 dev.last_seen = now
 
-                if dev.mac_address in self._known_macs:
+                # Normalize MAC for consistent matching (known_macs stores uppercase)
+                if dev.mac_address:
+                    dev.mac_address = dev.mac_address.upper()
+
+                if dev.mac_address and dev.mac_address in self._known_macs:
                     dev.device_class = DeviceClassification.KNOWN
                     dev.risk_score = 1
                     dev.notes = self._known_macs[dev.mac_address]
@@ -654,7 +679,8 @@ class IoTController:
                     # Check if it was previously seen
                     prev = next(
                         (d for d in self._discovered_devices
-                         if d.mac_address == dev.mac_address),
+                         if d.mac_address and dev.mac_address
+                         and d.mac_address.upper() == dev.mac_address),
                         None,
                     )
                     if prev:
@@ -953,11 +979,11 @@ class IoTController:
     # ------------------------------------------------------------------
 
     def _parse_nmap_xml(self, xml_output: str) -> list[DiscoveredDevice]:
-        """Parse nmap -oX output into DiscoveredDevice list.
+        """Parse nmap -oX output into a list of DiscoveredDevice objects.
 
-        Uses basic string parsing to avoid xml.etree dependency issues
-        with untrusted input. Only extracts host/address/vendor data
-        from ping scan (-sn) output.
+        Uses xml.etree.ElementTree to safely parse the XML and only extracts
+        host/address/vendor/hostname data from ping scan (-sn) output.
+        Parsing errors result in an empty list rather than raising.
         """
         import xml.etree.ElementTree as ET
 

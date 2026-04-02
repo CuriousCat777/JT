@@ -670,7 +670,11 @@ class DriverFactory:
         return KasaDriver(ip=device_ip)
 
     def get_hue_driver(self, bridge_ip: str = "192.168.1.147") -> HueDriver:
-        api_key = self._vault_retrieve("HUE_BRIDGE_USERNAME") or ""
+        api_key = (
+            self._vault_retrieve("HUE_BRIDGE_API_KEY")
+            or self._vault_retrieve("HUE_BRIDGE_USERNAME")
+            or ""
+        )
         return HueDriver(bridge_ip=bridge_ip, api_key=api_key)
 
     def get_govee_driver(self, device_ip: str) -> GoveeLanDriver:
