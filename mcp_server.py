@@ -66,7 +66,7 @@ def _boot_guardian():
             g.register_agent(AgentCls(config=agent_cfg, audit=g.audit, **extra_kw))
 
         _guardian = g
-    except Exception as exc:
+    except BaseException as exc:
         _boot_error = f"Guardian One boot failed: {exc}"
 
 
