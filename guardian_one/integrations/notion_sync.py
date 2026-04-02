@@ -98,7 +98,9 @@ _PHI_PATTERNS = [
     re.compile(r"\b[A-Z]{1,2}\d{6,10}\b"),              # Medical record numbers
     re.compile(r"\bMRN\s*[:#]?\s*\d+\b", re.IGNORECASE), # MRN references
     re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b"),  # Credit card
-    re.compile(r"\b\d{9,17}\b"),                         # Bank account numbers
+    re.compile(                                          # Bank routing + account
+        r"\b(?:routing|account|acct)\s*#?\s*:?\s*\d{9,17}\b", re.IGNORECASE
+    ),
     re.compile(                                          # Email addresses
         r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"
     ),
