@@ -44,8 +44,14 @@ def search_typesense():
     q = request.args.get("q", "*")
     category = request.args.get("category", "")
     doc_type = request.args.get("doc_type", "")
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 10))
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        per_page = max(1, min(100, int(request.args.get("per_page", 10))))
+    except (ValueError, TypeError):
+        per_page = 10
 
     filter_by = []
     if category:
@@ -94,8 +100,14 @@ def search_meilisearch():
     q = request.args.get("q", "")
     category = request.args.get("category", "")
     doc_type = request.args.get("doc_type", "")
-    page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 10))
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        per_page = max(1, min(100, int(request.args.get("per_page", 10))))
+    except (ValueError, TypeError):
+        per_page = 10
 
     filters = []
     if category:

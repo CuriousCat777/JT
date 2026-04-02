@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-04-02T09:58:25.161950+00:00",
+  "pipeline_version": "1.0.0",
+  "total_iterations": 1,
+  "pipeline_duration_seconds": 9.94,
+  "summary": {
+    "initial_passed": 3099,
+    "initial_failed": 0,
+    "final_passed": 3099,
+    "final_failed": 0,
+    "total_improvements_applied": 0,
+    "improvement_rate": "0.0%"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "passed": 3099,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 10,
+      "xfailed": 0,
+      "total": 3109,
+      "duration_seconds": 9.94,
+      "failures": [],
+      "improvements": []
+    }
+  ],
+  "failure_categories": {}
+}
