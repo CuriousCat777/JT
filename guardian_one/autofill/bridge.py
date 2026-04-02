@@ -16,8 +16,16 @@ The bookmarklet:
 from __future__ import annotations
 
 
-def get_bookmarklet_js(port: int = 17380) -> str:
-    """Return the full bookmarklet JavaScript source."""
+def get_bookmarklet_js(port: int = 17380, host: str | None = None) -> str:
+    """Return the full bookmarklet JavaScript source.
+
+    Args:
+        port: Port number (used when host is not specified).
+        host: Full host:port string (e.g. "192.168.1.50:17380").
+              When provided, port is ignored.
+    """
+    if host:
+        return _BRIDGE_JS.replace("http://127.0.0.1:{{PORT}}", f"http://{host}")
     return _BRIDGE_JS.replace("{{PORT}}", str(port))
 
 
@@ -28,6 +36,10 @@ _BRIDGE_JS = r"""
 
   var API = 'http://127.0.0.1:{{PORT}}/api/autofill';
   var OVERLAY_ID = '__guardian_autofill_overlay__';
+  var SESSION_KEY = '__guardian_autofill_session__';
+
+  // Session token for LAN mode (stored in sessionStorage)
+  var sessionToken = sessionStorage.getItem(SESSION_KEY) || '';
 
   // Remove existing overlay if re-triggered
   var existing = document.getElementById(OVERLAY_ID);
@@ -35,16 +47,47 @@ _BRIDGE_JS = r"""
 
   // ── Fetch helpers ─────────────────────────────────────────
 
+  function authHeaders() {
+    var h = { 'Content-Type': 'application/json' };
+    if (sessionToken) h['Authorization'] = 'Bearer ' + sessionToken;
+    return h;
+  }
+
   function apiGet(path) {
-    return fetch(API + path).then(function(r) { return r.json(); });
+    return fetch(API + path, { headers: authHeaders() }).then(function(r) {
+      if (r.status === 401) return promptForPin().then(function() { return apiGet(path); });
+      return r.json();
+    });
   }
 
   function apiPost(path, body) {
     return fetch(API + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(body)
-    }).then(function(r) { return r.json(); });
+    }).then(function(r) {
+      if (r.status === 401) return promptForPin().then(function() { return apiPost(path, body); });
+      return r.json();
+    });
+  }
+
+  function promptForPin() {
+    return new Promise(function(resolve, reject) {
+      var pin = prompt('Guardian Autofill — Enter PIN for LAN access:');
+      if (!pin) { reject(new Error('PIN required')); return; }
+      fetch(API + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pin })
+      }).then(function(r) {
+        if (!r.ok) throw new Error('Invalid PIN');
+        return r.json();
+      }).then(function(data) {
+        sessionToken = data.session_token;
+        sessionStorage.setItem(SESSION_KEY, sessionToken);
+        resolve();
+      }).catch(reject);
+    });
   }
 
   // ── Force-fill a single input ─────────────────────────────

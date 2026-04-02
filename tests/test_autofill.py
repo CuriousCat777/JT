@@ -488,3 +488,96 @@ class TestAutofillServer:
                 assert exc.value.code == 403
             finally:
                 agent.stop_server()
+
+
+# ========================================================================
+# LAN mode tests
+# ========================================================================
+
+class TestLANMode:
+    def test_set_and_verify_pin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault)
+            agent.set_lan_pin("1234")
+            assert agent.verify_pin("1234") is True
+            assert agent.verify_pin("wrong") is False
+
+    def test_pin_persists_in_vault(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault)
+            agent.set_lan_pin("mypin")
+
+            # New agent instance, same vault
+            agent2 = _make_agent(vault)
+            assert agent2.verify_pin("mypin") is True
+
+    def test_lan_mode_requires_pin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault)
+            with pytest.raises(ValueError, match="Set a PIN first"):
+                agent.enable_lan_mode()
+
+    def test_lan_mode_enable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault)
+            assert agent.is_lan_mode is False
+            agent.set_lan_pin("1234")
+            agent.enable_lan_mode()
+            assert agent.is_lan_mode is True
+
+    def test_lan_server_requires_pin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault, port=17395)
+            # Try to start in LAN mode without PIN
+            with pytest.raises(ValueError):
+                agent.start_server(bind_override="0.0.0.0")
+
+    def test_lan_server_auth_flow(self):
+        """Full LAN auth flow: auth with PIN, get session, access profiles."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault = _make_vault(tmpdir)
+            agent = _make_agent(vault, port=17394)
+            agent.set_lan_pin("testpin")
+            agent.enable_lan_mode()
+            agent.add_card(
+                label="LAN Card", cardholder_name="Jeremy",
+                card_number="5555555555554444",
+                exp_month="03", exp_year="2029", cvv="789",
+            )
+            # Start server (on localhost for testing, but with LAN auth logic)
+            url = agent.start_server(bind_override="127.0.0.1")
+            try:
+                # Auth with PIN
+                auth_body = json.dumps({"pin": "testpin"}).encode()
+                req = urllib.request.Request(
+                    f"{url}/api/autofill/auth",
+                    data=auth_body,
+                    headers={"Content-Type": "application/json"},
+                )
+                resp = urllib.request.urlopen(req, timeout=2)
+                auth_data = json.loads(resp.read())
+                assert "session_token" in auth_data
+                assert auth_data["ttl"] == 3600
+
+                # Wrong PIN should fail
+                bad_body = json.dumps({"pin": "wrong"}).encode()
+                req = urllib.request.Request(
+                    f"{url}/api/autofill/auth",
+                    data=bad_body,
+                    headers={"Content-Type": "application/json"},
+                )
+                with pytest.raises(urllib.error.HTTPError) as exc:
+                    urllib.request.urlopen(req, timeout=2)
+                assert exc.value.code == 403
+            finally:
+                agent.stop_server()
+
+    def test_bookmarklet_with_host(self):
+        js = get_bookmarklet_js(host="192.168.1.50:17380")
+        assert "192.168.1.50:17380" in js
+        assert "127.0.0.1" not in js

@@ -36,6 +36,12 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --autofill-server      # Start autofill bridge (localhost only)
+    python main.py --autofill-lan         # Start autofill bridge in LAN mode (MacBook access)
+    python main.py --autofill-pin         # Set/change LAN access PIN
+    python main.py --autofill-add card    # Add a payment card profile
+    python main.py --autofill-list        # List all autofill profiles
+    python main.py --autofill-bookmarklet # Get the browser bookmarklet
 """
 
 from __future__ import annotations
@@ -377,6 +383,10 @@ def main() -> None:
                         help="Remove an autofill profile by TYPE:ID (e.g. card:abc123)")
     parser.add_argument("--autofill-bookmarklet", action="store_true",
                         help="Print the bookmarklet JavaScript for browser autofill")
+    parser.add_argument("--autofill-lan", action="store_true",
+                        help="Start autofill server in LAN mode (accessible from MacBook/other devices)")
+    parser.add_argument("--autofill-pin", action="store_true",
+                        help="Set/change the PIN for LAN-mode access")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -1264,13 +1274,27 @@ def main() -> None:
             print(mgr.summary())
 
     elif (args.autofill_server or args.autofill_add or args.autofill_list
-          or args.autofill_remove or args.autofill_bookmarklet):
+          or args.autofill_remove or args.autofill_bookmarklet
+          or args.autofill_lan or args.autofill_pin):
         af: AutofillAgent = guardian._agents.get("autofill")  # type: ignore[assignment]
         if af is None:
             print("Error: autofill agent not registered")
             return
 
-        if args.autofill_list:
+        if args.autofill_pin:
+            import getpass
+            pin = getpass.getpass("  Set autofill LAN PIN: ")
+            if len(pin) < 4:
+                print("  PIN must be at least 4 characters.")
+                return
+            confirm = getpass.getpass("  Confirm PIN: ")
+            if pin != confirm:
+                print("  PINs don't match.")
+                return
+            af.set_lan_pin(pin)
+            print("  PIN set. You can now use --autofill-lan to start in LAN mode.")
+
+        elif args.autofill_list:
             profiles = af.list_profiles()
             if not profiles:
                 print("\n  No autofill profiles. Add one with --autofill-add card")
@@ -1302,6 +1326,40 @@ def main() -> None:
             print(f"  javascript:{js}\n")
             print("  Or start the server and visit:")
             print(f"  http://127.0.0.1:{af._port}/api/autofill/bookmarklet\n")
+
+        elif args.autofill_lan:
+            import socket
+            # Get this machine's LAN IP
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                lan_ip = "0.0.0.0"
+
+            try:
+                af.enable_lan_mode(bind="0.0.0.0")
+            except ValueError as e:
+                print(f"\n  Error: {e}")
+                return
+
+            url = af.start_server(bind_override="0.0.0.0")
+            print(f"\n  Autofill Bridge — LAN MODE")
+            print(f"  " + "=" * 50)
+            print(f"  Server:      {url}")
+            print(f"  LAN address: http://{lan_ip}:{af._port}")
+            print(f"  Bookmarklet: http://{lan_ip}:{af._port}/api/autofill/bookmarklet")
+            print(f"  Health:      http://{lan_ip}:{af._port}/api/autofill/health")
+            print(f"\n  On your MacBook, open the bookmarklet URL above.")
+            print(f"  You'll be prompted for your PIN on first use.")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
 
         elif args.autofill_server:
             url = af.start_server()

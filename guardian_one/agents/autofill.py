@@ -95,10 +95,55 @@ class AutofillAgent(BaseAgent):
         self._server: HTTPServer | None = None
         self._server_thread: threading.Thread | None = None
         self._port = config.custom.get("autofill_port", 17380)
+        self._bind = config.custom.get("autofill_bind", "127.0.0.1")
+        self._lan_pin: str | None = None  # Set via set_lan_pin() for LAN mode
 
     def set_vault(self, vault: Any) -> None:
         """Inject vault reference (called by GuardianOne after registration)."""
         self._vault = vault
+
+    # ── LAN mode & PIN ───────────────────────────────────────────
+
+    def set_lan_pin(self, pin: str) -> None:
+        """Set PIN for LAN-mode access. Stored as SHA-256 hash in vault."""
+        pin_hash = hashlib.sha256(pin.encode()).hexdigest()
+        self._vault.store(
+            "autofill_lan_pin", pin_hash,
+            service="autofill", scope="admin",
+        )
+        self._lan_pin = pin_hash
+        self.log("lan_pin_set", severity=Severity.WARNING)
+
+    def _load_lan_pin(self) -> str | None:
+        """Load the hashed PIN from vault."""
+        if self._lan_pin:
+            return self._lan_pin
+        raw = self._vault.retrieve("autofill_lan_pin")
+        if raw:
+            self._lan_pin = raw
+        return self._lan_pin
+
+    def verify_pin(self, pin: str) -> bool:
+        """Verify a PIN against the stored hash."""
+        stored = self._load_lan_pin()
+        if stored is None:
+            return False
+        return hashlib.sha256(pin.encode()).hexdigest() == stored
+
+    @property
+    def is_lan_mode(self) -> bool:
+        return self._bind != "127.0.0.1"
+
+    def enable_lan_mode(self, bind: str = "0.0.0.0") -> None:
+        """Switch to LAN mode (requires PIN to be set first)."""
+        if self._load_lan_pin() is None:
+            raise ValueError("Set a PIN first with set_lan_pin() before enabling LAN mode")
+        self._bind = bind
+        self.log(
+            "lan_mode_enabled",
+            severity=Severity.WARNING,
+            details={"bind": bind},
+        )
 
     # ── Profile CRUD ─────────────────────────────────────────────
 
@@ -264,15 +309,31 @@ class AutofillAgent(BaseAgent):
 
     # ── Local API Server ─────────────────────────────────────────
 
-    def start_server(self) -> str:
+    def start_server(self, bind_override: str | None = None) -> str:
         """Start the local autofill API server. Returns the URL."""
+        bind = bind_override or self._bind
         if self._server is not None:
-            return f"http://127.0.0.1:{self._port}"
+            return f"http://{bind}:{self._port}"
+
+        # LAN mode safety check
+        if bind != "127.0.0.1" and self._load_lan_pin() is None:
+            raise ValueError(
+                "Cannot start in LAN mode without a PIN. "
+                "Set one with: python main.py --autofill-pin"
+            )
 
         agent_ref = self
+        # Session tokens for LAN-authenticated clients
+        # session_token -> expiry_timestamp
+        lan_sessions: dict[str, float] = {}
+        lan_session_lock = threading.Lock()
+        LAN_SESSION_TTL = 3600  # 1 hour
+
+        def _is_localhost(addr: str) -> bool:
+            return addr in ("127.0.0.1", "::1", "localhost")
 
         class AutofillHandler(BaseHTTPRequestHandler):
-            """Handles autofill API requests on localhost only."""
+            """Handles autofill API requests. PIN-gated when in LAN mode."""
 
             def log_message(self, fmt: str, *args: Any) -> None:
                 pass  # Suppress default HTTP logging
@@ -281,6 +342,30 @@ class AutofillAgent(BaseAgent):
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+            def _check_lan_auth(self) -> bool:
+                """Returns True if request is authorized.
+
+                Localhost requests always pass. LAN requests need
+                a valid session token in the Authorization header.
+                """
+                client_ip = self.client_address[0]
+                if _is_localhost(client_ip):
+                    return True
+                if bind == "127.0.0.1":
+                    return True  # Shouldn't happen, but safe
+
+                # Check Authorization: Bearer <session_token>
+                auth = self.headers.get("Authorization", "")
+                if not auth.startswith("Bearer "):
+                    return False
+                session_token = auth[7:]
+                with lan_session_lock:
+                    expiry = lan_sessions.get(session_token)
+                    if expiry is None or time.time() > expiry:
+                        lan_sessions.pop(session_token, None)
+                        return False
+                return True
 
             def do_OPTIONS(self) -> None:
                 self.send_response(200)
@@ -291,10 +376,17 @@ class AutofillAgent(BaseAgent):
                 parsed = urlparse(self.path)
                 path = parsed.path
 
+                # Health is always public; auth endpoint is always open
+                if path == "/api/autofill/health":
+                    self._handle_health()
+                    return
+
+                if not self._check_lan_auth():
+                    self._send_json(401, {"error": "unauthorized", "hint": "POST /api/autofill/auth with {\"pin\": \"...\"}"})
+                    return
+
                 if path == "/api/autofill/profiles":
                     self._handle_list_profiles(parsed)
-                elif path == "/api/autofill/health":
-                    self._handle_health()
                 elif path == "/api/autofill/bookmarklet":
                     self._handle_bookmarklet()
                 else:
@@ -303,6 +395,15 @@ class AutofillAgent(BaseAgent):
             def do_POST(self) -> None:
                 parsed = urlparse(self.path)
                 path = parsed.path
+
+                # Auth endpoint is always open (it's how you get a session)
+                if path == "/api/autofill/auth":
+                    self._handle_auth()
+                    return
+
+                if not self._check_lan_auth():
+                    self._send_json(401, {"error": "unauthorized", "hint": "POST /api/autofill/auth with {\"pin\": \"...\"}"})
+                    return
 
                 if path == "/api/autofill/token":
                     self._handle_request_token()
@@ -334,11 +435,40 @@ class AutofillAgent(BaseAgent):
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _handle_auth(self) -> None:
+                """PIN authentication — returns a 1-hour session token."""
+                body = self._read_body()
+                pin = body.get("pin", "")
+                if not pin:
+                    self._send_json(400, {"error": "pin required"})
+                    return
+                if not agent_ref.verify_pin(pin):
+                    agent_ref.log(
+                        "lan_auth_failed",
+                        severity=Severity.WARNING,
+                        details={"client": self.client_address[0]},
+                    )
+                    self._send_json(403, {"error": "invalid pin"})
+                    return
+
+                session_token = secrets.token_urlsafe(32)
+                with lan_session_lock:
+                    lan_sessions[session_token] = time.time() + LAN_SESSION_TTL
+                agent_ref.log(
+                    "lan_auth_success",
+                    details={"client": self.client_address[0]},
+                )
+                self._send_json(200, {
+                    "session_token": session_token,
+                    "ttl": LAN_SESSION_TTL,
+                })
+
             def _handle_health(self) -> None:
                 self._send_json(200, {
                     "status": "ok",
                     "agent": "autofill",
                     "profiles": len(agent_ref.list_profiles()),
+                    "lan_mode": agent_ref.is_lan_mode,
                 })
 
             def _handle_list_profiles(self, parsed: Any) -> None:
@@ -393,10 +523,11 @@ class AutofillAgent(BaseAgent):
             def _handle_bookmarklet(self) -> None:
                 """Serve the bookmarklet JavaScript."""
                 from guardian_one.autofill.bridge import get_bookmarklet_js
-                js = get_bookmarklet_js(agent_ref._port)
+                host = self.headers.get("Host", f"{bind}:{agent_ref._port}")
+                js = get_bookmarklet_js(host=host)
                 self._send_js(200, js)
 
-        self._server = HTTPServer(("127.0.0.1", self._port), AutofillHandler)
+        self._server = HTTPServer((bind, self._port), AutofillHandler)
         self._server_thread = threading.Thread(
             target=self._server.serve_forever,
             daemon=True,
@@ -404,8 +535,12 @@ class AutofillAgent(BaseAgent):
         )
         self._server_thread.start()
 
-        url = f"http://127.0.0.1:{self._port}"
-        self.log("server_started", details={"url": url, "port": self._port})
+        url = f"http://{bind}:{self._port}"
+        self.log(
+            "server_started",
+            severity=Severity.WARNING if bind != "127.0.0.1" else Severity.INFO,
+            details={"url": url, "port": self._port, "bind": bind, "lan_mode": bind != "127.0.0.1"},
+        )
         return url
 
     def stop_server(self) -> None:
