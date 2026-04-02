@@ -64,6 +64,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.autofill import AutofillAgent
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -91,6 +92,63 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    af_cfg = config.agents.get("autofill", AgentConfig(name="autofill"))
+    af_agent = AutofillAgent(config=af_cfg, audit=guardian.audit, vault=guardian.vault)
+    guardian.register_agent(af_agent)
+
+
+def _autofill_add_interactive(af: AutofillAgent, profile_type: str) -> None:
+    """Interactive prompt to add an autofill profile."""
+    print(f"\n  Add {profile_type} profile")
+    print("  " + "-" * 40)
+
+    def ask(prompt: str, required: bool = True) -> str:
+        while True:
+            val = input(f"  {prompt}: ").strip()
+            if val or not required:
+                return val
+            print(f"  (required)")
+
+    if profile_type == "card":
+        p = af.add_card(
+            label=ask("Label (e.g. Chase Sapphire)"),
+            cardholder_name=ask("Cardholder Name"),
+            card_number=ask("Card Number"),
+            exp_month=ask("Exp Month (MM)"),
+            exp_year=ask("Exp Year (YYYY)"),
+            cvv=ask("CVV"),
+            billing_address=ask("Billing Address", required=False),
+            billing_zip=ask("Billing Zip", required=False),
+        )
+        print(f"\n  Added card: {p.label} ({p.masked_number})")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "address":
+        p = af.add_address(
+            label=ask("Label (e.g. Home, Work)"),
+            full_name=ask("Full Name"),
+            street=ask("Street Address"),
+            city=ask("City"),
+            state=ask("State"),
+            zip_code=ask("Zip Code"),
+            country=ask("Country", required=False) or "US",
+            phone=ask("Phone", required=False),
+        )
+        print(f"\n  Added address: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "identity":
+        p = af.add_identity(
+            label=ask("Label (e.g. Personal, Work)"),
+            first_name=ask("First Name"),
+            last_name=ask("Last Name"),
+            email=ask("Email"),
+            phone=ask("Phone", required=False),
+            date_of_birth=ask("Date of Birth (YYYY-MM-DD)", required=False),
+        )
+        print(f"\n  Added identity: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -308,6 +366,17 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--autofill-server", action="store_true",
+                        help="Start the autofill bridge local server")
+    parser.add_argument("--autofill-add", type=str, default=None,
+                        choices=["card", "address", "identity"],
+                        help="Add an autofill profile (card, address, or identity)")
+    parser.add_argument("--autofill-list", action="store_true",
+                        help="List all autofill profiles")
+    parser.add_argument("--autofill-remove", type=str, default=None,
+                        help="Remove an autofill profile by TYPE:ID (e.g. card:abc123)")
+    parser.add_argument("--autofill-bookmarklet", action="store_true",
+                        help="Print the bookmarklet JavaScript for browser autofill")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -1193,6 +1262,59 @@ def main() -> None:
         else:
             # --websites: show status
             print(mgr.summary())
+
+    elif (args.autofill_server or args.autofill_add or args.autofill_list
+          or args.autofill_remove or args.autofill_bookmarklet):
+        af: AutofillAgent = guardian._agents.get("autofill")  # type: ignore[assignment]
+        if af is None:
+            print("Error: autofill agent not registered")
+            return
+
+        if args.autofill_list:
+            profiles = af.list_profiles()
+            if not profiles:
+                print("\n  No autofill profiles. Add one with --autofill-add card")
+            else:
+                print(f"\n  Autofill Profiles ({len(profiles)})")
+                print("  " + "-" * 50)
+                for p in profiles:
+                    extra = f" {p.get('masked_number', '')}" if p["type"] == "card" else ""
+                    print(f"  [{p['type'].upper():8s}] {p['label']}{extra}  (id: {p['profile_id']})")
+
+        elif args.autofill_remove:
+            parts = args.autofill_remove.split(":", 1)
+            if len(parts) != 2:
+                print("Usage: --autofill-remove TYPE:ID  (e.g. card:abc123)")
+                return
+            ptype, pid = parts
+            if af.remove_profile(ptype, pid):
+                print(f"  Removed {ptype} profile {pid}")
+            else:
+                print(f"  Profile not found: {ptype}:{pid}")
+
+        elif args.autofill_add:
+            _autofill_add_interactive(af, args.autofill_add)
+
+        elif args.autofill_bookmarklet:
+            from guardian_one.autofill.bridge import get_bookmarklet_js
+            js = get_bookmarklet_js(af._port)
+            print("\n  Copy this entire line as a bookmark URL:\n")
+            print(f"  javascript:{js}\n")
+            print("  Or start the server and visit:")
+            print(f"  http://127.0.0.1:{af._port}/api/autofill/bookmarklet\n")
+
+        elif args.autofill_server:
+            url = af.start_server()
+            print(f"\n  Autofill Bridge server running at {url}")
+            print(f"  Bookmarklet: {url}/api/autofill/bookmarklet")
+            print(f"  Health:      {url}/api/autofill/health")
+            print("\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
 
     elif args.summary:
         print(guardian.daily_summary())
