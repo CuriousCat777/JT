@@ -139,9 +139,41 @@ python main.py --db-spending          # Spending summary by category
 python main.py --db-net-worth         # Net worth from database
 ```
 
+## Docker
+
+```bash
+# Build
+docker build -t guardian-one .
+
+# Run (database persists across restarts via volumes)
+docker run --env-file .env \
+  -v guardian-data:/app/data \
+  -v guardian-logs:/app/logs \
+  guardian-one --db
+
+# Docker Compose (recommended)
+docker compose up -d                              # Default: show DB status
+docker compose run guardian --db-init             # Initialize database
+docker compose run guardian --db-logs             # Query logs
+docker compose run guardian --sync-once           # One-shot financial sync
+docker compose --profile full up -d              # Start scheduler + sync services
+docker compose --profile web up -d               # Start dev panel on :5100
+docker compose --profile setup run db-init       # First-time DB import
+```
+
+Services (via compose profiles):
+- `guardian` — default service, runs any CLI command
+- `db-init` (profile: setup) — one-shot database initialization
+- `sync` (profile: full) — continuous financial sync loop
+- `scheduler` (profile: full) — scheduled agent runner
+- `devpanel` (profile: web) — Flask web panel on port 5100
+
+Container runs as non-root `guardian` user (uid 1000).
+Auto-initializes database on first run via `docker-entrypoint.sh`.
+
 ## Development Notes
 
-- Python 3.11+, no Docker yet (on roadmap)
+- Python 3.11+, Docker support included (Dockerfile + docker-compose.yml)
 - All agents extend `BaseAgent` (core/base_agent.py) with initialize/run/report
 - Tests use fake providers (no real API calls)
 - Config loaded via `load_config()` from core/config.py

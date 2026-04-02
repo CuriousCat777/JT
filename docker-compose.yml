@@ -1,0 +1,119 @@
+# Guardian One — Docker Compose
+# ================================
+# Usage:
+#   docker compose up -d              # Start Guardian One
+#   docker compose run guardian --db   # Check database status
+#   docker compose run guardian --db-init  # Initialize and import data
+#   docker compose run guardian --db-logs  # Query logs
+#   docker compose exec guardian python main.py --sync  # Live sync
+#
+# Data persists across container restarts via named volumes.
+
+services:
+  guardian:
+    build: .
+    container_name: guardian-one
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_DATA_DIR=/app/data
+      - GUARDIAN_LOG_DIR=/app/logs
+      - TZ=America/Chicago
+    volumes:
+      # Persistent storage — survives container rebuilds
+      - guardian-data:/app/data          # SQLite database + CFO ledger
+      - guardian-logs:/app/logs          # Audit logs (JSONL)
+      - guardian-config:/app/config      # Config files, tokens, credentials
+    ports:
+      - "5100:5100"     # Dev panel (--devpanel)
+    # Default command: run all agents once
+    command: ["--db"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from guardian_one.database import GuardianDatabase; db = GuardianDatabase(); print(db.stats())"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # One-shot service to initialize the database on first deploy
+  db-init:
+    build: .
+    container_name: guardian-db-init
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_DATA_DIR=/app/data
+      - GUARDIAN_LOG_DIR=/app/logs
+    volumes:
+      - guardian-data:/app/data
+      - guardian-logs:/app/logs
+    command: ["--db-init"]
+    profiles:
+      - setup
+
+  # Scheduled sync service — runs financial sync on loop
+  sync:
+    build: .
+    container_name: guardian-sync
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_DATA_DIR=/app/data
+      - GUARDIAN_LOG_DIR=/app/logs
+      - TZ=America/Chicago
+    volumes:
+      - guardian-data:/app/data
+      - guardian-logs:/app/logs
+      - guardian-config:/app/config
+    command: ["--sync"]
+    profiles:
+      - full
+
+  # Scheduled agent runner
+  scheduler:
+    build: .
+    container_name: guardian-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_DATA_DIR=/app/data
+      - GUARDIAN_LOG_DIR=/app/logs
+      - TZ=America/Chicago
+    volumes:
+      - guardian-data:/app/data
+      - guardian-logs:/app/logs
+      - guardian-config:/app/config
+    command: ["--schedule"]
+    profiles:
+      - full
+
+  # Web dev panel
+  devpanel:
+    build: .
+    container_name: guardian-devpanel
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_DATA_DIR=/app/data
+      - GUARDIAN_LOG_DIR=/app/logs
+      - TZ=America/Chicago
+    volumes:
+      - guardian-data:/app/data
+      - guardian-logs:/app/logs
+      - guardian-config:/app/config
+    ports:
+      - "5100:5100"
+    command: ["--devpanel", "--devpanel-port", "5100"]
+    profiles:
+      - web
+
+volumes:
+  guardian-data:
+    driver: local
+  guardian-logs:
+    driver: local
+  guardian-config:
+    driver: local
