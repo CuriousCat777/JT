@@ -112,7 +112,11 @@ class GuardianOne:
                 raw = yaml.safe_load(f) or {}
             ai_raw = raw.get("ai_engine", {})
 
-        provider_map = {"ollama": AIProvider.OLLAMA, "anthropic": AIProvider.ANTHROPIC}
+        provider_map = {
+            "ollama": AIProvider.OLLAMA,
+            "anthropic": AIProvider.ANTHROPIC,
+            "cloudflare": AIProvider.CLOUDFLARE,
+        }
 
         return AIConfig(
             primary_provider=provider_map.get(
@@ -125,6 +129,10 @@ class GuardianOne:
             ollama_model=ai_raw.get("ollama_model", "llama3"),
             anthropic_model=ai_raw.get(
                 "anthropic_model", "claude-sonnet-4-20250514"
+            ),
+            cloudflare_account_id=ai_raw.get("cloudflare_account_id", ""),
+            cloudflare_model=ai_raw.get(
+                "cloudflare_model", "@cf/meta/llama-3-8b-instruct"
             ),
             max_tokens=ai_raw.get("max_tokens", 2048),
             temperature=ai_raw.get("temperature", 0.3),

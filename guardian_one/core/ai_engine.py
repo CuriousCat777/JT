@@ -3,6 +3,7 @@
 Provides a unified interface for LLM reasoning, supporting:
 - Ollama (local, self-hosted, sovereign) — PRIMARY
 - Anthropic Claude API (cloud fallback)
+- Cloudflare Workers AI (edge inference)
 
 Every agent can call `ai.reason()` to get intelligent responses.
 The engine handles provider selection, failover, and conversation memory.
@@ -25,6 +26,7 @@ class AIProvider(Enum):
     """Supported AI backends."""
     OLLAMA = "ollama"
     ANTHROPIC = "anthropic"
+    CLOUDFLARE = "cloudflare"
 
 
 @dataclass
@@ -59,6 +61,8 @@ class AIConfig:
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
     anthropic_model: str = "claude-sonnet-4-20250514"
+    cloudflare_account_id: str = ""
+    cloudflare_model: str = "@cf/meta/llama-3-8b-instruct"
     max_tokens: int = 2048
     temperature: float = 0.3  # Low temp for reliable agent reasoning
     timeout_seconds: int = 60
@@ -254,6 +258,87 @@ class AnthropicBackend:
             )
 
 
+class CloudflareBackend:
+    """Cloudflare Workers AI backend (edge inference)."""
+
+    API_BASE = "https://api.cloudflare.com/client/v4/accounts"
+
+    def __init__(
+        self,
+        account_id: str = "",
+        model: str = "@cf/meta/llama-3-8b-instruct",
+        timeout: int = 60,
+    ) -> None:
+        self._account_id = account_id or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+        self._model = model
+        self._timeout = timeout
+        self._api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Cloudflare credentials are configured."""
+        return bool(self._api_token and self._account_id)
+
+    def generate(
+        self,
+        messages: list[AIMessage],
+        max_tokens: int = 2048,
+        temperature: float = 0.3,
+    ) -> AIResponse:
+        """Send messages to Cloudflare Workers AI and get a response."""
+        import time
+
+        if not self.is_available():
+            return AIResponse(content="", provider="cloudflare", model=self._model)
+
+        start = time.monotonic()
+
+        # Convert system messages into the first user-visible message context
+        cf_messages = []
+        for m in messages:
+            cf_messages.append({"role": m.role, "content": m.content})
+
+        url = f"{self.API_BASE}/{self._account_id}/ai/run/{self._model}"
+        headers = {"Authorization": f"Bearer {self._api_token}"}
+        payload = {"messages": cf_messages}
+
+        try:
+            import httpx
+
+            resp = httpx.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self._timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            elapsed = (time.monotonic() - start) * 1000
+
+            result = data.get("result", {})
+            content = result.get("response", "")
+
+            return AIResponse(
+                content=content,
+                provider="cloudflare",
+                model=self._model,
+                tokens_used=0,  # Workers AI doesn't return token counts
+                latency_ms=round(elapsed, 1),
+            )
+        except Exception as exc:
+            elapsed = (time.monotonic() - start) * 1000
+            logger.error("Cloudflare Workers AI error: %s", exc)
+            return AIResponse(
+                content="",
+                provider="cloudflare",
+                model=self._model,
+                latency_ms=round(elapsed, 1),
+            )
+
+
 class AgentMemory:
     """Per-agent conversation memory with sliding window."""
 
@@ -304,6 +389,11 @@ class AIEngine:
             model=self._config.anthropic_model,
             timeout=self._config.timeout_seconds,
         )
+        self._cloudflare = CloudflareBackend(
+            account_id=self._config.cloudflare_account_id,
+            model=self._config.cloudflare_model,
+            timeout=self._config.timeout_seconds,
+        )
         self._memories: dict[str, AgentMemory] = {}
         self._active_provider: AIProvider | None = None
         self._total_requests: int = 0
@@ -316,25 +406,23 @@ class AIEngine:
             )
         return self._memories[agent_name]
 
-    def _select_backend(self) -> OllamaBackend | AnthropicBackend | None:
+    def _backend_for(self, provider: AIProvider | None) -> OllamaBackend | AnthropicBackend | CloudflareBackend | None:
+        """Return the backend instance for a given provider, if available."""
+        if provider == AIProvider.OLLAMA and self._ollama.is_available():
+            return self._ollama
+        if provider == AIProvider.ANTHROPIC and self._anthropic.is_available():
+            return self._anthropic
+        if provider == AIProvider.CLOUDFLARE and self._cloudflare.is_available():
+            return self._cloudflare
+        return None
+
+    def _select_backend(self) -> OllamaBackend | AnthropicBackend | CloudflareBackend | None:
         """Select the best available backend (primary, then fallback)."""
-        primary = self._config.primary_provider
-        fallback = self._config.fallback_provider
-
-        if primary == AIProvider.OLLAMA and self._ollama.is_available():
-            self._active_provider = AIProvider.OLLAMA
-            return self._ollama
-        if primary == AIProvider.ANTHROPIC and self._anthropic.is_available():
-            self._active_provider = AIProvider.ANTHROPIC
-            return self._anthropic
-
-        # Try fallback
-        if fallback == AIProvider.OLLAMA and self._ollama.is_available():
-            self._active_provider = AIProvider.OLLAMA
-            return self._ollama
-        if fallback == AIProvider.ANTHROPIC and self._anthropic.is_available():
-            self._active_provider = AIProvider.ANTHROPIC
-            return self._anthropic
+        for provider in (self._config.primary_provider, self._config.fallback_provider):
+            backend = self._backend_for(provider)
+            if backend is not None:
+                self._active_provider = provider
+                return backend
 
         self._active_provider = None
         return None
@@ -456,6 +544,7 @@ class AIEngine:
         """Get the current status of the AI engine."""
         ollama_available = self._ollama.is_available()
         anthropic_available = self._anthropic.is_available()
+        cloudflare_available = self._cloudflare.is_available()
 
         return {
             "active_provider": self._active_provider.value if self._active_provider else None,
@@ -468,6 +557,11 @@ class AIEngine:
                 "available": anthropic_available,
                 "model": self._config.anthropic_model,
                 "has_key": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            },
+            "cloudflare": {
+                "available": cloudflare_available,
+                "model": self._config.cloudflare_model,
+                "account_id": self._config.cloudflare_account_id or "(from env)",
             },
             "primary_provider": self._config.primary_provider.value,
             "fallback_provider": (

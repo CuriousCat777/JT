@@ -15,6 +15,7 @@ from guardian_one.core.ai_engine import (
     AIResponse,
     AgentMemory,
     AnthropicBackend,
+    CloudflareBackend,
     OllamaBackend,
 )
 from guardian_one.core.audit import AuditLog
@@ -126,6 +127,66 @@ def test_anthropic_generate_returns_empty_without_key():
 
 
 # ---------------------------------------------------------------
+# CloudflareBackend
+# ---------------------------------------------------------------
+
+def test_cloudflare_not_available_without_credentials():
+    with patch.dict("os.environ", {}, clear=True):
+        backend = CloudflareBackend(account_id="", model="@cf/meta/llama-3-8b-instruct")
+        assert backend.is_available() is False
+
+
+def test_cloudflare_available_with_credentials():
+    with patch.dict("os.environ", {"CLOUDFLARE_API_TOKEN": "test-token"}, clear=False):
+        backend = CloudflareBackend(account_id="test-acct")
+        assert backend.is_available() is True
+
+
+def test_cloudflare_generate_returns_empty_without_credentials():
+    with patch.dict("os.environ", {}, clear=True):
+        backend = CloudflareBackend()
+        resp = backend.generate([AIMessage(role="user", content="test")])
+        assert resp.content == ""
+        assert resp.provider == "cloudflare"
+
+
+def test_cloudflare_model_property():
+    backend = CloudflareBackend(model="@cf/meta/llama-3-8b-instruct")
+    assert backend.model == "@cf/meta/llama-3-8b-instruct"
+
+
+def test_cloudflare_generate_success():
+    """Test successful Cloudflare API call with mocked httpx."""
+    with patch.dict("os.environ", {"CLOUDFLARE_API_TOKEN": "test-token"}, clear=False):
+        backend = CloudflareBackend(account_id="test-acct")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "result": {"response": "Hello from Cloudflare!"},
+            "success": True,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.post", return_value=mock_response):
+            resp = backend.generate([AIMessage(role="user", content="Hi")])
+            assert resp.content == "Hello from Cloudflare!"
+            assert resp.provider == "cloudflare"
+            assert resp.latency_ms > 0
+
+
+def test_cloudflare_generate_error():
+    """Test Cloudflare API error handling."""
+    with patch.dict("os.environ", {"CLOUDFLARE_API_TOKEN": "test-token"}, clear=False):
+        backend = CloudflareBackend(account_id="test-acct")
+
+        with patch("httpx.post", side_effect=Exception("Connection refused")):
+            resp = backend.generate([AIMessage(role="user", content="Hi")])
+            assert resp.content == ""
+            assert resp.provider == "cloudflare"
+
+
+# ---------------------------------------------------------------
 # AIEngine
 # ---------------------------------------------------------------
 
@@ -149,6 +210,7 @@ def test_engine_status():
     status = engine.status()
     assert "ollama" in status
     assert "anthropic" in status
+    assert "cloudflare" in status
     assert "total_requests" in status
     assert status["total_requests"] == 0
 
@@ -176,6 +238,55 @@ def test_engine_clear_all_memory():
     engine._get_memory("b").add(AIMessage(role="user", content="test"))
     engine.clear_all_memory()
     assert len(engine._memories) == 0
+
+
+def test_engine_cloudflare_fallback():
+    """When primary is down, engine falls back to Cloudflare."""
+    with patch.dict("os.environ", {"CLOUDFLARE_API_TOKEN": "test-token"}, clear=False):
+        config = AIConfig(
+            primary_provider=AIProvider.OLLAMA,
+            fallback_provider=AIProvider.CLOUDFLARE,
+            cloudflare_account_id="test-acct",
+        )
+        engine = AIEngine(config)
+        # Ollama offline
+        engine._ollama._available = False
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "result": {"response": "Cloudflare fallback works"},
+            "success": True,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.post", return_value=mock_response):
+            resp = engine.reason(agent_name="test", prompt="Hello")
+            assert resp.content == "Cloudflare fallback works"
+            assert resp.provider == "cloudflare"
+            assert engine._active_provider == AIProvider.CLOUDFLARE
+
+
+def test_engine_cloudflare_as_primary():
+    """Test Cloudflare as the primary provider."""
+    with patch.dict("os.environ", {"CLOUDFLARE_API_TOKEN": "test-token"}, clear=False):
+        config = AIConfig(
+            primary_provider=AIProvider.CLOUDFLARE,
+            fallback_provider=AIProvider.ANTHROPIC,
+            cloudflare_account_id="test-acct",
+        )
+        engine = AIEngine(config)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "result": {"response": "Cloudflare primary"},
+            "success": True,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.post", return_value=mock_response):
+            resp = engine.reason_stateless(prompt="Hello")
+            assert resp.content == "Cloudflare primary"
+            assert resp.provider == "cloudflare"
 
 
 def test_engine_with_mock_ollama():
