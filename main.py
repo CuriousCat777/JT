@@ -36,6 +36,12 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --health               # Start health check API (liveness/readiness/metrics)
+    python main.py --health --health-port 9090  # Custom health port
+    python main.py --context              # Show all agent context stores
+    python main.py --context cfo          # Show CFO agent context
+    python main.py --context-clear cfo    # Clear CFO context
+    python main.py --log-level DEBUG      # Set log level
 """
 
 from __future__ import annotations
@@ -310,13 +316,33 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    parser.add_argument("--health", action="store_true", help="Start health check API server")
+    parser.add_argument("--health-port", type=int, default=8080, help="Health server port (default: 8080)")
+    parser.add_argument("--context", nargs="?", const="all", default=None,
+                        help="Show agent context store (optionally specify agent name)")
+    parser.add_argument("--context-clear", type=str, default=None,
+                        help="Clear context for an agent (or 'all')")
+    parser.add_argument("--log-level", type=str, default="INFO",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                        help="Set operational log level (default: INFO)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
     config = load_config(config_path)
+
+    # Initialize structured production logging
+    from guardian_one.core.logger import setup_logging, get_logger
+    setup_logging(level=args.log_level)
+    log = get_logger("main")
+    log.info("Guardian One starting", extra={"log_level": args.log_level})
+
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # Initialize agent context store
+    from guardian_one.core.context_store import ContextStore
+    context_store = ContextStore(data_dir=config.data_dir)
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")
@@ -434,6 +460,60 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.health:
+        from guardian_one.core.health import HealthServer
+        health = HealthServer(guardian, port=args.health_port)
+        print(f"\n  Guardian One Health API")
+        print(f"  {'=' * 40}")
+        print(f"  Endpoints:")
+        print(f"    GET /health   — liveness probe")
+        print(f"    GET /ready    — readiness probe")
+        print(f"    GET /status   — full system status")
+        print(f"    GET /metrics  — Prometheus metrics")
+        print(f"  Port: {args.health_port}")
+        print(f"\n  Starting health server...")
+        health.start(daemon=False)
+        return
+
+    if args.context is not None:
+        if args.context == "all":
+            agents = context_store.agents_with_context()
+            if not agents:
+                print("  No agent context stored yet.")
+            else:
+                print(f"\n  Agent Context Store — {len(agents)} namespaces")
+                print(f"  {'=' * 40}")
+                for agent_name in agents:
+                    snapshot = context_store.snapshot(agent_name)
+                    total_keys = sum(len(v) for v in snapshot.values())
+                    print(f"  {agent_name}: {total_keys} keys")
+                    for cat, data in snapshot.items():
+                        if data:
+                            print(f"    {cat}: {list(data.keys())}")
+        else:
+            snapshot = context_store.snapshot(args.context)
+            print(f"\n  Context for '{args.context}'")
+            print(f"  {'=' * 40}")
+            for cat, data in snapshot.items():
+                print(f"\n  [{cat}]")
+                for key, val in data.items():
+                    preview = str(val.get("value", ""))[:80]
+                    print(f"    {key}: {preview}")
+        guardian.shutdown()
+        return
+
+    if args.context_clear:
+        target = args.context_clear
+        if target == "all":
+            for a in context_store.agents_with_context():
+                context_store.clear(a)
+            print("  Cleared all agent context.")
+        else:
+            context_store.clear(target)
+            print(f"  Cleared context for '{target}'.")
         guardian.shutdown()
         return
 

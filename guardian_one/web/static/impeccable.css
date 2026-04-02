@@ -1,0 +1,371 @@
+/*
+ * Impeccable Design System — Guardian One Integration
+ * Based on Impeccable (github.com/pbakaus/impeccable) design language
+ * for AI-generated UIs: clarity, hierarchy, restraint.
+ *
+ * Import this in any Guardian One web template:
+ *   <link rel="stylesheet" href="/static/impeccable.css">
+ *
+ * Principles:
+ *   1. Content-first — no decorative clutter
+ *   2. Typographic hierarchy — size + weight convey structure
+ *   3. Functional color — color means something, not decoration
+ *   4. Generous whitespace — let elements breathe
+ *   5. Motion with purpose — transitions guide, not distract
+ */
+
+/* ================================================================
+   DESIGN TOKENS
+   ================================================================ */
+:root {
+  /* --- Spacing scale (8px base) --- */
+  --imp-space-xs: 0.25rem;   /* 4px */
+  --imp-space-sm: 0.5rem;    /* 8px */
+  --imp-space-md: 1rem;      /* 16px */
+  --imp-space-lg: 1.5rem;    /* 24px */
+  --imp-space-xl: 2rem;      /* 32px */
+  --imp-space-2xl: 3rem;     /* 48px */
+  --imp-space-3xl: 4rem;     /* 64px */
+
+  /* --- Typography --- */
+  --imp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --imp-font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+  --imp-text-xs: 0.75rem;    /* 12px */
+  --imp-text-sm: 0.875rem;   /* 14px */
+  --imp-text-base: 1rem;     /* 16px */
+  --imp-text-lg: 1.125rem;   /* 18px */
+  --imp-text-xl: 1.25rem;    /* 20px */
+  --imp-text-2xl: 1.5rem;    /* 24px */
+  --imp-text-3xl: 2rem;      /* 32px */
+
+  /* --- Functional Colors --- */
+  --imp-surface: #f8f7f4;
+  --imp-surface-raised: #ffffff;
+  --imp-surface-sunken: #f0ede8;
+  --imp-border: #e2dfd9;
+  --imp-border-subtle: #eeebe6;
+
+  --imp-text: #1a1a1a;
+  --imp-text-secondary: #5c5a56;
+  --imp-text-muted: #9b9690;
+
+  --imp-accent: #2c5282;
+  --imp-success: #2f855a;
+  --imp-warning: #b7791f;
+  --imp-danger: #c53030;
+  --imp-info: #2b6cb0;
+
+  /* --- Semantic backgrounds (subtle tints) --- */
+  --imp-bg-success: rgba(47, 133, 90, 0.08);
+  --imp-bg-warning: rgba(183, 121, 31, 0.08);
+  --imp-bg-danger: rgba(197, 48, 48, 0.08);
+  --imp-bg-info: rgba(43, 108, 176, 0.08);
+
+  /* --- Elevation (shadow) --- */
+  --imp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --imp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --imp-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --imp-shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.1);
+
+  /* --- Radius --- */
+  --imp-radius-sm: 4px;
+  --imp-radius-md: 8px;
+  --imp-radius-lg: 12px;
+  --imp-radius-full: 9999px;
+
+  /* --- Transitions --- */
+  --imp-transition-fast: 120ms ease;
+  --imp-transition-normal: 200ms ease;
+  --imp-transition-slow: 350ms ease;
+}
+
+/* ================================================================
+   BASE RESET
+   ================================================================ */
+.imp-reset,
+.imp-reset *,
+.imp-reset *::before,
+.imp-reset *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ================================================================
+   TYPOGRAPHY
+   ================================================================ */
+.imp-heading-1 {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-3xl);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--imp-text);
+}
+
+.imp-heading-2 {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--imp-text);
+}
+
+.imp-heading-3 {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-xl);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--imp-text);
+}
+
+.imp-body {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-base);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--imp-text-secondary);
+}
+
+.imp-caption {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-sm);
+  font-weight: 400;
+  color: var(--imp-text-muted);
+}
+
+.imp-mono {
+  font-family: var(--imp-font-mono);
+  font-size: var(--imp-text-sm);
+}
+
+/* ================================================================
+   CARD — Primary container
+   ================================================================ */
+.imp-card {
+  background: var(--imp-surface-raised);
+  border: 1px solid var(--imp-border-subtle);
+  border-radius: var(--imp-radius-lg);
+  padding: var(--imp-space-lg);
+  box-shadow: var(--imp-shadow-sm);
+  transition: box-shadow var(--imp-transition-normal),
+              border-color var(--imp-transition-normal);
+}
+
+.imp-card:hover {
+  box-shadow: var(--imp-shadow-md);
+  border-color: var(--imp-border);
+}
+
+.imp-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--imp-space-md);
+  padding-bottom: var(--imp-space-sm);
+  border-bottom: 1px solid var(--imp-border-subtle);
+}
+
+/* ================================================================
+   STATUS BADGES
+   ================================================================ */
+.imp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imp-space-xs);
+  padding: var(--imp-space-xs) var(--imp-space-sm);
+  border-radius: var(--imp-radius-full);
+  font-size: var(--imp-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.imp-badge--success {
+  background: var(--imp-bg-success);
+  color: var(--imp-success);
+}
+
+.imp-badge--warning {
+  background: var(--imp-bg-warning);
+  color: var(--imp-warning);
+}
+
+.imp-badge--danger {
+  background: var(--imp-bg-danger);
+  color: var(--imp-danger);
+}
+
+.imp-badge--info {
+  background: var(--imp-bg-info);
+  color: var(--imp-info);
+}
+
+/* Status dot — tiny colored circle for inline status */
+.imp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.imp-dot--green { background: var(--imp-success); }
+.imp-dot--yellow { background: var(--imp-warning); }
+.imp-dot--red { background: var(--imp-danger); }
+.imp-dot--blue { background: var(--imp-info); }
+
+/* ================================================================
+   DATA TABLE
+   ================================================================ */
+.imp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-sm);
+}
+
+.imp-table th {
+  text-align: left;
+  padding: var(--imp-space-sm) var(--imp-space-md);
+  font-weight: 600;
+  font-size: var(--imp-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--imp-text-muted);
+  border-bottom: 2px solid var(--imp-border);
+}
+
+.imp-table td {
+  padding: var(--imp-space-sm) var(--imp-space-md);
+  border-bottom: 1px solid var(--imp-border-subtle);
+  color: var(--imp-text-secondary);
+}
+
+.imp-table tr:hover td {
+  background: var(--imp-surface-sunken);
+}
+
+/* ================================================================
+   METRIC CARD — for KPIs and numbers
+   ================================================================ */
+.imp-metric {
+  text-align: center;
+  padding: var(--imp-space-lg);
+}
+
+.imp-metric__value {
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-3xl);
+  font-weight: 700;
+  color: var(--imp-text);
+  line-height: 1;
+}
+
+.imp-metric__label {
+  font-size: var(--imp-text-sm);
+  color: var(--imp-text-muted);
+  margin-top: var(--imp-space-xs);
+}
+
+/* ================================================================
+   GRID LAYOUT
+   ================================================================ */
+.imp-grid {
+  display: grid;
+  gap: var(--imp-space-lg);
+}
+
+.imp-grid--2 { grid-template-columns: repeat(2, 1fr); }
+.imp-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.imp-grid--4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 768px) {
+  .imp-grid--2,
+  .imp-grid--3,
+  .imp-grid--4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+.imp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--imp-space-xs);
+  padding: var(--imp-space-sm) var(--imp-space-md);
+  font-family: var(--imp-font-sans);
+  font-size: var(--imp-text-sm);
+  font-weight: 500;
+  border: 1px solid var(--imp-border);
+  border-radius: var(--imp-radius-md);
+  background: var(--imp-surface-raised);
+  color: var(--imp-text);
+  cursor: pointer;
+  transition: all var(--imp-transition-fast);
+}
+
+.imp-btn:hover {
+  background: var(--imp-surface-sunken);
+  border-color: var(--imp-border);
+  box-shadow: var(--imp-shadow-sm);
+}
+
+.imp-btn--primary {
+  background: var(--imp-accent);
+  color: white;
+  border-color: var(--imp-accent);
+}
+
+.imp-btn--primary:hover {
+  filter: brightness(1.1);
+}
+
+.imp-btn--danger {
+  color: var(--imp-danger);
+  border-color: var(--imp-danger);
+}
+
+/* ================================================================
+   PROGRESS BAR
+   ================================================================ */
+.imp-progress {
+  height: 6px;
+  background: var(--imp-surface-sunken);
+  border-radius: var(--imp-radius-full);
+  overflow: hidden;
+}
+
+.imp-progress__bar {
+  height: 100%;
+  border-radius: var(--imp-radius-full);
+  transition: width var(--imp-transition-slow);
+}
+
+.imp-progress__bar--success { background: var(--imp-success); }
+.imp-progress__bar--warning { background: var(--imp-warning); }
+.imp-progress__bar--danger { background: var(--imp-danger); }
+
+/* ================================================================
+   LOG/CONSOLE OUTPUT
+   ================================================================ */
+.imp-log {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: var(--imp-font-mono);
+  font-size: var(--imp-text-xs);
+  padding: var(--imp-space-md);
+  border-radius: var(--imp-radius-md);
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  line-height: 1.7;
+}
+
+.imp-log .log-info { color: #63b3ed; }
+.imp-log .log-warn { color: #f6ad55; }
+.imp-log .log-error { color: #fc8181; }
+.imp-log .log-ts { color: #718096; }

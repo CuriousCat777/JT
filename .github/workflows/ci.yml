@@ -1,0 +1,162 @@
+name: Guardian One CI/CD
+
+on:
+  push:
+    branches: [main, develop, "claude/*"]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  GUARDIAN_MASTER_PASSPHRASE: "ci-test-passphrase-not-for-production"
+  GUARDIAN_ENV: "ci"
+
+jobs:
+  # ------------------------------------------------------------------
+  # Stage 1: Lint + Type Check
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff mypy
+
+      - name: Ruff lint
+        run: ruff check . --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy guardian_one/core/ --ignore-missing-imports --no-error-summary || true
+
+  # ------------------------------------------------------------------
+  # Stage 2: Test Suite
+  # ------------------------------------------------------------------
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short --junitxml=reports/junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: reports/junit.xml
+
+  # ------------------------------------------------------------------
+  # Stage 3: Security Scan
+  # ------------------------------------------------------------------
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: Bandit security scan
+        run: bandit -r guardian_one/ -ll --format json -o reports/bandit.json || true
+
+      - name: Check dependencies for vulnerabilities
+        run: safety check -r requirements.txt --output json > reports/safety.json || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: reports/
+
+  # ------------------------------------------------------------------
+  # Stage 4: Prompt Quality (PromptFoo)
+  # ------------------------------------------------------------------
+  prompt-eval:
+    name: Prompt Evaluation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run PromptFoo eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npx promptfoo@latest eval --no-cache -o reports/promptfoo.json
+        continue-on-error: true
+
+      - name: Upload prompt eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results
+          path: reports/promptfoo.json
+
+  # ------------------------------------------------------------------
+  # Stage 5: Build validation
+  # ------------------------------------------------------------------
+  build:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate entry point
+        run: python -c "from guardian_one.core.guardian import GuardianOne; print('Import OK')"
+
+      - name: Validate all agents importable
+        run: |
+          python -c "
+          from guardian_one.agents.chronos import Chronos
+          from guardian_one.agents.archivist import Archivist
+          from guardian_one.agents.cfo import CFO
+          from guardian_one.agents.doordash import DoorDashAgent
+          from guardian_one.agents.gmail_agent import GmailAgent
+          from guardian_one.agents.web_architect import WebArchitect
+          from guardian_one.core.health import HealthServer
+          from guardian_one.core.context_store import ContextStore
+          from guardian_one.core.logger import get_logger, setup_logging
+          print('All modules importable')
+          "
