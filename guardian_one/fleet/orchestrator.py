@@ -448,6 +448,99 @@ class FleetOrchestrator:
         return self.ssh_exec(node_id, cmd, timeout=15)
 
     # ------------------------------------------------------------------
+    # Kernel & daemon overview
+    # ------------------------------------------------------------------
+
+    def kernel_info(self, node_id: str) -> dict[str, Any]:
+        """Get kernel and OS info for a single node."""
+        node = self.registry.get(node_id)
+        if not node:
+            return {"node_id": node_id, "error": f"Unknown node: {node_id}"}
+
+        result: dict[str, Any] = {"node_id": node_id, "name": node.name, "os": node.os.value}
+
+        if node.os.value == "macos":
+            kern = self.ssh_exec(node_id, "uname -srm", timeout=10)
+            sw_vers = self.ssh_exec(node_id, "sw_vers 2>/dev/null | tr '\\n' ' '", timeout=10)
+            uptime = self.ssh_exec(node_id, "uptime", timeout=10)
+            result["kernel"] = kern.stdout if kern.success else "unreachable"
+            result["os_version"] = sw_vers.stdout.strip() if sw_vers.success else ""
+            result["uptime"] = uptime.stdout.strip() if uptime.success else ""
+        else:
+            # Windows (local) or Linux
+            kern = self.ssh_exec(node_id, "ver 2>nul || uname -srm", timeout=10)
+            uptime = self.ssh_exec(node_id, "uptime 2>/dev/null || echo N/A", timeout=10)
+            result["kernel"] = kern.stdout.strip() if kern.success else "unreachable"
+            result["uptime"] = uptime.stdout.strip() if uptime.success else ""
+
+        return result
+
+    def list_daemons(self, node_id: str) -> dict[str, Any]:
+        """List active daemons/background services on a node."""
+        node = self.registry.get(node_id)
+        if not node:
+            return {"node_id": node_id, "error": f"Unknown node: {node_id}"}
+
+        result: dict[str, Any] = {"node_id": node_id, "name": node.name}
+
+        if node.os.value == "macos":
+            # LaunchDaemons + Docker + Guardian processes
+            daemons_cmd = (
+                "echo '=== LAUNCHD DAEMONS ===' && "
+                "launchctl list 2>/dev/null | grep -E 'com\\.(apple|docker|n8n|guardian|ollama)' | head -20 && "
+                "echo '' && echo '=== DOCKER CONTAINERS ===' && "
+                "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}' 2>/dev/null || echo 'Docker not running' && "
+                "echo '' && echo '=== GUARDIAN PROCESSES ===' && "
+                "ps aux | grep -E 'guardian|n8n|ollama|node|python.*main' | grep -v grep"
+            )
+        else:
+            # Windows: services + Docker + processes
+            daemons_cmd = (
+                "echo === DOCKER CONTAINERS === && "
+                "docker ps --format \"table {{.Names}}\\t{{.Status}}\\t{{.Image}}\" 2>nul && "
+                "echo. && echo === KEY PROCESSES === && "
+                "tasklist /FI \"IMAGENAME eq ollama*\" /FI \"STATUS eq Running\" 2>nul & "
+                "tasklist /FI \"IMAGENAME eq python*\" /FI \"STATUS eq Running\" 2>nul & "
+                "tasklist /FI \"IMAGENAME eq docker*\" /FI \"STATUS eq Running\" 2>nul & "
+                "tasklist /FI \"IMAGENAME eq node*\" /FI \"STATUS eq Running\" 2>nul"
+            )
+
+        cmd_result = self.ssh_exec(node_id, daemons_cmd, timeout=20)
+        result["daemons_output"] = cmd_result.stdout if cmd_result.success else cmd_result.stderr
+        result["reachable"] = cmd_result.return_code != -1
+
+        # Docker containers separately for structured data
+        docker_result = self.ssh_exec(node_id, "docker ps --format '{{.Names}}|{{.Status}}|{{.Image}}' 2>/dev/null", timeout=10)
+        containers = []
+        if docker_result.success and docker_result.stdout:
+            for line in docker_result.stdout.strip().split("\n"):
+                parts = line.split("|")
+                if len(parts) == 3:
+                    containers.append({
+                        "name": parts[0],
+                        "status": parts[1],
+                        "image": parts[2],
+                    })
+        result["docker_containers"] = containers
+
+        return result
+
+    def fleet_kernel_overview(self) -> dict[str, Any]:
+        """Get kernel + daemon info for ALL nodes in the fleet."""
+        overview: dict[str, Any] = {"nodes": {}}
+        for node in self.registry.all_nodes():
+            nid = node.node_id
+            kernel = self.kernel_info(nid)
+            daemons = self.list_daemons(nid)
+            overview["nodes"][nid] = {
+                "kernel": kernel,
+                "daemons": daemons,
+                "role": node.role.value,
+                "assigned_services": node.assigned_services,
+            }
+        return overview
+
+    # ------------------------------------------------------------------
     # Fleet dashboard
     # ------------------------------------------------------------------
 

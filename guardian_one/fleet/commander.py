@@ -198,6 +198,104 @@ class FleetCommander:
         lines.append("=" * 70)
         return "\n".join(lines)
 
+    def cmd_kernels(self) -> str:
+        """--fleet-kernels: Show active kernels and daemons across all 3 nodes."""
+        overview = self.orchestrator.fleet_kernel_overview()
+        lines = [
+            "=" * 70,
+            "  GUARDIAN ONE — ACTIVE KERNELS & DAEMONS",
+            "=" * 70,
+            "",
+        ]
+
+        role_labels = {
+            "primary": "PRIMARY (Controller)",
+            "workstation": "WORKSTATION",
+            "daemon": "DAEMON (Always-On)",
+        }
+
+        for nid, data in overview["nodes"].items():
+            node = self.registry.get(nid)
+            name = node.name if node else nid
+            role = role_labels.get(data["role"], data["role"])
+            kernel = data["kernel"]
+            daemons = data["daemons"]
+
+            reachable = daemons.get("reachable", False)
+            status_icon = "[OK]" if reachable else "[--]"
+
+            lines.append(f"  {status_icon} {name} ({nid}) — {role}")
+            lines.append(f"  " + "-" * 60)
+
+            # Kernel info
+            kern_str = kernel.get("kernel", "unreachable")
+            os_ver = kernel.get("os_version", "")
+            uptime = kernel.get("uptime", "")
+            lines.append(f"      Kernel:  {kern_str}")
+            if os_ver:
+                lines.append(f"      OS:      {os_ver}")
+            if uptime:
+                lines.append(f"      Uptime:  {uptime}")
+
+            # Docker containers
+            containers = daemons.get("docker_containers", [])
+            if containers:
+                lines.append(f"      Docker:  {len(containers)} container(s)")
+                for c in containers:
+                    lines.append(f"        - {c['name']:<20} {c['status']:<25} {c['image']}")
+            else:
+                lines.append("      Docker:  no containers running")
+
+            # Assigned services (from config)
+            services = data.get("assigned_services", [])
+            if services:
+                lines.append(f"      Assigned services ({len(services)}):")
+                # Show in two columns
+                for i in range(0, len(services), 2):
+                    pair = services[i:i+2]
+                    line = "        " + "  ".join(f"- {s:<28}" for s in pair)
+                    lines.append(line)
+
+            # Raw daemon output (abbreviated)
+            raw = daemons.get("daemons_output", "")
+            if raw and reachable:
+                # Show just the Guardian/key processes section
+                for section in raw.split("==="):
+                    section = section.strip()
+                    if not section:
+                        continue
+                    header = section.split("\n")[0].strip()
+                    if header in ("GUARDIAN PROCESSES", "KEY PROCESSES"):
+                        proc_lines = [l.strip() for l in section.split("\n")[1:] if l.strip()]
+                        if proc_lines:
+                            lines.append(f"      Active processes:")
+                            for pl in proc_lines[:10]:
+                                # Truncate long lines
+                                lines.append(f"        {pl[:70]}")
+
+            lines.append("")
+
+        # Fleet totals
+        total_nodes = len(overview["nodes"])
+        reachable_count = sum(
+            1 for d in overview["nodes"].values()
+            if d["daemons"].get("reachable", False)
+        )
+        total_containers = sum(
+            len(d["daemons"].get("docker_containers", []))
+            for d in overview["nodes"].values()
+        )
+        total_services = sum(
+            len(d.get("assigned_services", []))
+            for d in overview["nodes"].values()
+        )
+
+        lines.append(f"  FLEET TOTALS: {reachable_count}/{total_nodes} nodes online | "
+                     f"{total_containers} Docker containers | "
+                     f"{total_services} assigned services")
+        lines.append("=" * 70)
+        return "\n".join(lines)
+
     def cmd_full_status(self) -> str:
         """Complete fleet status — combines fleet + displays + resources."""
         parts = [

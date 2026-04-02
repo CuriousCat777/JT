@@ -46,6 +46,7 @@ Usage:
     python main.py --fleet-resources     # Resource optimization recommendations
     python main.py --fleet-subs          # Subscription portfolio dashboard
     python main.py --fleet-backup        # Backup strategy overview
+    python main.py --fleet-kernels       # Active kernels & daemons on all 3 nodes
     python main.py --fleet-status        # Full status (fleet + displays + subs)
 """
 
@@ -336,6 +337,8 @@ def main() -> None:
     parser.add_argument("--fleet-resources", action="store_true", help="Resource optimization dashboard")
     parser.add_argument("--fleet-subs", action="store_true", help="Subscription portfolio")
     parser.add_argument("--fleet-backup", action="store_true", help="Backup strategy overview")
+    parser.add_argument("--fleet-kernels", action="store_true",
+                        help="Active kernels and daemons across all 3 nodes")
     parser.add_argument("--fleet-status", action="store_true",
                         help="Full fleet status (nodes + displays + subscriptions)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -1225,7 +1228,7 @@ def main() -> None:
     elif (args.fleet or args.fleet_health or args.fleet_ssh or args.fleet_start
           or args.fleet_stop or args.fleet_services or args.fleet_displays
           or args.fleet_resources or args.fleet_subs or args.fleet_backup
-          or args.fleet_status):
+          or args.fleet_kernels or args.fleet_status):
         from guardian_one.fleet.commander import FleetCommander
 
         commander = FleetCommander(audit=guardian.audit)
@@ -1254,6 +1257,8 @@ def main() -> None:
             print(commander.cmd_subscriptions())
         elif args.fleet_backup:
             print(commander.cmd_backup())
+        elif args.fleet_kernels:
+            print(commander.cmd_kernels())
         elif args.fleet_status:
             print(commander.cmd_full_status())
 

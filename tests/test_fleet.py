@@ -374,6 +374,38 @@ class TestFleetOrchestrator:
         assert "ssh" in cmd
         assert "ls -la" in cmd
 
+    def test_kernel_info_unknown_node(self, orchestrator: FleetOrchestrator) -> None:
+        result = orchestrator.kernel_info("nonexistent")
+        assert "error" in result
+
+    def test_kernel_info_local_primary(self, orchestrator: FleetOrchestrator) -> None:
+        result = orchestrator.kernel_info("rog")
+        assert result["node_id"] == "rog"
+        assert result["os"] == "windows"
+        assert "kernel" in result
+
+    def test_list_daemons_unknown_node(self, orchestrator: FleetOrchestrator) -> None:
+        result = orchestrator.list_daemons("nonexistent")
+        assert "error" in result
+
+    def test_list_daemons_local_primary(self, orchestrator: FleetOrchestrator) -> None:
+        result = orchestrator.list_daemons("rog")
+        assert result["node_id"] == "rog"
+        assert "docker_containers" in result
+
+    def test_fleet_kernel_overview_all_nodes(self, orchestrator: FleetOrchestrator) -> None:
+        overview = orchestrator.fleet_kernel_overview()
+        assert "nodes" in overview
+        assert "rog" in overview["nodes"]
+        assert "macbook-pro" in overview["nodes"]
+        assert "mac-mini" in overview["nodes"]
+        # Each node has kernel + daemons + role + assigned_services
+        for nid, data in overview["nodes"].items():
+            assert "kernel" in data
+            assert "daemons" in data
+            assert "role" in data
+            assert "assigned_services" in data
+
 
 # ===========================================================================
 # Resource Optimizer Tests
@@ -469,6 +501,16 @@ class TestFleetCommander:
     def test_cmd_ssh_unknown_node(self, commander: FleetCommander) -> None:
         output = commander.cmd_ssh("nonexistent", "echo hi")
         assert "Return code: -1" in output
+
+    def test_cmd_kernels(self, commander: FleetCommander) -> None:
+        output = commander.cmd_kernels()
+        assert "ACTIVE KERNELS & DAEMONS" in output
+        assert "ASUS ROG Flow Z13" in output
+        assert "MacBook Pro 2024" in output
+        assert "Mac Mini" in output
+        assert "PRIMARY (Controller)" in output
+        assert "DAEMON (Always-On)" in output
+        assert "FLEET TOTALS" in output
 
     def test_cmd_full_status(self, commander: FleetCommander) -> None:
         output = commander.cmd_full_status()
