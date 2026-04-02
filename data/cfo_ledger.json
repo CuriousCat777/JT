@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-03-31T13:51:07.924245+00:00",
+  "saved_at": "2026-04-02T18:10:16.829528+00:00",
   "accounts": [
     {
       "name": "Essentia Health 457(b) Deferred Compensation",
@@ -6977,6 +6977,17 @@
     },
     {
       "date": "2026-03-31",
+      "net_worth": 95162.0105,
+      "by_type": {
+        "retirement": 157665.5805,
+        "checking": 67277.54000000001,
+        "savings": 574.9300000000001,
+        "credit_card": -8791.98,
+        "loan": -121564.06
+      }
+    },
+    {
+      "date": "2026-04-02",
       "net_worth": 95162.0105,
       "by_type": {
         "retirement": 157665.5805,
