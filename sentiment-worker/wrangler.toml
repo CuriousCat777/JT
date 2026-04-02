@@ -1,0 +1,6 @@
+name = "guardian-sentiment-analysis"
+main = "src/index.js"
+compatibility_date = "2024-12-20"
+
+[ai]
+binding = "AI"
