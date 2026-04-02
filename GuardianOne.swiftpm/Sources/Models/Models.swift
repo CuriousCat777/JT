@@ -273,14 +273,19 @@ enum AnyCodableValue: Codable {
     case int(Int)
     case double(Double)
     case bool(Bool)
+    case array([AnyCodableValue])
+    case object([String: AnyCodableValue])
     case null
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if let v = try? container.decode(Bool.self) { self = .bool(v) }
+        if container.decodeNil() { self = .null }
+        else if let v = try? container.decode(Bool.self) { self = .bool(v) }
         else if let v = try? container.decode(Int.self) { self = .int(v) }
         else if let v = try? container.decode(Double.self) { self = .double(v) }
         else if let v = try? container.decode(String.self) { self = .string(v) }
+        else if let v = try? container.decode([AnyCodableValue].self) { self = .array(v) }
+        else if let v = try? container.decode([String: AnyCodableValue].self) { self = .object(v) }
         else { self = .null }
     }
 
@@ -291,6 +296,8 @@ enum AnyCodableValue: Codable {
         case .int(let v): try container.encode(v)
         case .double(let v): try container.encode(v)
         case .bool(let v): try container.encode(v)
+        case .array(let v): try container.encode(v)
+        case .object(let v): try container.encode(v)
         case .null: try container.encodeNil()
         }
     }
@@ -301,6 +308,8 @@ enum AnyCodableValue: Codable {
         case .int(let v): return "\(v)"
         case .double(let v): return String(format: "%.1f", v)
         case .bool(let v): return v ? "true" : "false"
+        case .array(let v): return "[\(v.count) items]"
+        case .object(let v): return "{\(v.count) keys}"
         case .null: return "—"
         }
     }

@@ -72,7 +72,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeader(title: "Quick Reference")
                     referenceRow("Start server", "python main.py --devpanel")
-                    referenceRow("Custom port", "python main.py --devpanel --port 8080")
+                    referenceRow("Custom port", "python main.py --devpanel --devpanel-port 8080")
                     referenceRow("Daemon mode", "python main.py --daemon")
                     referenceRow("Default URL", "http://localhost:5100")
                 }

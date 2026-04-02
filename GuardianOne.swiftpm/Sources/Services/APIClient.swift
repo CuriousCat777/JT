@@ -72,12 +72,15 @@ final class APIClient {
     // MARK: - Audit
 
     func fetchAudit(agent: String? = nil, severity: String? = nil, limit: Int = 100) async throws -> [AuditEntry] {
-        var params: [String] = []
-        if let agent { params.append("agent=\(agent)") }
-        if let severity { params.append("severity=\(severity)") }
-        params.append("limit=\(limit)")
-        let query = params.joined(separator: "&")
-        return try await request("/api/audit?\(query)")
+        var components = URLComponents()
+        components.path = "/api/audit"
+        var queryItems: [URLQueryItem] = []
+        if let agent { queryItems.append(URLQueryItem(name: "agent", value: agent)) }
+        if let severity { queryItems.append(URLQueryItem(name: "severity", value: severity)) }
+        queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        components.queryItems = queryItems
+        guard let path = components.string else { throw APIError.invalidURL }
+        return try await request(path)
     }
 
     func fetchPendingReviews() async throws -> [AuditEntry] {

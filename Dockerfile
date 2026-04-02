@@ -34,5 +34,5 @@ EXPOSE 5100 5200
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:5200/health || exit 1
 
-# Default: run daemon mode
-CMD ["python", "main.py", "--daemon"]
+# Default: run daemon + web panel together
+CMD ["sh", "-c", "python main.py --daemon & exec python main.py --devpanel"]

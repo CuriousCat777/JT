@@ -6,10 +6,51 @@ questions autonomously. Uses DuckDuckGo (no API key) and httpx.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# -- URL safety ----------------------------------------------------------------
+
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
+def _is_safe_url(url: str) -> tuple[bool, str]:
+    """Validate a URL against SSRF: scheme allowlist + block private/loopback IPs.
+
+    Returns (safe, reason).
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Malformed URL"
+
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        return False, f"Blocked scheme: {parsed.scheme}"
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "No hostname in URL"
+
+    # Block obvious localhost variants
+    if hostname in ("localhost", "0.0.0.0", "127.0.0.1", "::1", "[::1]"):
+        return False, "Blocked: localhost"
+
+    # Resolve hostname and check all IPs
+    try:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for _family, _type, _proto, _canonname, sockaddr in infos:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False, f"Blocked: private/reserved IP {ip}"
+    except socket.gaierror:
+        return False, f"Cannot resolve hostname: {hostname}"
+
+    return True, ""
 
 # -- Tool definitions for Claude tool_use API ----------------------------------
 
@@ -155,6 +196,10 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 def web_fetch(url: str) -> str:
     """Fetch a web page and return its text content."""
+    safe, reason = _is_safe_url(url)
+    if not safe:
+        return f"URL blocked: {reason}"
+
     try:
         import httpx
         from bs4 import BeautifulSoup
@@ -162,7 +207,7 @@ def web_fetch(url: str) -> str:
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; GuardianOne/1.0)",
         }
-        resp = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=True)
+        resp = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=False)
         resp.raise_for_status()
 
         soup = BeautifulSoup(resp.text, "html.parser")

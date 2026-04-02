@@ -72,6 +72,7 @@ class ConsoleFormatter(logging.Formatter):
 
 
 _initialized: set[str] = set()
+_init_lock = threading.Lock()
 
 
 def get_logger(
@@ -83,33 +84,39 @@ def get_logger(
 
     File handler logs everything at DEBUG level as JSON.
     Console handler logs INFO and above in compact format.
+    Thread-safe: guarded by _init_lock to prevent duplicate handlers.
     """
     logger = logging.getLogger(f"guardian.{name}")
 
     if name in _initialized:
         return logger
 
-    logger.setLevel(level)
-    logger.propagate = False
+    with _init_lock:
+        # Double-check under lock to prevent races
+        if name in _initialized:
+            return logger
 
-    # File handler — JSON, daily rotation, 30 days
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        log_path / "guardian.log",
-        when="midnight",
-        backupCount=30,
-        encoding="utf-8",
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(JSONFormatter())
-    logger.addHandler(file_handler)
+        logger.setLevel(level)
+        logger.propagate = False
 
-    # Console handler — compact, INFO+
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(ConsoleFormatter())
-    logger.addHandler(console_handler)
+        # File handler — JSON, daily rotation, 30 days
+        log_path = Path(log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path / "guardian.log",
+            when="midnight",
+            backupCount=30,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(JSONFormatter())
+        logger.addHandler(file_handler)
 
-    _initialized.add(name)
+        # Console handler — compact, INFO+
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(ConsoleFormatter())
+        logger.addHandler(console_handler)
+
+        _initialized.add(name)
     return logger

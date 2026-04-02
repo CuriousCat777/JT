@@ -41,10 +41,6 @@ class TestPWAManifest:
     def test_manifest_icons_exist(self):
         data = json.loads((WEB_DIR / "static" / "manifest.json").read_text())
         for icon in data["icons"]:
-            # src is like "/static/icons/icon-192.png"
-            relative = icon["src"].lstrip("/")
-            icon_path = WEB_DIR.parent.parent / relative.replace("static/", "guardian_one/web/static/", 1)
-            # Simpler: just check the icons dir
             filename = Path(icon["src"]).name
             assert (WEB_DIR / "static" / "icons" / filename).exists(), f"Icon {filename} missing"
 
