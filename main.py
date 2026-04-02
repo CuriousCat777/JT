@@ -36,6 +36,8 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --heap-analyze PATH     # Analyze a V8 .heapsnapshot file
+    python main.py --heap-analyze PATH --heap-diag DIAG  # With companion diagnostics JSON
 """
 
 from __future__ import annotations
@@ -308,6 +310,10 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--heap-analyze", type=str, default=None,
+                        help="Analyze a V8 .heapsnapshot file")
+    parser.add_argument("--heap-diag", type=str, default=None,
+                        help="Companion diagnostics JSON for heap analysis")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -1193,6 +1199,33 @@ def main() -> None:
         else:
             # --websites: show status
             print(mgr.summary())
+
+    elif args.heap_analyze:
+        from guardian_one.agents.heap_analyzer import (
+            HeapAnalyzer,
+            parse_diagnostics,
+            print_heap_report,
+        )
+        ha_cfg = AgentConfig(name="heap_analyzer")
+        analyzer = HeapAnalyzer(config=ha_cfg, audit=guardian.audit)
+        analyzer.initialize()
+
+        snap_path = Path(args.heap_analyze)
+        diag_path = Path(args.heap_diag) if args.heap_diag else None
+
+        # Auto-detect companion diagnostics if not specified
+        if diag_path is None:
+            candidate = snap_path.with_name(
+                snap_path.name.replace(".heapsnapshot", "-diagnostics.json")
+            )
+            if candidate.exists():
+                diag_path = candidate
+                print(f"  Auto-detected diagnostics: {diag_path}")
+
+        summary = analyzer.analyze(snap_path, diagnostics_path=diag_path)
+        print_heap_report(summary)
+        guardian.shutdown()
+        return
 
     elif args.summary:
         print(guardian.daily_summary())
