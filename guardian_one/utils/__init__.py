@@ -1,1 +1,1 @@
-"""Shared utilities: encryption, notifications."""
+"""Shared utilities: encryption, formatting, notifications."""

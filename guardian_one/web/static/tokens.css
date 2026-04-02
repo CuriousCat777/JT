@@ -1,0 +1,175 @@
+/*  Guardian One — Design System Tokens v1.0
+ *  ==========================================
+ *  Single source of truth for all visual constants.
+ *  Import once; every template and component inherits.
+ *
+ *  Usage:
+ *    <link rel="stylesheet" href="/static/tokens.css">
+ *    color: var(--g1-color-success);
+ */
+
+/* --------------------------------------------------------
+   1. Brand Palette
+   -------------------------------------------------------- */
+:root {
+  --g1-color-brand-primary:        #0EA5E9;
+  --g1-color-brand-secondary:      #8B5CF6;
+  --g1-color-brand-accent:         #F59E0B;
+  --g1-color-brand-surface:        #0F172A;
+  --g1-color-brand-surface-raised: #1E293B;
+  --g1-color-brand-surface-overlay:#334155;
+
+/* --------------------------------------------------------
+   2. Semantic Colors
+   -------------------------------------------------------- */
+  --g1-color-success:       #22C55E;
+  --g1-color-success-muted: #166534;
+  --g1-color-warning:       #EAB308;
+  --g1-color-warning-muted: #854D0E;
+  --g1-color-error:         #EF4444;
+  --g1-color-error-muted:   #991B1B;
+  --g1-color-info:          #3B82F6;
+  --g1-color-info-muted:    #1E40AF;
+
+/* --------------------------------------------------------
+   3. Neutral Scale
+   -------------------------------------------------------- */
+  --g1-color-neutral-50:  #F8FAFC;
+  --g1-color-neutral-100: #F1F5F9;
+  --g1-color-neutral-200: #E2E8F0;
+  --g1-color-neutral-300: #CBD5E1;
+  --g1-color-neutral-400: #94A3B8;
+  --g1-color-neutral-500: #64748B;
+  --g1-color-neutral-600: #475569;
+  --g1-color-neutral-700: #334155;
+  --g1-color-neutral-800: #1E293B;
+  --g1-color-neutral-900: #0F172A;
+  --g1-color-neutral-950: #020617;
+
+/* --------------------------------------------------------
+   4. Agent Accents
+   -------------------------------------------------------- */
+  --g1-color-agent-guardian:  #F59E0B;
+  --g1-color-agent-chronos:  #06B6D4;
+  --g1-color-agent-archivist:#A78BFA;
+  --g1-color-agent-cfo:      #22C55E;
+  --g1-color-agent-doordash: #FB923C;
+  --g1-color-agent-gmail:    #F43F5E;
+  --g1-color-agent-web:      #3B82F6;
+  --g1-color-agent-device:   #14B8A6;
+  --g1-color-agent-varys:    #DC2626;
+
+/* --------------------------------------------------------
+   5. Typography
+   -------------------------------------------------------- */
+  --g1-font-mono:   'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+  --g1-font-sans:   'Inter', 'SF Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --g1-font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --g1-font-size-xs:  0.6875rem; /* 11px */
+  --g1-font-size-sm:  0.8125rem; /* 13px */
+  --g1-font-size-md:  0.9375rem; /* 15px */
+  --g1-font-size-lg:  1.125rem;  /* 18px */
+  --g1-font-size-xl:  1.5rem;    /* 24px */
+  --g1-font-size-2xl: 2rem;      /* 32px */
+
+  --g1-font-weight-regular:  400;
+  --g1-font-weight-medium:   500;
+  --g1-font-weight-semibold: 600;
+  --g1-font-weight-bold:     700;
+
+  --g1-line-height-tight:   1.25;
+  --g1-line-height-normal:  1.5;
+  --g1-line-height-relaxed: 1.75;
+
+/* --------------------------------------------------------
+   6. Spacing  (base 4px)
+   -------------------------------------------------------- */
+  --g1-space-1:   4px;
+  --g1-space-2:   8px;
+  --g1-space-3:  12px;
+  --g1-space-4:  16px;
+  --g1-space-5:  20px;
+  --g1-space-6:  24px;
+  --g1-space-8:  32px;
+  --g1-space-10: 40px;
+  --g1-space-12: 48px;
+  --g1-space-16: 64px;
+
+/* --------------------------------------------------------
+   7. Borders
+   -------------------------------------------------------- */
+  --g1-radius-sm:   4px;
+  --g1-radius-md:   8px;
+  --g1-radius-lg:  12px;
+  --g1-radius-xl:  16px;
+  --g1-radius-full: 9999px;
+
+  --g1-border-thin:   1px;
+  --g1-border-medium: 2px;
+  --g1-border-thick:  3px;
+
+  --g1-border-color-default: #334155;
+  --g1-border-color-subtle:  #1E293B;
+
+/* --------------------------------------------------------
+   8. Shadows / Elevation
+   -------------------------------------------------------- */
+  --g1-shadow-0: none;
+  --g1-shadow-1: 0 1px  3px  rgba(0,0,0,0.3);
+  --g1-shadow-2: 0 4px  6px  rgba(0,0,0,0.35);
+  --g1-shadow-3: 0 10px 15px rgba(0,0,0,0.4);
+  --g1-shadow-4: 0 20px 25px rgba(0,0,0,0.5);
+  --g1-shadow-glow-primary: 0 0 12px rgba(14,165,233,0.3);
+  --g1-shadow-glow-error:   0 0 12px rgba(239,68,68,0.3);
+  --g1-shadow-glow-varys:   0 0 12px rgba(220,38,38,0.25);
+
+/* --------------------------------------------------------
+   9. Motion
+   -------------------------------------------------------- */
+  --g1-duration-instant:    50ms;
+  --g1-duration-fast:      150ms;
+  --g1-duration-normal:    250ms;
+  --g1-duration-slow:      400ms;
+  --g1-duration-deliberate:600ms;
+
+  --g1-easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --g1-easing-enter:   cubic-bezier(0, 0, 0.2, 1);
+  --g1-easing-exit:    cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* --------------------------------------------------------
+   StatusBadge utility classes
+   -------------------------------------------------------- */
+.g1-status-online   { color: var(--g1-color-success); }
+.g1-status-offline  { color: var(--g1-color-error); }
+.g1-status-idle     { color: var(--g1-color-warning); }
+.g1-status-error    { color: var(--g1-color-error); }
+.g1-status-syncing  { color: var(--g1-color-info); }
+.g1-status-degraded { color: var(--g1-color-warning); }
+
+/* Agent accent left-border helper: .g1-agent-border-cfo */
+.g1-agent-border-guardian  { border-left: var(--g1-border-thick) solid var(--g1-color-agent-guardian); }
+.g1-agent-border-chronos   { border-left: var(--g1-border-thick) solid var(--g1-color-agent-chronos); }
+.g1-agent-border-archivist { border-left: var(--g1-border-thick) solid var(--g1-color-agent-archivist); }
+.g1-agent-border-cfo       { border-left: var(--g1-border-thick) solid var(--g1-color-agent-cfo); }
+.g1-agent-border-doordash  { border-left: var(--g1-border-thick) solid var(--g1-color-agent-doordash); }
+.g1-agent-border-gmail     { border-left: var(--g1-border-thick) solid var(--g1-color-agent-gmail); }
+.g1-agent-border-web       { border-left: var(--g1-border-thick) solid var(--g1-color-agent-web); }
+.g1-agent-border-web_architect { border-left: var(--g1-border-thick) solid var(--g1-color-agent-web); }
+.g1-agent-border-device    { border-left: var(--g1-border-thick) solid var(--g1-color-agent-device); }
+.g1-agent-border-varys     { border-left: var(--g1-border-thick) solid var(--g1-color-agent-varys); }
+
+/* Pulse animation for live indicators */
+@keyframes g1-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50%      { opacity: 0.6; box-shadow: 0 0 0 5px transparent; }
+}
+.g1-pulse { animation: g1-pulse 3s ease-in-out infinite; }
+
+/* Spin animation for syncing indicators */
+@keyframes g1-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.g1-spin { animation: g1-spin 1s linear infinite; }

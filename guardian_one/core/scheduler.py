@@ -341,12 +341,8 @@ class Scheduler:
 
 def _print_report_brief(name: str, report) -> None:
     """Print a one-line report summary."""
-    status = report.status
-    alerts = len(report.alerts) if report.alerts else 0
-    line = f"  [{name}] {status} — {report.summary}"
-    if alerts:
-        line += f"  ({alerts} alert{'s' if alerts > 1 else ''})"
-    print(line)
+    from guardian_one.utils.formatting import format_agent_report_brief
+    print(format_agent_report_brief(name, report))
 
 
 HELP_TEXT = """
