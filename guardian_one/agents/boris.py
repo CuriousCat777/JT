@@ -130,6 +130,7 @@ class Boris(BaseAgent):
         self._tokens: list[TokenEntry] = []
         self._repairs: list[ComponentRepair] = []
         self._last_report: AgentReport | None = None
+        self._tokens_css_mtime: float = 0.0  # mtime cache for tokens.css
 
         # Varys uplink
         self._varys: Varys | None = None
@@ -272,16 +273,34 @@ class Boris(BaseAgent):
     def get_mcp_connections(self) -> list[MCPConnection]:
         return list(self._mcp_connections)
 
+    def refresh_mcp(self) -> list[MCPConnection]:
+        """Public API: rescan MCP connections and return results."""
+        self._scan_mcp_connections()
+        return self.get_mcp_connections()
+
+    def refresh_tokens(self) -> dict[str, Any]:
+        """Public API: rescan tokens, check alignment, return summary."""
+        self._scan_tokens()
+        self._check_token_alignment()
+        return self.get_token_summary()
+
     # ------------------------------------------------------------------
     # Token inventory
     # ------------------------------------------------------------------
 
     def _scan_tokens(self) -> None:
-        """Parse tokens.css and build the token inventory."""
+        """Parse tokens.css and build the token inventory (skips if unchanged)."""
         tokens_path = self._web_root / "static" / "tokens.css"
-        if not tokens_path.exists():
+        try:
+            mtime = tokens_path.stat().st_mtime
+        except OSError:
             self._tokens = []
             return
+
+        # Skip re-parse if file hasn't changed since last scan
+        if mtime == self._tokens_css_mtime and self._tokens:
+            return
+        self._tokens_css_mtime = mtime
 
         css = tokens_path.read_text(encoding="utf-8")
         pattern = re.compile(r"(--g1-[\w-]+)\s*:\s*([^;]+);")
@@ -424,12 +443,11 @@ class Boris(BaseAgent):
 
     def _load_repairs(self) -> None:
         path = self._data_dir / "boris_repairs.json"
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                self._repairs = [ComponentRepair(**r) for r in data]
-            except (json.JSONDecodeError, TypeError):
-                self._repairs = []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self._repairs = [ComponentRepair(**r) for r in data]
+        except (json.JSONDecodeError, TypeError, OSError):
+            self._repairs = []
 
     def _save_repairs(self) -> None:
         path = self._data_dir / "boris_repairs.json"

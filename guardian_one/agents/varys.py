@@ -67,6 +67,7 @@ class Varys(BaseAgent):
     def __init__(self, config: AgentConfig, audit: AuditLog) -> None:
         super().__init__(config, audit)
         self._ledger: list[IntelReport] = []
+        self._max_ledger_size: int = 5000
         self._last_brief: str = ""
         self._last_correlation: dict[str, Any] = {}
 
@@ -230,6 +231,13 @@ class Varys(BaseAgent):
             details=details or {},
         )
         self._ledger.append(report)
+        # Prune oldest acknowledged entries if ledger exceeds cap
+        if len(self._ledger) > self._max_ledger_size:
+            self._ledger = [
+                r for r in self._ledger if not r.acknowledged
+            ] + [
+                r for r in self._ledger if r.acknowledged
+            ][-self._max_ledger_size // 2:]
         index = len(self._ledger) - 1
 
         audit_severity = {

@@ -1029,8 +1029,8 @@ def create_app() -> Flask:
         if agent is None:
             return jsonify({"error": "Boris agent not registered"}), 500
         agent.initialize()
-        agent._scan_mcp_connections()
-        return jsonify([c.to_dict() for c in agent.get_mcp_connections()])
+        connections = agent.refresh_mcp()
+        return jsonify([c.to_dict() for c in connections])
 
     @app.route("/api/boris/tokens")
     def api_boris_tokens():
@@ -1039,10 +1039,9 @@ def create_app() -> Flask:
         if agent is None:
             return jsonify({"error": "Boris agent not registered"}), 500
         agent.initialize()
-        agent._scan_tokens()
-        agent._check_token_alignment()
+        summary = agent.refresh_tokens()
         return jsonify({
-            "summary": agent.get_token_summary(),
+            "summary": summary,
             "tokens": [t.to_dict() for t in agent.get_tokens()],
         })
 
@@ -1097,7 +1096,7 @@ def create_app() -> Flask:
         if agent is None:
             return jsonify({"error": "Boris agent not registered"}), 500
         agent.initialize()
-        agent._scan_mcp_connections()
+        agent.refresh_mcp()
         breaches = agent.scan_for_breaches()
         return jsonify({"breaches": breaches, "count": len(breaches)})
 
