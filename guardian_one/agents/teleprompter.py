@@ -24,6 +24,8 @@ from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
 
+from guardian_one.agents.teleprompter_db import TeleprompterDB
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -234,7 +236,9 @@ class Teleprompter(BaseAgent):
     ) -> None:
         super().__init__(config, audit)
         self._data_dir = Path(data_dir)
-        self._db_path = self._data_dir / "teleprompter_db.json"
+        self._db_path = self._data_dir / "teleprompter_db.json"  # legacy JSON path
+        self._sqlite_path = self._data_dir / "teleprompter.db"
+        self._db = TeleprompterDB(self._sqlite_path)
         self._scripts: list[Script] = []
         self._sessions: list[PracticeSession] = []
         self._tips: list[AdvisoryTip] = []
@@ -246,16 +250,31 @@ class Teleprompter(BaseAgent):
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Connect SQLite database
+        self._db.connect()
+
+        # Migrate from legacy JSON if it exists
+        if self._db_path.exists():
+            migrated = self._db.migrate_from_json(self._db_path)
+            if migrated:
+                self.log("db_migrated_from_json", details={"records": migrated})
+
+        # Load into in-memory lists (keeps existing API compatible)
         self._load_db()
 
         # Seed default scripts if empty
         if not self._scripts:
             self._seed_defaults()
 
+        # Sync in-memory to SQLite (covers fresh seed + legacy load)
+        self._sync_to_sqlite()
+
         self.log("initialized", details={
             "scripts": len(self._scripts),
             "sessions": len(self._sessions),
             "tips": len(self._tips),
+            "database": str(self._sqlite_path),
         })
 
     def run(self) -> AgentReport:
@@ -689,7 +708,7 @@ class Teleprompter(BaseAgent):
         self.log("defaults_seeded", details={"count": len(DEFAULT_SCRIPTS)})
 
     # ------------------------------------------------------------------
-    # Guardian One activity logging
+    # Guardian One activity logging (now backed by SQLite)
     # ------------------------------------------------------------------
 
     def _log_to_guardian(
@@ -698,10 +717,17 @@ class Teleprompter(BaseAgent):
         event_data: dict[str, Any] | None = None,
         session_context: dict[str, Any] | None = None,
     ) -> None:
-        """Write a detailed activity log entry to the Guardian One activity log.
+        """Write a detailed activity log entry to the SQLite database.
 
-        Each entry is a single JSON line appended to data/teleprompter_activity.log.
+        Also appends to data/teleprompter_activity.log for backward compat.
         """
+        # Write to SQLite
+        try:
+            self._db.log_activity(event_type, event_data, session_context)
+        except Exception:
+            pass
+
+        # Backward-compat: also append to JSONL file
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type,
@@ -715,10 +741,16 @@ class Teleprompter(BaseAgent):
             with open(log_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
         except OSError:
-            pass  # Don't let logging failures break the agent
+            pass
 
     def get_activity_log(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Read and return recent activity log entries (most recent first)."""
+        """Read recent activity log entries from SQLite (most recent first)."""
+        try:
+            return self._db.get_activity_log(limit=limit)
+        except Exception:
+            pass
+
+        # Fallback: read from JSONL file
         log_path = self._data_dir / "teleprompter_activity.log"
         if not log_path.exists():
             return []
@@ -737,15 +769,23 @@ class Teleprompter(BaseAgent):
         except OSError:
             return []
 
-        # Return most recent first, capped at limit
         return list(reversed(entries[-limit:]))
 
     # ------------------------------------------------------------------
-    # Persistence (JSON, matching cfo_ledger.json pattern)
+    # Persistence (SQLite primary, JSON backup for backward compat)
     # ------------------------------------------------------------------
 
     def _load_db(self) -> None:
-        """Load teleprompter data from JSON file."""
+        """Load teleprompter data.
+
+        Priority: SQLite first, then fall back to legacy JSON.
+        """
+        # Try loading from SQLite first
+        if self._sqlite_path.exists() and self._db.script_count() > 0:
+            self._load_from_sqlite()
+            return
+
+        # Fall back to legacy JSON
         if not self._db_path.exists():
             return
 
@@ -754,7 +794,7 @@ class Teleprompter(BaseAgent):
             self._scripts = [Script(**s) for s in raw.get("scripts", [])]
             self._sessions = [PracticeSession(**s) for s in raw.get("sessions", [])]
             self._tips = [AdvisoryTip(**t) for t in raw.get("tips", [])]
-            self.log("db_loaded", details={
+            self.log("db_loaded_from_json", details={
                 "scripts": len(self._scripts),
                 "sessions": len(self._sessions),
             })
@@ -762,8 +802,42 @@ class Teleprompter(BaseAgent):
             self.log("db_load_error", severity=Severity.WARNING,
                      details={"error": str(exc)})
 
+    def _load_from_sqlite(self) -> None:
+        """Load in-memory lists from SQLite."""
+        scripts = self._db.list_scripts()
+        self._scripts = [Script(**s) for s in scripts]
+
+        sessions = self._db.list_sessions(limit=10000)
+        self._sessions = [PracticeSession(**s) for s in sessions]
+
+        tips = self._db.list_tips(limit=10000)
+        self._tips = [AdvisoryTip(**t) for t in tips]
+
+        self.log("db_loaded_from_sqlite", details={
+            "scripts": len(self._scripts),
+            "sessions": len(self._sessions),
+            "tips": len(self._tips),
+        })
+
+    def _sync_to_sqlite(self) -> None:
+        """Sync in-memory data to SQLite (used after seed or JSON load)."""
+        try:
+            for s in self._scripts:
+                self._db.insert_script(asdict(s))
+            for s in self._sessions:
+                self._db.insert_session(asdict(s))
+            for t in self._tips:
+                self._db.insert_tip(asdict(t))
+        except Exception as exc:
+            self.log("sqlite_sync_error", severity=Severity.WARNING,
+                     details={"error": str(exc)})
+
     def _save_db(self) -> None:
-        """Persist teleprompter data to JSON file."""
+        """Persist teleprompter data to both SQLite and JSON."""
+        # Write to SQLite (primary)
+        self._sync_to_sqlite()
+
+        # Write JSON backup (backward compat with other Guardian One tools)
         data = {
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "scripts": [asdict(s) for s in self._scripts],
@@ -775,36 +849,24 @@ class Teleprompter(BaseAgent):
 
     def _write_summary(self) -> None:
         """Write a summary file readable by other Guardian One agents."""
-        completed = [s for s in self._sessions if s.completed]
-        ratings = [s.self_rating for s in completed if s.self_rating > 0]
-
-        # Category breakdown
-        category_counts: dict[str, int] = {}
-        for s in self._scripts:
-            cat = s.category
-            category_counts[cat] = category_counts.get(cat, 0) + 1
-
-        # Determine last activity timestamp
-        timestamps: list[str] = []
-        if self._scripts:
-            timestamps.extend(s.updated_at for s in self._scripts)
-        if completed:
-            timestamps.extend(s.completed_at for s in completed if s.completed_at)
-        if self._tips:
-            timestamps.extend(t.created_at for t in self._tips)
-
-        summary = {
-            "total_scripts": len(self._scripts),
-            "total_sessions": len(completed),
-            "total_practice_minutes": round(
-                sum(s.duration_seconds for s in completed) / 60, 2
-            ),
-            "average_rating": round(
-                sum(ratings) / len(ratings), 2
-            ) if ratings else 0.0,
-            "last_activity": max(timestamps) if timestamps else "",
-            "categories_breakdown": category_counts,
-        }
+        try:
+            summary = self._db.export_summary()
+        except Exception:
+            # Fallback: compute from in-memory
+            completed = [s for s in self._sessions if s.completed]
+            ratings = [s.self_rating for s in completed if s.self_rating > 0]
+            summary = {
+                "total_scripts": len(self._scripts),
+                "total_sessions": len(completed),
+                "total_practice_minutes": round(
+                    sum(s.duration_seconds for s in completed) / 60, 2
+                ),
+                "average_rating": round(
+                    sum(ratings) / len(ratings), 2
+                ) if ratings else 0.0,
+                "last_activity": "",
+                "categories_breakdown": {},
+            }
 
         summary_path = self._data_dir / "teleprompter_summary.json"
         try:
