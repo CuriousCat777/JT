@@ -9,13 +9,16 @@ Usage:
 from __future__ import annotations
 
 import json
+import queue
+import shutil
+import subprocess
 import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne
@@ -943,6 +946,108 @@ def create_app() -> Flask:
         if _ring_monitor is None:
             return jsonify({"events": [], "note": "Ring monitor not started"})
         return jsonify({"events": _ring_monitor.manteca_events()})
+
+    # ------------------------------------------------------------------
+    # API — Live Network Scan (SSE streaming)
+    # ------------------------------------------------------------------
+
+    _scan_lock = threading.Lock()
+    _scan_running = False
+
+    @app.route("/api/homelink/network-scan/stream")
+    def api_network_scan_stream():
+        """SSE endpoint: run nmap and stream output line-by-line."""
+        nonlocal _scan_running
+
+        subnet = request.args.get("subnet", "192.168.1.0/24")
+
+        # Prevent concurrent scans
+        if _scan_running:
+            def _busy():
+                yield "data: {\"type\":\"error\",\"line\":\"A scan is already running. Please wait.\"}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            return Response(_busy(), mimetype="text/event-stream")
+
+        if not shutil.which("nmap"):
+            def _no_nmap():
+                yield "data: {\"type\":\"error\",\"line\":\"nmap not found on PATH. Install with: sudo apt install nmap\"}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            return Response(_no_nmap(), mimetype="text/event-stream")
+
+        def generate():
+            nonlocal _scan_running
+            _scan_running = True
+            try:
+                g = _get_guardian()
+                g.audit.record(
+                    agent="homelink_iot",
+                    action="live_network_scan_started",
+                    severity=Severity.INFO,
+                    details={"subnet": subnet, "source": "devpanel"},
+                )
+
+                yield f"data: {json.dumps({'type': 'status', 'line': f'Starting nmap scan on {subnet}...'})}\n\n"
+
+                proc = subprocess.Popen(
+                    ["nmap", "-sn", "-oX", "-", subnet],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+
+                xml_buffer = []
+                for line in proc.stdout:
+                    stripped = line.rstrip("\n")
+                    xml_buffer.append(line)
+                    yield f"data: {json.dumps({'type': 'output', 'line': stripped})}\n\n"
+
+                proc.wait(timeout=120)
+
+                # Parse results
+                xml_output = "".join(xml_buffer)
+                devices = []
+                try:
+                    from guardian_one.homelink.iot_controller import IoTController
+                    # Use a temporary controller just for parsing
+                    ctrl = IoTController.__new__(IoTController)
+                    parsed = ctrl._parse_nmap_xml(xml_output)
+                    devices = [
+                        {"ip": d.ip, "mac": d.mac, "hostname": d.hostname,
+                         "vendor": d.vendor, "status": d.status}
+                        for d in parsed
+                    ]
+                except Exception:
+                    pass
+
+                yield f"data: {json.dumps({'type': 'status', 'line': f'Scan complete. {len(devices)} device(s) found.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'results', 'devices': devices})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+
+                g.audit.record(
+                    agent="homelink_iot",
+                    action="live_network_scan_completed",
+                    severity=Severity.INFO,
+                    details={"subnet": subnet, "devices_found": len(devices)},
+                )
+
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                yield f"data: {json.dumps({'type': 'error', 'line': 'Scan timed out after 120 seconds.'})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'line': f'Scan failed: {str(exc)}'})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            finally:
+                _scan_running = False
+
+        return Response(generate(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache",
+                                 "X-Accel-Buffering": "no"})
+
+    @app.route("/api/homelink/network-scan/status")
+    def api_network_scan_status():
+        return jsonify({"running": _scan_running})
 
     # ------------------------------------------------------------------
     # API — Config (read-only view)
