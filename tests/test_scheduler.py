@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from guardian_one.core.config import AgentConfig, GuardianConfig
 from guardian_one.core.guardian import GuardianOne
-from guardian_one.core.scheduler import Scheduler, _print_report_brief
+from guardian_one.core.scheduler import Scheduler, _print_report_brief, _sd_notify
 from guardian_one.core.base_agent import AgentReport, AgentStatus
 from guardian_one.agents.chronos import Chronos
 from guardian_one.agents.archivist import Archivist
@@ -241,3 +241,128 @@ def test_print_report_brief_no_alerts():
         summary="test summary",
     )
     _print_report_brief("test", report)
+
+
+# ------------------------------------------------------------------
+# Error budget tests
+# ------------------------------------------------------------------
+
+
+def test_error_budget_resets_on_success():
+    """Consecutive error count resets after a successful run."""
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+    sched._consecutive_errors["chronos"] = 3
+    sched._run_agent_job("chronos")
+    assert sched._consecutive_errors["chronos"] == 0
+
+
+def test_error_budget_increments_on_failure():
+    """Consecutive error count increments when agent raises."""
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+
+    # Force the agent to fail
+    with patch.object(guardian, "run_agent", side_effect=RuntimeError("boom")):
+        sched._run_agent_job("chronos")
+
+    assert sched._consecutive_errors["chronos"] == 1
+
+
+def test_error_budget_auto_pauses():
+    """Agent is auto-paused after exhausting error budget."""
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+    sched._error_budget = 3  # lower budget for testing
+
+    with patch.object(guardian, "run_agent", side_effect=RuntimeError("boom")):
+        sched._run_agent_job("chronos")  # 1
+        sched._run_agent_job("chronos")  # 2
+        sched._run_agent_job("chronos")  # 3 — should auto-pause
+
+    assert "chronos" in sched._paused
+    assert sched._consecutive_errors["chronos"] == 3
+
+    # Verify it was audited
+    entries = guardian.audit.query(agent="scheduler")
+    auto_paused = [e for e in entries if "auto_paused" in e.action]
+    assert len(auto_paused) == 1
+
+
+def test_error_counts_property():
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+    sched._consecutive_errors["cfo"] = 2
+    assert sched.error_counts == {"cfo": 2}
+
+
+def test_paused_agents_property():
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+    sched._paused.add("chronos")
+    assert "chronos" in sched.paused_agents
+
+
+# ------------------------------------------------------------------
+# Daemon mode tests
+# ------------------------------------------------------------------
+
+
+def test_daemon_starts_and_stops():
+    """Daemon mode starts, runs agents once, and shuts down on stop_event."""
+    guardian = _make_guardian()
+    sched = Scheduler(guardian)
+
+    import threading
+
+    # Set stop event after a short delay so daemon exits quickly
+    def _stop_after_delay():
+        import time
+        time.sleep(0.5)
+        sched._stop_event.set()
+
+    stop_thread = threading.Thread(target=_stop_after_delay)
+    stop_thread.start()
+
+    # Run daemon in the main thread with health disabled (port conflict avoidance)
+    sched.start_daemon(enable_health=False)
+    stop_thread.join()
+
+    # Should have run all agents at least once
+    assert len(sched._last_run) >= 1
+
+    # Should have audit entries for daemon start/stop
+    entries = guardian.audit.query(agent="scheduler")
+    actions = [e.action for e in entries]
+    assert "daemon_started" in actions
+    assert "daemon_stopped" in actions
+
+
+# ------------------------------------------------------------------
+# sd_notify tests
+# ------------------------------------------------------------------
+
+
+def test_sd_notify_no_socket():
+    """sd_notify does nothing when NOTIFY_SOCKET is not set."""
+    with patch.dict("os.environ", {}, clear=True):
+        # Should not raise
+        _sd_notify("READY=1")
+
+
+def test_sd_notify_with_socket(tmp_path):
+    """sd_notify sends message when NOTIFY_SOCKET is set."""
+    import socket as sock_mod
+    import os
+
+    sock_path = str(tmp_path / "notify.sock")
+    server = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_DGRAM)
+    server.bind(sock_path)
+
+    with patch.dict("os.environ", {"NOTIFY_SOCKET": sock_path}):
+        _sd_notify("READY=1")
+
+    data = server.recv(1024)
+    server.close()
+    os.unlink(sock_path)
+    assert data == b"READY=1"

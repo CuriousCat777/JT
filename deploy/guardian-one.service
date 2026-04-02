@@ -5,15 +5,17 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
 User=guardian
 Group=guardian
 WorkingDirectory=/opt/guardian-one
-ExecStart=/opt/guardian-one/venv/bin/python main.py --schedule
+ExecStart=/opt/guardian-one/venv/bin/python main.py --daemon --log-level INFO
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=10
 WatchdogSec=300
+TimeoutStartSec=60
+TimeoutStopSec=30
 
 # Environment
 EnvironmentFile=/opt/guardian-one/.env

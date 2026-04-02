@@ -1,9 +1,10 @@
-"""Scheduler — interactive background runner for Guardian One agents.
+"""Scheduler — background runner for Guardian One agents.
 
-Runs agents on their configured intervals while giving Jeremy full control
-via an interactive command prompt.
+Supports two modes:
+    Interactive (--schedule): agents run on intervals with a command prompt.
+    Daemon (--daemon): headless 24/7 operation for systemd / background use.
 
-Commands (while running):
+Commands (interactive mode):
     status             — Show all agents and their next run time
     run <agent>        — Run an agent immediately
     run all            — Run all agents immediately
@@ -18,7 +19,10 @@ Commands (while running):
 
 from __future__ import annotations
 
+import logging
+import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -32,9 +36,18 @@ from guardian_one.core.audit import Severity
 if TYPE_CHECKING:
     from guardian_one.core.guardian import GuardianOne
 
+log = logging.getLogger("guardian_one.scheduler")
+
+# Default error budget: disable agent after this many consecutive failures
+_DEFAULT_ERROR_BUDGET = 5
+
 
 class Scheduler:
-    """Interactive scheduler that runs agents on configured intervals."""
+    """Scheduler that runs agents on configured intervals.
+
+    Supports interactive mode (with command prompt) and daemon mode
+    (headless, for systemd / 24/7 operation).
+    """
 
     def __init__(self, guardian: GuardianOne) -> None:
         self.guardian = guardian
@@ -43,6 +56,8 @@ class Scheduler:
         self._scheduler_thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._last_run: dict[str, str] = {}
+        self._consecutive_errors: dict[str, int] = {}
+        self._error_budget = _DEFAULT_ERROR_BUDGET
 
     # ------------------------------------------------------------------
     # Setup
@@ -71,9 +86,38 @@ class Scheduler:
             try:
                 report = self.guardian.run_agent(name)
                 self._last_run[name] = datetime.now(timezone.utc).isoformat()
+                self._consecutive_errors[name] = 0  # reset on success
                 _print_report_brief(name, report)
+                log.info("Agent run complete", extra={
+                    "agent": name, "status": report.status,
+                })
             except Exception as exc:
-                print(f"\n  [{name}] Error: {exc}")
+                errors = self._consecutive_errors.get(name, 0) + 1
+                self._consecutive_errors[name] = errors
+                log.error("Agent run failed", extra={
+                    "agent": name, "error": str(exc),
+                    "consecutive_errors": errors,
+                })
+                print(f"\n  [{name}] Error ({errors}/{self._error_budget}): {exc}")
+
+                # Error budget: auto-pause after too many consecutive failures
+                if errors >= self._error_budget:
+                    self._paused.add(name)
+                    self.guardian.audit.record(
+                        agent="scheduler",
+                        action=f"agent_auto_paused:{name}",
+                        severity=Severity.WARNING,
+                        details={
+                            "reason": "error_budget_exhausted",
+                            "consecutive_errors": errors,
+                        },
+                        requires_review=True,
+                    )
+                    log.warning(
+                        "Agent auto-paused after %d consecutive errors",
+                        errors, extra={"agent": name},
+                    )
+                    print(f"  [{name}] AUTO-PAUSED — {errors} consecutive failures")
 
     def _run_cfo_sync(self) -> None:
         """Daily CFO financial sync — pulls latest from all connected providers."""
@@ -333,6 +377,152 @@ class Scheduler:
 
         # Restore original handler
         signal.signal(signal.SIGINT, original_sigint)
+
+    # ------------------------------------------------------------------
+    # Daemon mode — headless 24/7 operation
+    # ------------------------------------------------------------------
+
+    def start_daemon(
+        self,
+        health_port: int = 8080,
+        enable_health: bool = True,
+    ) -> None:
+        """Start in daemon mode — headless, for systemd / 24/7 operation.
+
+        No interactive prompt. Responds to SIGTERM/SIGHUP for graceful
+        shutdown and config reload. Optionally starts the health API.
+        Sends systemd watchdog pings if WatchdogSec is configured.
+        """
+        log.info("Starting Guardian One in daemon mode")
+
+        # Signal handlers for systemd
+        def _shutdown_handler(signum, frame):
+            sig_name = signal.Signals(signum).name
+            log.info("Received %s — shutting down", sig_name)
+            self._stop_event.set()
+
+        def _reload_handler(signum, frame):
+            log.info("Received SIGHUP — reloading agent schedules")
+            self._register_jobs()
+            self.guardian.audit.record(
+                agent="scheduler",
+                action="config_reloaded",
+                severity=Severity.INFO,
+                details={"trigger": "SIGHUP"},
+            )
+
+        signal.signal(signal.SIGTERM, _shutdown_handler)
+        signal.signal(signal.SIGINT, _shutdown_handler)
+        if hasattr(signal, "SIGHUP"):
+            signal.signal(signal.SIGHUP, _reload_handler)
+
+        # Register scheduled jobs
+        self._register_jobs()
+
+        # Start health API if requested
+        health_server = None
+        if enable_health:
+            try:
+                from guardian_one.core.health import HealthServer
+                health_server = HealthServer(self.guardian, port=health_port)
+                health_server.start(daemon=True)
+                log.info("Health API started on port %d", health_port)
+            except Exception as exc:
+                log.warning("Health API failed to start: %s", exc)
+
+        # Initial run
+        log.info("Running initial agent cycle")
+        reports = self.guardian.run_all()
+        for r in reports:
+            self._last_run[r.agent_name] = datetime.now(timezone.utc).isoformat()
+            log.info("Initial run: %s=%s", r.agent_name, r.status)
+
+        self.guardian.audit.record(
+            agent="scheduler",
+            action="daemon_started",
+            severity=Severity.INFO,
+            details={
+                "agents": self.guardian.list_agents(),
+                "health_port": health_port if enable_health else None,
+                "pid": os.getpid(),
+            },
+        )
+
+        # Notify systemd we're ready
+        _sd_notify("READY=1")
+        _sd_notify(f"STATUS=Running {len(self.guardian.list_agents())} agents")
+
+        # Start background tick thread
+        self._scheduler_thread = threading.Thread(
+            target=self._tick_loop, daemon=True,
+        )
+        self._scheduler_thread.start()
+
+        # Main loop: sleep + watchdog pings (no interactive prompt)
+        watchdog_usec = int(os.environ.get("WATCHDOG_USEC", "0"))
+        watchdog_interval = (watchdog_usec / 1_000_000 / 2) if watchdog_usec else 30
+
+        log.info(
+            "Daemon running (PID=%d, watchdog_interval=%.1fs)",
+            os.getpid(), watchdog_interval,
+        )
+
+        while not self._stop_event.is_set():
+            _sd_notify("WATCHDOG=1")
+
+            # Periodic status update for systemd
+            active = len(self.guardian.list_agents()) - len(self._paused)
+            _sd_notify(f"STATUS={active} agents active, "
+                       f"{len(self._paused)} paused")
+
+            self._stop_event.wait(timeout=watchdog_interval)
+
+        # Graceful shutdown
+        log.info("Daemon shutting down")
+        _sd_notify("STOPPING=1")
+        self._stop_event.set()
+        if self._scheduler_thread:
+            self._scheduler_thread.join(timeout=10)
+        schedule.clear()
+
+        self.guardian.audit.record(
+            agent="scheduler",
+            action="daemon_stopped",
+            severity=Severity.INFO,
+            details={"pid": os.getpid()},
+        )
+        log.info("Daemon stopped cleanly")
+
+    @property
+    def error_counts(self) -> dict[str, int]:
+        """Return consecutive error counts per agent (for monitoring)."""
+        with self._lock:
+            return dict(self._consecutive_errors)
+
+    @property
+    def paused_agents(self) -> set[str]:
+        """Return the set of paused agents."""
+        with self._lock:
+            return set(self._paused)
+
+
+def _sd_notify(state: str) -> None:
+    """Send a notification to systemd (sd_notify protocol).
+
+    This implements the sd_notify socket protocol directly, avoiding
+    the need for the python-systemd package.
+    """
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return
+    try:
+        if addr.startswith("@"):
+            addr = "\0" + addr[1:]
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock.sendto(state.encode(), addr)
+        sock.close()
+    except OSError:
+        pass  # not running under systemd — that's fine
 
 
 # ------------------------------------------------------------------

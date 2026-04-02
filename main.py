@@ -3,6 +3,7 @@
 Usage:
     python main.py              # Run all agents once and print daily summary
     python main.py --schedule   # Start interactive scheduler (agents run on intervals)
+    python main.py --daemon     # Start headless 24/7 daemon (for systemd / production)
     python main.py --summary    # Print daily summary only
     python main.py --dashboard  # Print CFO financial dashboard
     python main.py --validate   # CFO validation report (detailed, for review)
@@ -252,6 +253,9 @@ def _run_sync_loop(cfo: CFO, interval: int = 300, once: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Guardian One — multi-agent system")
     parser.add_argument("--schedule", action="store_true", help="Start interactive scheduler")
+    parser.add_argument("--daemon", action="store_true", help="Start headless 24/7 daemon (for systemd)")
+    parser.add_argument("--daemon-health-port", type=int, default=8080, help="Health API port in daemon mode (default: 8080)")
+    parser.add_argument("--no-health", action="store_true", help="Disable health API in daemon mode")
     parser.add_argument("--summary", action="store_true", help="Print daily summary")
     parser.add_argument("--dashboard", action="store_true", help="Generate CFO Excel dashboard")
     parser.add_argument("--dashboard-password", type=str, default=None, help="Password-protect the Excel dashboard")
@@ -597,6 +601,16 @@ def main() -> None:
             evaluator.start()
         else:
             print("  Sandbox deployment failed. Fix issues above before retrying.")
+        guardian.shutdown()
+        return
+
+    if args.daemon:
+        from guardian_one.core.scheduler import Scheduler
+        sched = Scheduler(guardian)
+        sched.start_daemon(
+            health_port=args.daemon_health_port,
+            enable_health=not args.no_health,
+        )
         guardian.shutdown()
         return
 
