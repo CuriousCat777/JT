@@ -958,17 +958,30 @@ def create_app() -> Flask:
     def api_network_scan_stream():
         """SSE endpoint: run nmap and stream output line-by-line."""
         nonlocal _scan_running
+        import re
+        import time as _time
 
         subnet = request.args.get("subnet", "192.168.1.0/24")
 
-        # Prevent concurrent scans
-        if _scan_running:
-            def _busy():
-                yield "data: {\"type\":\"error\",\"line\":\"A scan is already running. Please wait.\"}\n\n"
+        # Validate subnet to prevent command injection
+        if not re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", subnet):
+            def _bad_subnet():
+                yield f"data: {json.dumps({'type': 'error', 'line': 'Invalid subnet format. Use CIDR notation like 192.168.1.0/24'})}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
-            return Response(_busy(), mimetype="text/event-stream")
+            return Response(_bad_subnet(), mimetype="text/event-stream")
+
+        # Prevent concurrent scans (thread-safe)
+        with _scan_lock:
+            if _scan_running:
+                def _busy():
+                    yield "data: {\"type\":\"error\",\"line\":\"A scan is already running. Please wait.\"}\n\n"
+                    yield "data: {\"type\":\"done\"}\n\n"
+                return Response(_busy(), mimetype="text/event-stream")
+            _scan_running = True
 
         if not shutil.which("nmap"):
+            with _scan_lock:
+                _scan_running = False
             def _no_nmap():
                 yield "data: {\"type\":\"error\",\"line\":\"nmap not found on PATH. Install with: sudo apt install nmap\"}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
@@ -976,7 +989,6 @@ def create_app() -> Flask:
 
         def generate():
             nonlocal _scan_running
-            _scan_running = True
             try:
                 g = _get_guardian()
                 g.audit.record(
@@ -997,28 +1009,36 @@ def create_app() -> Flask:
                 )
 
                 xml_buffer = []
+                deadline = _time.monotonic() + 120
                 for line in proc.stdout:
+                    if _time.monotonic() > deadline:
+                        proc.kill()
+                        yield f"data: {json.dumps({'type': 'error', 'line': 'Scan timed out after 120 seconds.'})}\n\n"
+                        yield "data: {\"type\":\"done\"}\n\n"
+                        return
                     stripped = line.rstrip("\n")
                     xml_buffer.append(line)
                     yield f"data: {json.dumps({'type': 'output', 'line': stripped})}\n\n"
 
-                proc.wait(timeout=120)
+                proc.wait(timeout=10)
 
-                # Parse results
+                # Parse results using correct DiscoveredDevice field names
                 xml_output = "".join(xml_buffer)
                 devices = []
                 try:
                     from guardian_one.homelink.iot_controller import IoTController
-                    # Use a temporary controller just for parsing
                     ctrl = IoTController.__new__(IoTController)
                     parsed = ctrl._parse_nmap_xml(xml_output)
                     devices = [
-                        {"ip": d.ip, "mac": d.mac, "hostname": d.hostname,
-                         "vendor": d.vendor, "status": d.status}
+                        {"ip": d.ip_address, "mac": d.mac_address,
+                         "hostname": d.hostname, "vendor": d.vendor,
+                         "status": "up"}
                         for d in parsed
                     ]
-                except Exception:
-                    pass
+                except AttributeError as e:
+                    yield f"data: {json.dumps({'type': 'status', 'line': f'Error parsing scan results: {e}'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'status', 'line': f'Unexpected error parsing results: {e}'})}\n\n"
 
                 yield f"data: {json.dumps({'type': 'status', 'line': f'Scan complete. {len(devices)} device(s) found.'})}\n\n"
                 yield f"data: {json.dumps({'type': 'results', 'devices': devices})}\n\n"
@@ -1039,7 +1059,8 @@ def create_app() -> Flask:
                 yield f"data: {json.dumps({'type': 'error', 'line': f'Scan failed: {str(exc)}'})}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
             finally:
-                _scan_running = False
+                with _scan_lock:
+                    _scan_running = False
 
         return Response(generate(), mimetype="text/event-stream",
                         headers={"Cache-Control": "no-cache",
@@ -1047,7 +1068,9 @@ def create_app() -> Flask:
 
     @app.route("/api/homelink/network-scan/status")
     def api_network_scan_status():
-        return jsonify({"running": _scan_running})
+        with _scan_lock:
+            running = _scan_running
+        return jsonify({"running": running})
 
     # ------------------------------------------------------------------
     # API — Config (read-only view)

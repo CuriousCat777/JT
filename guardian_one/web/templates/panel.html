@@ -1418,25 +1418,57 @@ function startNetworkScan() {
     } else if (data.type === 'results') {
       const devices = data.devices || [];
       if (devices.length > 0) {
-        let html = `<div class="card"><div class="card-title">Discovered Devices (${devices.length})</div>`;
-        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;">`;
-        html += `<tr style="border-bottom:2px solid var(--border);text-align:left;">
-          <th style="padding:8px;">IP Address</th>
-          <th style="padding:8px;">Hostname</th>
-          <th style="padding:8px;">MAC Address</th>
-          <th style="padding:8px;">Vendor</th>
-          <th style="padding:8px;">Status</th></tr>`;
-        devices.forEach(d => {
-          html += `<tr style="border-bottom:1px solid var(--border-subtle);">
-            <td style="padding:8px;font-family:var(--font-mono);font-weight:600;">${d.ip}</td>
-            <td style="padding:8px;">${d.hostname || '—'}</td>
-            <td style="padding:8px;font-family:var(--font-mono);font-size:11px;">${d.mac || '—'}</td>
-            <td style="padding:8px;">${d.vendor || '—'}</td>
-            <td style="padding:8px;"><span class="agent-badge badge-running">${d.status || 'up'}</span></td>
-          </tr>`;
+        // Build table via DOM APIs to avoid XSS from attacker-controlled hostnames/vendors
+        const card = document.createElement('div');
+        card.className = 'card';
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = `Discovered Devices (${devices.length})`;
+        card.appendChild(title);
+
+        const table = document.createElement('table');
+        table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
+        const headerRow = document.createElement('tr');
+        headerRow.style.cssText = 'border-bottom:2px solid var(--border);text-align:left;';
+        ['IP Address','Hostname','MAC Address','Vendor','Status'].forEach(text => {
+          const th = document.createElement('th');
+          th.style.padding = '8px';
+          th.textContent = text;
+          headerRow.appendChild(th);
         });
-        html += `</table></div>`;
-        results.innerHTML = html;
+        table.appendChild(headerRow);
+
+        devices.forEach(d => {
+          const row = document.createElement('tr');
+          row.style.borderBottom = '1px solid var(--border-subtle)';
+          const ipCell = document.createElement('td');
+          ipCell.style.cssText = 'padding:8px;font-family:var(--font-mono);font-weight:600;';
+          ipCell.textContent = d.ip || '';
+          row.appendChild(ipCell);
+          const hostCell = document.createElement('td');
+          hostCell.style.padding = '8px';
+          hostCell.textContent = d.hostname || '\u2014';
+          row.appendChild(hostCell);
+          const macCell = document.createElement('td');
+          macCell.style.cssText = 'padding:8px;font-family:var(--font-mono);font-size:11px;';
+          macCell.textContent = d.mac || '\u2014';
+          row.appendChild(macCell);
+          const vendorCell = document.createElement('td');
+          vendorCell.style.padding = '8px';
+          vendorCell.textContent = d.vendor || '\u2014';
+          row.appendChild(vendorCell);
+          const statusCell = document.createElement('td');
+          statusCell.style.padding = '8px';
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge badge-running';
+          badge.textContent = d.status || 'up';
+          statusCell.appendChild(badge);
+          row.appendChild(statusCell);
+          table.appendChild(row);
+        });
+        card.appendChild(table);
+        results.innerHTML = '';
+        results.appendChild(card);
       }
 
     } else if (data.type === 'done') {
