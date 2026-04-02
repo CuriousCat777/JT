@@ -31,6 +31,13 @@ Usage:
     python main.py --scene movie         # Activate a scene (movie, work, away, goodnight)
     python main.py --home-event wake     # Fire event (wake, sleep, leave, arrive, sunrise, sunset)
     python main.py --flipper             # Flipper Zero device profiles
+    python main.py --hue                  # Show all Hue lights and groups
+    python main.py --hue-register         # Register with Hue Bridge (press link button first!)
+    python main.py --hue-on 1             # Turn on light 1
+    python main.py --hue-off 1            # Turn off light 1
+    python main.py --hue-dim 1:50         # Dim light 1 to 50%
+    python main.py --hue-color 1:warm     # Set light 1 to warm white
+    python main.py --hue-scene 1:abc123   # Activate scene in group
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
@@ -330,6 +337,20 @@ def main() -> None:
                         help="IoT security hardening checklist + VLAN policy")
     parser.add_argument("--iot-workflows", type=str, default=None,
                         help="Export n8n + Node-RED workflow templates to directory")
+    parser.add_argument("--hue", action="store_true",
+                        help="Show all Hue lights and groups")
+    parser.add_argument("--hue-register", action="store_true",
+                        help="Register with Hue Bridge (press link button first!)")
+    parser.add_argument("--hue-on", type=str, default=None,
+                        help="Turn on a Hue light by ID (e.g. --hue-on 1)")
+    parser.add_argument("--hue-off", type=str, default=None,
+                        help="Turn off a Hue light by ID (e.g. --hue-off 1)")
+    parser.add_argument("--hue-dim", type=str, default=None,
+                        help="Dim a Hue light: 'ID:PCT' (e.g. --hue-dim 1:50)")
+    parser.add_argument("--hue-color", type=str, default=None,
+                        help="Set Hue light color: 'ID:COLOR' (warm/daylight/red/green/blue)")
+    parser.add_argument("--hue-scene", type=str, default=None,
+                        help="Activate Hue scene: 'GROUP_ID:SCENE_ID'")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -571,6 +592,120 @@ def main() -> None:
             print("\n  REQUIRES MANUAL APPROVAL:")
             for task in maint["manual_approval_required"]:
                 print(f"    - {task}")
+            print()
+
+        guardian.shutdown()
+        return
+
+    if args.hue or args.hue_register or args.hue_on or args.hue_off or args.hue_dim or args.hue_color or args.hue_scene:
+        from guardian_one.homelink.drivers import HueDriver
+
+        dev_cfg = config.agents.get("device_agent", AgentConfig(name="device_agent"))
+        custom = dev_cfg.custom if hasattr(dev_cfg, "custom") and dev_cfg.custom else {}
+        hue_cfg = custom.get("ecosystems", {}).get("philips_hue", {})
+        bridge_ip = hue_cfg.get("bridge_ip", "192.168.1.147")
+
+        if args.hue_register:
+            print(f"\n  Registering with Hue Bridge at {bridge_ip}...")
+            print("  (Make sure you pressed the link button within the last 30 seconds!)\n")
+            result = HueDriver.register(bridge_ip)
+            if result["success"]:
+                username = result["username"]
+                print(f"  [OK] Registered! API username: {username}")
+                print(f"\n  Add this to your .env file:")
+                print(f"    HUE_BRIDGE_USERNAME={username}")
+                print(f"\n  Then Guardian One will control your lights automatically.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+                if "link button" in result.get("error", "").lower():
+                    print("  Press the physical button on top of the bridge, then retry within 30s.")
+            guardian.shutdown()
+            return
+
+        # All other hue commands need an API key
+        api_key = os.environ.get("HUE_BRIDGE_USERNAME", "")
+        if not api_key:
+            api_key = guardian.vault.retrieve("HUE_BRIDGE_USERNAME") or ""
+        if not api_key:
+            print("\n  Hue Bridge not registered. Run --hue-register first.")
+            print("  (Press the link button on the bridge, then run --hue-register)")
+            guardian.shutdown()
+            return
+
+        hue = HueDriver(bridge_ip=bridge_ip, api_key=api_key)
+
+        if args.hue_on:
+            result = hue.turn_on(light_id=args.hue_on)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_on} on"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_off:
+            result = hue.turn_off(light_id=args.hue_off)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_off} off"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_dim:
+            parts = args.hue_dim.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-dim LIGHT_ID:PERCENT (e.g. --hue-dim 1:50)")
+            else:
+                result = hue.set_brightness(int(parts[1]), light_id=parts[0])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}%"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_color:
+            parts = args.hue_color.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-color LIGHT_ID:COLOR (warm/daylight/red/green/blue)")
+            else:
+                result = hue.set_color(light_id=parts[0], color_name=parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_scene:
+            parts = args.hue_scene.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-scene GROUP_ID:SCENE_ID")
+            else:
+                result = hue.activate_scene(int(parts[0]), parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Scene {parts[1]} in group {parts[0]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        else:
+            # --hue: show all lights and groups
+            print(f"\n  H.O.M.E. L.I.N.K. — PHILIPS HUE (bridge: {bridge_ip})")
+            print("  " + "=" * 50)
+
+            lights_result = hue.get_lights()
+            if lights_result["success"] and lights_result.get("data"):
+                lights = lights_result["data"]
+                print(f"\n  LIGHTS ({len(lights)}):")
+                print(f"  {'ID':4s} {'Name':30s} {'State':6s} {'Bri':4s} {'Reachable':9s}")
+                print("  " + "-" * 55)
+                for lid, info in sorted(lights.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {})
+                    on = "ON" if state.get("on") else "OFF"
+                    bri = str(state.get("bri", "")) if state.get("on") else ""
+                    reach = "yes" if state.get("reachable") else "NO"
+                    name = info.get("name", "")
+                    print(f"  {lid:4s} {name:30s} {on:6s} {bri:4s} {reach:9s}")
+            else:
+                print(f"  Could not fetch lights: {lights_result.get('error', 'unknown')}")
+
+            groups_result = hue.get_groups()
+            if groups_result["success"] and groups_result.get("data"):
+                groups = groups_result["data"]
+                print(f"\n  GROUPS/ROOMS ({len(groups)}):")
+                print(f"  {'ID':4s} {'Name':25s} {'Type':10s} {'Lights':8s} {'All On':6s}")
+                print("  " + "-" * 55)
+                for gid, info in sorted(groups.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {}) if isinstance(info, dict) else {}
+                    name = info.get("name", "")
+                    gtype = info.get("type", "")
+                    light_count = str(len(info.get("lights", [])))
+                    all_on = "yes" if state.get("all_on") else "no"
+                    print(f"  {gid:4s} {name:25s} {gtype:10s} {light_count:8s} {all_on:6s}")
+
             print()
 
         guardian.shutdown()
