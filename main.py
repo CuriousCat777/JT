@@ -36,6 +36,9 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --daemon                        # Headless daemon, health API on :8080
+    python main.py --daemon --daemon-health-port 9090  # Custom health port
+    python main.py --daemon --no-health            # Daemon without health API
 """
 
 from __future__ import annotations
@@ -308,6 +311,9 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--daemon", action="store_true", help="Run headless with scheduled agents (no interactive prompt)")
+    parser.add_argument("--daemon-health-port", type=int, default=8080, help="Health API port for daemon mode (default: 8080)")
+    parser.add_argument("--no-health", action="store_true", help="Disable health API in daemon mode")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -524,6 +530,18 @@ def main() -> None:
         from guardian_one.core.scheduler import Scheduler
         sched = Scheduler(guardian)
         sched.start()
+        guardian.shutdown()
+        return
+
+    if args.daemon:
+        from guardian_one.core.daemon import DaemonRunner
+        runner = DaemonRunner(
+            guardian,
+            health_port=args.daemon_health_port,
+            enable_health=not args.no_health,
+            config_path=args.config,
+        )
+        runner.start()
         guardian.shutdown()
         return
 

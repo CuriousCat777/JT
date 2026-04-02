@@ -1,0 +1,33 @@
+[Unit]
+Description=Guardian One — multi-agent AI orchestration daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+WorkingDirectory=/opt/guardian-one
+EnvironmentFile=/opt/guardian-one/.env
+ExecStart=/opt/guardian-one/venv/bin/python main.py --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+
+# Health check
+TimeoutStartSec=60
+WatchdogSec=300
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/guardian-one/data /opt/guardian-one/logs
+PrivateTmp=true
+
+# Logging — stdout/stderr to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guardian-one
+
+[Install]
+WantedBy=multi-user.target
