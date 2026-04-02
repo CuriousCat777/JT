@@ -145,34 +145,67 @@ class KasaDriver:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class HueDriver:
-    """Controls Philips Hue lights via the Hue Bridge local API.
+    """Controls Philips Hue lights via the Hue Bridge local REST API.
 
-    The Hue Bridge is the gateway to all Hue bulbs (Zigbee mesh).
-    phue library sends HTTP PUT/GET to the bridge's REST API.
+    Zero external dependencies — uses stdlib urllib to hit the bridge
+    directly over HTTPS/HTTP on the LAN.  No cloud, no phue library.
+
+    Bridge at 192.168.1.147 (self-signed cert → verify=False).
+    API docs: https://developers.meethue.com/develop/hue-api-v2/
 
     Usage:
-        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
-        result = driver.turn_on(light_id=1, brightness=200)
-        result = driver.set_color(light_id=1, hue=10000, sat=254)
+        driver = HueDriver(bridge_ip="192.168.1.147", api_key="abc123")
+        result = driver.turn_on(light_id="1", brightness=200)
+        result = driver.get_lights()
     """
 
     def __init__(self, bridge_ip: str, api_key: str = "") -> None:
         self._bridge_ip = bridge_ip
         self._api_key = api_key
-        self._bridge = None
 
-    def _get_bridge(self):
-        """Lazily initialize the phue Bridge object."""
-        if self._bridge is not None:
-            return self._bridge
-        from phue import Bridge
-        # phue stores/reads API key from ~/.python_hue by default.
-        # If we have a key from Vault, set it directly.
-        b = Bridge(self._bridge_ip)
-        if self._api_key:
-            b.username = self._api_key
-        self._bridge = b
-        return b
+    @property
+    def _base_url(self) -> str:
+        return f"https://{self._bridge_ip}/api/{self._api_key}"
+
+    def _request(
+        self, method: str, path: str, body: dict | None = None,
+    ) -> dict[str, Any]:
+        """Send a request to the Hue Bridge local API."""
+        import ssl
+        import urllib.error
+        import urllib.request
+
+        if not self._api_key:
+            return _fail(path, "No Hue API key — register with bridge first")
+
+        url = f"{self._base_url}{path}"
+        data = json.dumps(body).encode() if body else None
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+
+        # Bridge uses self-signed cert — skip verification on LAN
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        try:
+            with urllib.request.urlopen(req, timeout=5, context=ctx) as resp:
+                result = json.loads(resp.read().decode())
+                # Hue API returns a list for state changes
+                if isinstance(result, list) and result:
+                    if "error" in result[0]:
+                        return _fail(path, result[0]["error"].get("description", str(result[0])))
+                return _ok(method.lower(), path=path, data=result)
+        except urllib.error.HTTPError as exc:
+            return _fail(path, f"HTTP {exc.code}")
+        except urllib.error.URLError as exc:
+            return _fail(path, f"Connection failed: {exc.reason}")
+        except Exception as exc:
+            return _fail(path, str(exc))
+
+    # ------------------------------------------------------------------
+    # Light control
+    # ------------------------------------------------------------------
 
     def turn_on(
         self,
@@ -183,50 +216,28 @@ class HueDriver:
         """Turn on a light or group.
 
         Args:
-            light_id: Individual light ID or name. None if using group.
+            light_id: Individual light ID. None if using group.
             group_id: Group/room ID. None if using individual light.
             brightness: 1-254 (Hue scale).
         """
-        try:
-            b = self._get_bridge()
-            cmd = {"on": True, "bri": max(1, min(254, brightness))}
-            if group_id is not None:
-                b.set_group(group_id, cmd)
-                return _ok("light_on", target=f"group:{group_id}",
-                           brightness=brightness)
-            elif light_id is not None:
-                b.set_light(light_id, cmd)
-                return _ok("light_on", target=f"light:{light_id}",
-                           brightness=brightness)
-            else:
-                return _fail("light_on", "No light_id or group_id specified")
-        except ImportError:
-            return _fail("light_on",
-                         "phue not installed (pip install phue)")
-        except Exception as exc:
-            return _fail("light_on", str(exc))
+        cmd = {"on": True, "bri": max(1, min(254, brightness))}
+        if group_id is not None:
+            return self._request("PUT", f"/groups/{group_id}/action", cmd)
+        elif light_id is not None:
+            return self._request("PUT", f"/lights/{light_id}/state", cmd)
+        return _fail("light_on", "No light_id or group_id specified")
 
     def turn_off(
         self,
         light_id: int | str | None = None,
         group_id: int | None = None,
     ) -> dict[str, Any]:
-        try:
-            b = self._get_bridge()
-            cmd = {"on": False}
-            if group_id is not None:
-                b.set_group(group_id, cmd)
-                return _ok("light_off", target=f"group:{group_id}")
-            elif light_id is not None:
-                b.set_light(light_id, cmd)
-                return _ok("light_off", target=f"light:{light_id}")
-            else:
-                return _fail("light_off", "No light_id or group_id specified")
-        except ImportError:
-            return _fail("light_off",
-                         "phue not installed (pip install phue)")
-        except Exception as exc:
-            return _fail("light_off", str(exc))
+        cmd = {"on": False}
+        if group_id is not None:
+            return self._request("PUT", f"/groups/{group_id}/action", cmd)
+        elif light_id is not None:
+            return self._request("PUT", f"/lights/{light_id}/state", cmd)
+        return _fail("light_off", "No light_id or group_id specified")
 
     def set_brightness(
         self,
@@ -235,25 +246,13 @@ class HueDriver:
         group_id: int | None = None,
     ) -> dict[str, Any]:
         """Set brightness as a percentage (0-100) → Hue scale (1-254)."""
-        try:
-            b = self._get_bridge()
-            bri = max(1, int(brightness_pct / 100 * 254))
-            cmd = {"on": True, "bri": bri}
-            if group_id is not None:
-                b.set_group(group_id, cmd)
-                target = f"group:{group_id}"
-            elif light_id is not None:
-                b.set_light(light_id, cmd)
-                target = f"light:{light_id}"
-            else:
-                return _fail("light_dim", "No light_id or group_id specified")
-            return _ok("light_dim", target=target,
-                       brightness_pct=brightness_pct, bri_hue=bri)
-        except ImportError:
-            return _fail("light_dim",
-                         "phue not installed (pip install phue)")
-        except Exception as exc:
-            return _fail("light_dim", str(exc))
+        bri = max(1, int(brightness_pct / 100 * 254))
+        cmd = {"on": True, "bri": bri}
+        if group_id is not None:
+            return self._request("PUT", f"/groups/{group_id}/action", cmd)
+        elif light_id is not None:
+            return self._request("PUT", f"/lights/{light_id}/state", cmd)
+        return _fail("light_dim", "No light_id or group_id specified")
 
     def set_color(
         self,
@@ -271,68 +270,96 @@ class HueDriver:
             color_name: Named preset — 'warm', 'daylight', 'red', 'blue',
                         'green'. Overrides hue/sat if set.
         """
-        try:
-            b = self._get_bridge()
+        presets = {
+            "warm": {"on": True, "ct": 400},           # 2500K warm white
+            "daylight": {"on": True, "ct": 153},        # 6500K daylight
+            "red": {"on": True, "hue": 0, "sat": 254},
+            "green": {"on": True, "hue": 21845, "sat": 254},
+            "blue": {"on": True, "hue": 43690, "sat": 254},
+        }
 
-            presets = {
-                "warm": {"ct": 400},           # 2500K warm white
-                "daylight": {"ct": 153},        # 6500K daylight
-                "red": {"hue": 0, "sat": 254},
-                "green": {"hue": 21845, "sat": 254},
-                "blue": {"hue": 43690, "sat": 254},
-            }
+        if color_name and color_name.lower() in presets:
+            cmd = presets[color_name.lower()]
+        elif hue is not None:
+            cmd = {"on": True, "hue": hue, "sat": sat}
+        else:
+            return _fail("light_color", "No color specified (hue or color_name)")
 
-            if color_name and color_name.lower() in presets:
-                cmd = {"on": True, **presets[color_name.lower()]}
-            elif hue is not None:
-                cmd = {"on": True, "hue": hue, "sat": sat}
-            else:
-                return _fail("light_color",
-                             "No color specified (hue or color_name)")
+        if group_id is not None:
+            return self._request("PUT", f"/groups/{group_id}/action", cmd)
+        elif light_id is not None:
+            return self._request("PUT", f"/lights/{light_id}/state", cmd)
+        return _fail("light_color", "No light_id or group_id specified")
 
-            if group_id is not None:
-                b.set_group(group_id, cmd)
-                target = f"group:{group_id}"
-            elif light_id is not None:
-                b.set_light(light_id, cmd)
-                target = f"light:{light_id}"
-            else:
-                return _fail("light_color",
-                             "No light_id or group_id specified")
-            return _ok("light_color", target=target, color=color_name or hue)
-        except ImportError:
-            return _fail("light_color",
-                         "phue not installed (pip install phue)")
-        except Exception as exc:
-            return _fail("light_color", str(exc))
+    # ------------------------------------------------------------------
+    # Discovery / status
+    # ------------------------------------------------------------------
 
     def get_lights(self) -> dict[str, Any]:
         """List all lights on the bridge."""
-        try:
-            b = self._get_bridge()
-            lights = b.get_light_objects("id")
-            info = {
-                lid: {"name": l.name, "on": l.on, "brightness": l.brightness}
-                for lid, l in lights.items()
-            }
-            return _ok("get_lights", lights=info)
-        except ImportError:
-            return _fail("get_lights",
-                         "phue not installed (pip install phue)")
-        except Exception as exc:
-            return _fail("get_lights", str(exc))
+        return self._request("GET", "/lights")
+
+    def get_light(self, light_id: int | str) -> dict[str, Any]:
+        """Get state of a single light."""
+        return self._request("GET", f"/lights/{light_id}")
 
     def get_groups(self) -> dict[str, Any]:
         """List all groups/rooms on the bridge."""
+        return self._request("GET", "/groups")
+
+    def get_config(self) -> dict[str, Any]:
+        """Get bridge configuration (name, zigbee channel, sw version)."""
+        return self._request("GET", "/config")
+
+    def get_sensors(self) -> dict[str, Any]:
+        """List all sensors (motion, daylight, switches)."""
+        return self._request("GET", "/sensors")
+
+    def get_scenes(self) -> dict[str, Any]:
+        """List all scenes."""
+        return self._request("GET", "/scenes")
+
+    def activate_scene(self, group_id: int, scene_id: str) -> dict[str, Any]:
+        """Activate a scene in a group."""
+        return self._request("PUT", f"/groups/{group_id}/action", {"scene": scene_id})
+
+    # ------------------------------------------------------------------
+    # Registration (call after pressing bridge link button)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def register(bridge_ip: str, device_type: str = "guardian_one#homelink") -> dict[str, Any]:
+        """Register a new API user on the bridge.
+
+        Press the link button on the bridge FIRST, then call this within 30s.
+        Returns the API username on success.
+        """
+        import ssl
+        import urllib.error
+        import urllib.request
+
+        url = f"https://{bridge_ip}/api"
+        data = json.dumps({"devicetype": device_type}).encode()
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=data, method="POST", headers=headers)
+
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
         try:
-            b = self._get_bridge()
-            groups = b.get_group()
-            return _ok("get_groups", groups=groups)
-        except ImportError:
-            return _fail("get_groups",
-                         "phue not installed (pip install phue)")
+            with urllib.request.urlopen(req, timeout=5, context=ctx) as resp:
+                result = json.loads(resp.read().decode())
+                if isinstance(result, list) and result:
+                    if "success" in result[0]:
+                        username = result[0]["success"]["username"]
+                        return _ok("register", username=username, bridge_ip=bridge_ip)
+                    elif "error" in result[0]:
+                        desc = result[0]["error"].get("description", "")
+                        return _fail("register", desc, bridge_ip=bridge_ip)
+                return _fail("register", f"Unexpected response: {result}", bridge_ip=bridge_ip)
         except Exception as exc:
-            return _fail("get_groups", str(exc))
+            return _fail("register", str(exc), bridge_ip=bridge_ip)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -642,8 +669,8 @@ class DriverFactory:
     def get_kasa_driver(self, device_ip: str) -> KasaDriver:
         return KasaDriver(ip=device_ip)
 
-    def get_hue_driver(self, bridge_ip: str) -> HueDriver:
-        api_key = self._vault_retrieve("HUE_BRIDGE_API_KEY") or ""
+    def get_hue_driver(self, bridge_ip: str = "192.168.1.147") -> HueDriver:
+        api_key = self._vault_retrieve("HUE_BRIDGE_USERNAME") or ""
         return HueDriver(bridge_ip=bridge_ip, api_key=api_key)
 
     def get_govee_driver(self, device_ip: str) -> GoveeLanDriver:
