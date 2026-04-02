@@ -36,6 +36,17 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --fleet               # Fleet command center (3-node dashboard)
+    python main.py --fleet-health        # Health check all fleet nodes (A/B/C)
+    python main.py --fleet-ssh NODE CMD  # Execute command on a fleet node via SSH
+    python main.py --fleet-start NODE SVC # Start a service on a fleet node
+    python main.py --fleet-stop NODE SVC  # Stop a service on a fleet node
+    python main.py --fleet-services NODE  # List running services on a node
+    python main.py --fleet-displays      # Display topology (monitors + TVs layout)
+    python main.py --fleet-resources     # Resource optimization recommendations
+    python main.py --fleet-subs          # Subscription portfolio dashboard
+    python main.py --fleet-backup        # Backup strategy overview
+    python main.py --fleet-status        # Full status (fleet + displays + subs)
 """
 
 from __future__ import annotations
@@ -310,6 +321,23 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    # Fleet management (multi-device orchestration)
+    parser.add_argument("--fleet", action="store_true", help="Fleet command center dashboard")
+    parser.add_argument("--fleet-health", action="store_true", help="Health check all fleet nodes")
+    parser.add_argument("--fleet-ssh", nargs=2, metavar=("NODE", "CMD"), default=None,
+                        help="Execute SSH command on a fleet node")
+    parser.add_argument("--fleet-start", nargs=2, metavar=("NODE", "SERVICE"), default=None,
+                        help="Start a service on a fleet node")
+    parser.add_argument("--fleet-stop", nargs=2, metavar=("NODE", "SERVICE"), default=None,
+                        help="Stop a service on a fleet node")
+    parser.add_argument("--fleet-services", type=str, default=None,
+                        help="List running services on a fleet node")
+    parser.add_argument("--fleet-displays", action="store_true", help="Show display topology layout")
+    parser.add_argument("--fleet-resources", action="store_true", help="Resource optimization dashboard")
+    parser.add_argument("--fleet-subs", action="store_true", help="Subscription portfolio")
+    parser.add_argument("--fleet-backup", action="store_true", help="Backup strategy overview")
+    parser.add_argument("--fleet-status", action="store_true",
+                        help="Full fleet status (nodes + displays + subscriptions)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -1193,6 +1221,41 @@ def main() -> None:
         else:
             # --websites: show status
             print(mgr.summary())
+
+    elif (args.fleet or args.fleet_health or args.fleet_ssh or args.fleet_start
+          or args.fleet_stop or args.fleet_services or args.fleet_displays
+          or args.fleet_resources or args.fleet_subs or args.fleet_backup
+          or args.fleet_status):
+        from guardian_one.fleet.commander import FleetCommander
+
+        commander = FleetCommander(audit=guardian.audit)
+        commander.initialize()
+
+        if args.fleet:
+            print(commander.cmd_fleet())
+        elif args.fleet_health:
+            print(commander.cmd_health())
+        elif args.fleet_ssh:
+            node_id, cmd = args.fleet_ssh
+            print(commander.cmd_ssh(node_id, cmd))
+        elif args.fleet_start:
+            node_id, service = args.fleet_start
+            print(commander.cmd_start_service(node_id, service))
+        elif args.fleet_stop:
+            node_id, service = args.fleet_stop
+            print(commander.cmd_stop_service(node_id, service))
+        elif args.fleet_services:
+            print(commander.cmd_list_services(args.fleet_services))
+        elif args.fleet_displays:
+            print(commander.cmd_displays())
+        elif args.fleet_resources:
+            print(commander.cmd_resources())
+        elif args.fleet_subs:
+            print(commander.cmd_subscriptions())
+        elif args.fleet_backup:
+            print(commander.cmd_backup())
+        elif args.fleet_status:
+            print(commander.cmd_full_status())
 
     elif args.summary:
         print(guardian.daily_summary())
