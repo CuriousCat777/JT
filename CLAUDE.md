@@ -16,12 +16,14 @@ Timezone: America/Chicago
 
 ```
 main.py                         # CLI entry point (25+ commands)
+mcp_server.py                   # MCP server for Claude integration
 guardian_one/
 ├── agents/                     # Subordinate agents
 │   ├── chronos.py              # Schedule & calendar management
 │   ├── archivist.py            # File & data sovereignty
 │   ├── cfo.py                  # Financial intelligence (Plaid, Empower, Rocket Money)
 │   ├── cfo_dashboard.py        # Excel financial dashboards
+│   ├── device_agent.py         # Device management agent
 │   ├── doordash.py             # Meal delivery coordination
 │   ├── gmail_agent.py          # Email & inbox monitoring
 │   ├── web_architect.py        # Website security & n8n deployment
@@ -29,31 +31,69 @@ guardian_one/
 ├── core/                       # System infrastructure
 │   ├── guardian.py              # Central coordinator
 │   ├── base_agent.py           # Agent contract (BaseAgent ABC)
+│   ├── ai_engine.py            # AI/LLM engine interface
+│   ├── cfo_router.py           # CFO command routing
 │   ├── mediator.py             # Cross-agent conflict resolution
 │   ├── scheduler.py            # Agent scheduling
 │   ├── sandbox.py              # Deployment testing
 │   ├── evaluator.py            # Performance metrics
 │   ├── audit.py                # Immutable audit logging
 │   ├── security.py             # Access control
+│   ├── security_remediation.py # Security remediation workflows
 │   └── config.py               # Configuration management
 ├── integrations/               # External service connectors
 │   ├── notion_sync.py          # Write-only Notion workspace sync
 │   ├── notion_website_sync.py  # Per-site Notion dashboards
+│   ├── notion_remediation_sync.py # Remediation Notion dashboards
 │   ├── n8n_sync.py             # n8n workflow automation
 │   ├── financial_sync.py       # Plaid/Empower/Rocket Money
+│   ├── plaid_connect.py        # Plaid bank connection
 │   ├── calendar_sync.py        # Google Calendar
 │   ├── gmail_sync.py           # Gmail API
 │   ├── doordash_sync.py        # DoorDash API
+│   ├── ollama_sync.py          # Local Ollama LLM integration
+│   ├── ring_monitor.py         # Ring security camera monitoring
 │   └── privacy_tools.py        # VPN/privacy services
 ├── homelink/                   # H.O.M.E. L.I.N.K. service layer
 │   ├── gateway.py              # API gateway (rate limit, TLS, circuit breaker)
 │   ├── vault.py                # Encrypted credential storage
 │   ├── registry.py             # Integration catalog with threat models
-│   └── monitor.py              # System health monitoring
+│   ├── monitor.py              # System health monitoring
+│   ├── devices.py              # Device registry & management
+│   ├── drivers.py              # Device protocol drivers
+│   ├── automations.py          # Home automation rules
+│   ├── lan_security.py         # LAN security scanning
+│   └── email_commands.py       # Email-triggered commands
+├── web/                        # Web dashboard
+│   ├── app.py                  # Flask/web app
+│   └── templates/              # HTML templates
+├── templates/                  # Agent templates
+│   └── agent_template.py       # Base agent scaffold
 └── utils/                      # Shared utilities
+    ├── encryption.py           # Encryption helpers
+    └── notifications.py        # Notification delivery
 config/
 ├── guardian_config.yaml        # Agent & system configuration
-tests/                          # 200+ pytest test cases
+├── .env.example                # Environment variable template
+data/
+├── cfo_ledger.json             # Financial ledger
+├── guardian_errors.json        # Error tracking
+└── guardian_skills.json        # Skill definitions
+docs/
+├── GUARDIAN_ONE_SYSTEM_PROMPT.md
+├── deliverables/               # Business deliverables
+├── security/                   # Security & privacy policies
+└── learning/                   # Python learning modules
+scripts/
+├── guardian_daemon.ps1         # Windows daemon script
+├── guardian_launcher.py        # Auto-launcher
+├── guardian_agent_setup.py     # Agent setup wizard
+├── guardian_diagnostic.py      # System diagnostic tool
+├── guardian_cli_v0.2.0.py      # Legacy CLI v0.2.0
+├── guardian_cli_v0.2.2.py      # Legacy CLI v0.2.2
+└── inspect_mcp.sh              # MCP inspection tool
+logs/                           # Runtime logs (gitignored)
+tests/                          # 25+ pytest test modules
 ```
 
 ## Managed Websites
