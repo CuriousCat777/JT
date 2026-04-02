@@ -45,6 +45,11 @@ guardian_one/
 │   ├── gmail_sync.py           # Gmail API
 │   ├── doordash_sync.py        # DoorDash API
 │   └── privacy_tools.py        # VPN/privacy services
+├── database/                   # SQLite repository for all Guardian One data
+│   ├── __init__.py             # Public API exports
+│   ├── models.py               # Data models (SystemLog, SystemCode, CrawlRecord, etc.)
+│   ├── manager.py              # GuardianDatabase — CRUD, queries, import helpers
+│   └── bridge.py               # DatabaseBridge — connects agents/sync to the DB
 ├── homelink/                   # H.O.M.E. L.I.N.K. service layer
 │   ├── gateway.py              # API gateway (rate limit, TLS, circuit breaker)
 │   ├── vault.py                # Encrypted credential storage
@@ -123,6 +128,15 @@ python main.py --websites              # Website management
 python main.py --homelink              # H.O.M.E. L.I.N.K. status
 python main.py --brief                 # Weekly security brief
 python main.py --sandbox               # Sandbox deployment
+python main.py --db                    # Database status and stats
+python main.py --db-init              # Initialize DB and import existing data
+python main.py --db-logs              # Query system logs (all or by agent)
+python main.py --db-crawls            # Query crawl bot records
+python main.py --db-transactions      # Query financial transactions
+python main.py --db-accounts          # Show financial accounts
+python main.py --db-search "text"     # Full-text search across logs/transactions
+python main.py --db-spending          # Spending summary by category
+python main.py --db-net-worth         # Net worth from database
 ```
 
 ## Development Notes
