@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guardian One — Document Search (Typesense)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/instantsearch.css@8/themes/satellite-min.css" />
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-light: #e8f0fe;
+      --text: #1f2937;
+      --text-light: #6b7280;
+      --border: #e5e7eb;
+      --bg: #f9fafb;
+      --white: #ffffff;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --success: #16a34a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header__logo {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      white-space: nowrap;
+    }
+
+    .header__search {
+      flex: 1;
+      max-width: 640px;
+    }
+
+    .header__badge {
+      background: #dbeafe;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+
+    /* ── Layout ──────────────────────────────────── */
+    .layout {
+      display: flex;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      gap: 24px;
+    }
+
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+    }
+
+    .main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Sidebar Filters ────────────────────────── */
+    .filter-section {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .filter-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-light);
+      margin-bottom: 12px;
+    }
+
+    /* ── Result Cards ───────────────────────────── */
+    .ais-Hits-item {
+      background: var(--white) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 8px !important;
+      padding: 20px !important;
+      margin-bottom: 12px !important;
+      box-shadow: none !important;
+      transition: border-color 0.15s;
+    }
+
+    .ais-Hits-item:hover {
+      border-color: var(--primary) !important;
+    }
+
+    .result-card__header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .result-card__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .icon-pdf { background: #fef2f2; color: var(--danger); }
+    .icon-docx { background: #eff6ff; color: var(--primary); }
+    .icon-pptx { background: #fef3c7; color: #b45309; }
+    .icon-xlsx { background: #ecfdf5; color: var(--success); }
+    .icon-web { background: #f3e8ff; color: #7c3aed; }
+
+    .result-card__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+      line-height: 1.3;
+    }
+
+    .result-card__snippet {
+      font-size: 14px;
+      color: var(--text-light);
+      margin: 8px 0;
+      line-height: 1.5;
+    }
+
+    .result-card__snippet mark,
+    .ais-Highlight mark,
+    .ais-Snippet mark {
+      background: #fef08a;
+      color: inherit;
+      padding: 1px 2px;
+      border-radius: 2px;
+    }
+
+    .result-card__meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-light);
+      flex-wrap: wrap;
+    }
+
+    .result-card__meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+    }
+
+    .badge-active { background: #ecfdf5; color: var(--success); }
+    .badge-expired { background: #fef2f2; color: var(--danger); }
+    .badge-under-review { background: #fffbeb; color: var(--warning); }
+    .badge-na { background: #f3f4f6; color: var(--text-light); }
+
+    /* ── Stats & Sort ───────────────────────────── */
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .ais-Stats { font-size: 14px; color: var(--text-light); }
+
+    .ais-SortBy-select {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    /* ── Search Box ─────────────────────────────── */
+    .ais-SearchBox-input {
+      border-radius: 8px !important;
+      border: 1px solid var(--border) !important;
+      padding: 10px 16px !important;
+      font-size: 15px !important;
+    }
+
+    .ais-SearchBox-input:focus {
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1) !important;
+    }
+
+    /* ── Keyboard Shortcut Hint ──────────────────── */
+    .kbd-hint {
+      font-size: 12px;
+      color: var(--text-light);
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    /* ── Responsive ─────────────────────────────── */
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      .sidebar { width: 100%; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header__logo">Guardian One</div>
+    <div class="header__search" id="searchbox"></div>
+    <span class="kbd-hint" title="Press Ctrl+K or Cmd+K to focus search">Ctrl+K</span>
+    <span class="header__badge">Typesense</span>
+  </div>
+
+  <!-- Layout -->
+  <div class="layout">
+    <!-- Sidebar Filters -->
+    <aside class="sidebar">
+      <div class="filter-section">
+        <h3>Category</h3>
+        <div id="category-filter"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Document Type</h3>
+        <div id="doctype-filter"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Compliance Status</h3>
+        <div id="compliance-filter"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Access Level</h3>
+        <div id="access-filter"></div>
+      </div>
+      <div class="filter-section">
+        <h3>Author</h3>
+        <div id="author-filter"></div>
+      </div>
+      <div id="clear-filters" style="margin-top: 8px;"></div>
+    </aside>
+
+    <!-- Main Results -->
+    <main class="main">
+      <div class="results-header">
+        <div id="stats"></div>
+        <div id="sort-by"></div>
+      </div>
+      <div id="hits"></div>
+      <div id="pagination" style="margin-top: 24px;"></div>
+    </main>
+  </div>
+
+  <!-- Typesense InstantSearch Adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/typesense-instantsearch-adapter@2/dist/typesense-instantsearch-adapter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4"></script>
+
+  <script>
+    // ── Typesense config ──────────────────────────
+    const typesenseAdapter = new TypesenseInstantSearchAdapter({
+      server: {
+        apiKey: "guardian-search-key",
+        nodes: [{ host: "localhost", port: "8108", protocol: "http" }],
+      },
+      additionalSearchParameters: {
+        query_by: "title,content,author,tags",
+        highlight_full_fields: "title,content",
+      },
+    });
+
+    const search = instantsearch({
+      indexName: "documents",
+      searchClient: typesenseAdapter.searchClient,
+    });
+
+    // ── Helper: doc type icon ────────────────────
+    function docTypeIcon(type) {
+      const map = { PDF: "icon-pdf", DOCX: "icon-docx", PPTX: "icon-pptx", XLSX: "icon-xlsx" };
+      return map[type] || "icon-web";
+    }
+
+    function complianceBadge(status) {
+      const map = {
+        active: "badge-active",
+        expired: "badge-expired",
+        under_review: "badge-under-review",
+        "N/A": "badge-na",
+      };
+      return `<span class="badge ${map[status] || 'badge-na'}">${status.replace("_", " ")}</span>`;
+    }
+
+    // ── Widgets ─────────────────────────────────
+    search.addWidgets([
+      instantsearch.widgets.searchBox({
+        container: "#searchbox",
+        placeholder: "Search documents, protocols, and policies...",
+        autofocus: true,
+      }),
+
+      instantsearch.widgets.hits({
+        container: "#hits",
+        templates: {
+          item(hit, { html, components }) {
+            return html`
+              <div class="result-card__header">
+                <div class="result-card__icon ${docTypeIcon(hit.doc_type)}">${hit.doc_type}</div>
+                <div>
+                  <div class="result-card__title">
+                    ${components.Highlight({ hit, attribute: "title" })}
+                  </div>
+                </div>
+              </div>
+              <div class="result-card__snippet">
+                ${components.Snippet({ hit, attribute: "content" })}
+              </div>
+              <div class="result-card__meta">
+                <span>${hit.author}</span>
+                <span>${hit.date_modified}</span>
+                <span>${hit.category}</span>
+                ${complianceBadge(hit.compliance_status)}
+              </div>
+            `;
+          },
+          empty(results, { html }) {
+            return html`
+              <div style="text-align:center;padding:48px;color:#6b7280;">
+                <p style="font-size:18px;margin-bottom:8px;">No documents found for "<strong>${results.query}</strong>"</p>
+                <p>Try broadening your search or removing filters.</p>
+              </div>
+            `;
+          },
+        },
+      }),
+
+      instantsearch.widgets.refinementList({
+        container: "#category-filter",
+        attribute: "category",
+      }),
+
+      instantsearch.widgets.refinementList({
+        container: "#doctype-filter",
+        attribute: "doc_type",
+      }),
+
+      instantsearch.widgets.refinementList({
+        container: "#compliance-filter",
+        attribute: "compliance_status",
+      }),
+
+      instantsearch.widgets.refinementList({
+        container: "#access-filter",
+        attribute: "access_level",
+      }),
+
+      instantsearch.widgets.refinementList({
+        container: "#author-filter",
+        attribute: "author",
+      }),
+
+      instantsearch.widgets.stats({
+        container: "#stats",
+      }),
+
+      instantsearch.widgets.sortBy({
+        container: "#sort-by",
+        items: [
+          { label: "Relevance", value: "documents" },
+          { label: "Date (newest)", value: "documents/sort/date_modified:desc" },
+          { label: "Date (oldest)", value: "documents/sort/date_modified:asc" },
+        ],
+      }),
+
+      instantsearch.widgets.clearRefinements({
+        container: "#clear-filters",
+      }),
+
+      instantsearch.widgets.pagination({
+        container: "#pagination",
+      }),
+    ]);
+
+    search.start();
+
+    // ── Keyboard shortcut: Ctrl/Cmd + K ─────────
+    document.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        document.querySelector(".ais-SearchBox-input").focus();
+      }
+    });
+  </script>
+</body>
+</html>
