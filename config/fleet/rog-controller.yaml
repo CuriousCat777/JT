@@ -79,6 +79,16 @@ fleet_coordination:
     strategy: "priority"
     fallback_controller: "mac-mini"
 
+integrations:
+  anthropic:
+    organization_uuid: "3d2eac6c-cafd-42b2-956b-a3739c9c71aa"
+    service: "claude_code"
+
+  cloudflare:
+    # WARNING: Move token to env var or secrets manager before production use
+    user_token: "cfut_SjGY2WQ60VRAJ2lZTEuDQ1WvcbHkbDW1lH0cxD6Pe04f4b78"
+    service: "workers"
+
 logging:
   fleet_log: "data/fleet/fleet.jsonl"
   node_logs: "data/fleet/nodes/"
