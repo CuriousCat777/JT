@@ -976,6 +976,169 @@ def create_app() -> Flask:
         g = _get_guardian()
         return jsonify({"summary": g.daily_summary()})
 
+    # ------------------------------------------------------------------
+    # API — OpenAI-compatible chat completions (Chatbot UI bridge)
+    # ------------------------------------------------------------------
+
+    @app.route("/v1/models", methods=["GET"])
+    def oai_models():
+        """List available models in OpenAI format."""
+        g = _get_guardian()
+        ai_status = g.ai_engine.status()
+        models = []
+        if ai_status["ollama"]["available"]:
+            models.append({
+                "id": f"ollama/{ai_status['ollama']['model']}",
+                "object": "model",
+                "owned_by": "ollama",
+            })
+        if ai_status["anthropic"]["available"]:
+            models.append({
+                "id": f"anthropic/{ai_status['anthropic']['model']}",
+                "object": "model",
+                "owned_by": "anthropic",
+            })
+        if ai_status["cloudflare"]["available"]:
+            models.append({
+                "id": f"cloudflare/{ai_status['cloudflare']['model']}",
+                "object": "model",
+                "owned_by": "cloudflare",
+            })
+        # Always expose the auto-select model
+        models.insert(0, {
+            "id": "guardian-one",
+            "object": "model",
+            "owned_by": "guardian-one",
+        })
+        return jsonify({"object": "list", "data": models})
+
+    @app.route("/v1/chat/completions", methods=["POST"])
+    def oai_chat_completions():
+        """OpenAI-compatible chat completions endpoint.
+
+        Translates OpenAI format to Guardian One's AI engine, which
+        routes to the best available backend (Ollama, Anthropic, or
+        Cloudflare Workers AI).
+
+        Chatbot UI and any OpenAI-compatible client can use this.
+        """
+        import time
+        import uuid
+
+        g = _get_guardian()
+        body = request.get_json(silent=True) or {}
+
+        messages = body.get("messages", [])
+        temperature = body.get("temperature", 0.7)
+        max_tokens = body.get("max_tokens", 4096)
+        stream = body.get("stream", False)
+
+        if not messages:
+            return jsonify({
+                "error": {
+                    "message": "messages is required",
+                    "type": "invalid_request_error",
+                }
+            }), 400
+
+        # Extract system prompt and build conversation
+        from guardian_one.core.ai_engine import AIMessage
+        ai_messages = [
+            AIMessage(role=m["role"], content=m.get("content", ""))
+            for m in messages
+        ]
+
+        # Find the right backend based on requested model
+        requested_model = body.get("model", "guardian-one")
+        backend = None
+        if requested_model.startswith("ollama/"):
+            backend = g.ai_engine._ollama
+        elif requested_model.startswith("anthropic/"):
+            backend = g.ai_engine._anthropic
+        elif requested_model.startswith("cloudflare/"):
+            backend = g.ai_engine._cloudflare
+        else:
+            backend = g.ai_engine._select_backend()
+
+        if backend is None or not backend.is_available():
+            return jsonify({
+                "error": {
+                    "message": "No AI backend available",
+                    "type": "server_error",
+                }
+            }), 503
+
+        response = backend.generate(
+            messages=ai_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        # Track usage
+        g.ai_engine._total_requests += 1
+        g.ai_engine._total_tokens += response.tokens_used
+
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+        created = int(time.time())
+
+        if stream:
+            # Server-Sent Events streaming
+            def generate_sse():
+                # Send the full content as a single chunk
+                chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": response.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": response.content},
+                        "finish_reason": None,
+                    }],
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
+                # Send done signal
+                done_chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": response.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop",
+                    }],
+                }
+                yield f"data: {json.dumps(done_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return app.response_class(
+                generate_sse(),
+                mimetype="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
+        # Non-streaming response
+        return jsonify({
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": response.model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": response.content,
+                },
+                "finish_reason": "stop",
+            }],
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": response.tokens_used,
+                "total_tokens": response.tokens_used,
+            },
+        })
+
     return app
 
 
