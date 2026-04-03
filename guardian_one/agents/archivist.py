@@ -76,6 +76,7 @@ class Archivist(BaseAgent):
         self._privacy_tools: dict[str, PrivacyTool] = {}
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
+        self._power_tools: Any | None = None  # PowerToolsLibrary, injected by Guardian
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
@@ -105,6 +106,22 @@ class Archivist(BaseAgent):
                 data_types=["broker_removal_status", "exposure_report"],
             ),
         }
+
+    def set_power_tools(self, library: Any) -> None:
+        """Inject the PowerToolsLibrary (called by GuardianOne after boot)."""
+        self._power_tools = library
+        self.log("power_tools_attached", details={"library": type(library).__name__})
+
+    @property
+    def power_tools(self) -> Any | None:
+        """Access the PowerToolsLibrary managed by this agent."""
+        return self._power_tools
+
+    def power_tools_status(self) -> dict[str, Any]:
+        """Return power tools status from the managed library."""
+        if self._power_tools is None:
+            return {"error": "Power tools library not attached"}
+        return self._power_tools.status(requester=self.name)
 
     def _setup_privacy_tools(self) -> None:
         self._privacy_tools = {
@@ -259,11 +276,18 @@ class Archivist(BaseAgent):
         recommendations.extend(privacy.get("recommendations", []))
         actions.append("Ran privacy audit.")
 
+        # Power tools audit
+        pt_count = 0
+        if self._power_tools is not None:
+            pt_projects = self._power_tools.list_projects()
+            pt_count = len(pt_projects)
+            actions.append(f"Power tools library: {pt_count} managed project(s).")
+
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
             agent_name=self.name,
             status=AgentStatus.IDLE.value,
-            summary=f"Tracking {len(self._file_index)} files, {len(self._data_sources)} data sources.",
+            summary=f"Tracking {len(self._file_index)} files, {len(self._data_sources)} data sources, {pt_count} power tool project(s).",
             actions_taken=actions,
             recommendations=recommendations,
             alerts=alerts,
@@ -271,18 +295,21 @@ class Archivist(BaseAgent):
                 "files": len(self._file_index),
                 "sources": len(self._data_sources),
                 "privacy": privacy,
+                "power_tools_projects": pt_count,
             },
         )
 
     def report(self) -> AgentReport:
+        pt_count = len(self._power_tools.list_projects()) if self._power_tools else 0
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
-            summary=f"Managing {len(self._file_index)} files, {len(self._data_sources)} sources, {len(self._privacy_tools)} privacy tools.",
+            summary=f"Managing {len(self._file_index)} files, {len(self._data_sources)} sources, {len(self._privacy_tools)} privacy tools, {pt_count} power tool project(s).",
             data={
                 "files": len(self._file_index),
                 "sources": list(self._data_sources.keys()),
                 "privacy_tools": list(self._privacy_tools.keys()),
                 "profile_fields": len(self._master_profile),
+                "power_tools_projects": pt_count,
             },
         )
