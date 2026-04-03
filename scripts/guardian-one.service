@@ -1,6 +1,17 @@
 # Guardian One — systemd service unit
 #
 # Install:
+#   # 1. Create dedicated service user (or use your own user — see note below)
+#   sudo useradd -r -s /usr/sbin/nologin guardian
+#
+#   # 2. Ensure startup script is executable
+#   chmod +x /home/user/JT/scripts/guardian_daemon.sh
+#
+#   # 3. Ensure the guardian user can access the project directory
+#   #    Option A: Run as your own user — change User/Group below
+#   #    Option B: Grant guardian access — sudo chown -R guardian:guardian /home/user/JT
+#
+#   # 4. Install and enable
 #   sudo cp scripts/guardian-one.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable guardian-one    # start on boot
@@ -12,8 +23,13 @@
 #   sudo systemctl restart guardian-one   # restart
 #   sudo systemctl stop guardian-one      # graceful stop (SIGTERM)
 #
+# Paths:
+#   All paths below assume the project lives at /home/user/JT.
+#   Update WorkingDirectory, ExecStart, EnvironmentFile, and ReadWritePaths
+#   if your deployment path differs (e.g. /opt/guardian-one or /home/guardian/JT).
+#
 # Security:
-#   - Runs as dedicated 'guardian' user (create with: sudo useradd -r -s /usr/sbin/nologin guardian)
+#   - Runs as dedicated 'guardian' user (or change User/Group to your own)
 #   - Private /tmp, no privilege escalation, restricted filesystem
 #   - Credentials loaded from EnvironmentFile (.env), never in this unit
 

@@ -1242,16 +1242,18 @@ class TellerProvider(FinancialProvider):
         if result is not None and isinstance(result, list):
             self._authenticated = True
             self._last_error = ""
-            # Extract unique enrollments
+            # Extract unique enrollments (rebuild to avoid duplicates on re-auth)
             seen: set[str] = set()
+            enrollments: list[dict[str, Any]] = []
             for acct in result:
                 enrollment = acct.get("enrollment_id", "")
                 if enrollment and enrollment not in seen:
                     seen.add(enrollment)
-                    self._enrollments.append({
+                    enrollments.append({
                         "enrollment_id": enrollment,
                         "institution": acct.get("institution", {}),
                     })
+            self._enrollments = enrollments
             return True
         elif isinstance(result, dict) and result.get("error"):
             self._last_error = f"Teller auth failed: {result.get('error', {}).get('message', 'unknown')}"
@@ -1484,11 +1486,23 @@ def parse_bank_csv(
     # Infer institution/account from filename if not provided
     stem = path.stem.lower().replace("_", " ").replace("-", " ")
     if not institution:
-        for bank in ("chase", "bofa", "bank of america", "wells fargo",
-                     "capital one", "citi", "us bank", "pnc", "td bank",
-                     "ally", "discover", "amex", "american express"):
+        for bank, display_name in (
+            ("chase", "Chase"),
+            ("bofa", "Bank of America"),
+            ("bank of america", "Bank of America"),
+            ("wells fargo", "Wells Fargo"),
+            ("capital one", "Capital One"),
+            ("citi", "Citi"),
+            ("us bank", "US Bank"),
+            ("pnc", "PNC"),
+            ("td bank", "TD Bank"),
+            ("ally", "Ally"),
+            ("discover", "Discover"),
+            ("amex", "American Express"),
+            ("american express", "American Express"),
+        ):
             if bank in stem:
-                institution = bank.title()
+                institution = display_name
                 break
         if not institution:
             institution = "Bank"
@@ -1658,7 +1672,8 @@ def parse_ofx(
             acct_from = stmt.find("BANKACCTFROM") or stmt.find("CCACCTFROM")
             acct_id = ""
             acct_type = "checking"
-            institution = ""
+            institution = "Bank"
+            masked_id = ""
 
             if acct_from is not None:
                 acct_id_el = acct_from.find("ACCTID")

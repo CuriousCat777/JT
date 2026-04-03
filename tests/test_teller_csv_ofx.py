@@ -1,8 +1,11 @@
 """Tests for Teller, bank CSV, and OFX providers + CFO integration."""
 
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from guardian_one.core.audit import AuditLog
 from guardian_one.core.config import AgentConfig
@@ -25,6 +28,22 @@ from guardian_one.integrations.financial_sync import (
     _sgml_ofx_to_xml,
     _parse_ofx_date,
 )
+
+
+# Env vars that could cause real network calls if set in CI/dev
+_FINANCIAL_ENV_VARS = (
+    "TELLER_ACCESS_TOKEN", "TELLER_ENVIRONMENT",
+    "PLAID_CLIENT_ID", "PLAID_SECRET", "PLAID_ENV",
+    "ROCKET_MONEY_API_KEY", "EMPOWER_API_KEY",
+    "EMPOWER_USERNAME", "EMPOWER_PASSWORD",
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_financial_env(monkeypatch):
+    """Strip financial provider env vars so tests never make real API calls."""
+    for var in _FINANCIAL_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
 
 
 def _make_audit() -> AuditLog:
@@ -164,6 +183,18 @@ class TestBankCSV:
         csv_file.write_text("Date,Description,Amount\n2026-01-01,Test,50\n")
         accounts, _ = parse_bank_csv(csv_file)
         assert accounts[0].institution == "Chase"
+
+    def test_auto_detect_bofa(self, tmp_path):
+        csv_file = tmp_path / "bofa_checking.csv"
+        csv_file.write_text("Date,Description,Amount\n2026-01-01,Test,50\n")
+        accounts, _ = parse_bank_csv(csv_file)
+        assert accounts[0].institution == "Bank of America"
+
+    def test_auto_detect_us_bank(self, tmp_path):
+        csv_file = tmp_path / "us_bank_statement.csv"
+        csv_file.write_text("Date,Description,Amount\n2026-01-01,Test,50\n")
+        accounts, _ = parse_bank_csv(csv_file)
+        assert accounts[0].institution == "US Bank"
 
     def test_empty_csv(self, tmp_path):
         csv_file = tmp_path / "empty.csv"
