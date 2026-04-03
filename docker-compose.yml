@@ -41,6 +41,26 @@ services:
               count: all
               capabilities: [gpu]
 
+  # Open WebUI — local ChatGPT-style interface backed by Ollama
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: guardian-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - open_webui_data:/app/backend/data
+      - ./data:/app/backend/knowledge/guardian  # Archivist data as RAG source
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=true
+      - ENABLE_RAG_WEB_SEARCH=false
+      - RAG_EMBEDDING_ENGINE=ollama
+      - RAG_EMBEDDING_MODEL=nomic-embed-text
+      - ENABLE_RAG_LOCAL_WEB_FETCH=false
+    depends_on:
+      - ollama
+
   # Optional: Wazuh manager for VARYS
   # Uncomment when ready to deploy SIEM
   # wazuh:
@@ -56,4 +76,5 @@ services:
 
 volumes:
   ollama_data:
+  open_webui_data:
   # wazuh_data:

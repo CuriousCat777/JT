@@ -13,6 +13,7 @@ from guardian_one.archivist.cloudsync import CloudSync, CloudTarget
 from guardian_one.archivist.file_organizer import FileOrganizer, CleanupRule
 from guardian_one.archivist.account_manager import AccountManager, AccountRecord
 from guardian_one.archivist.password_sync import PasswordSync, VaultItem
+from guardian_one.archivist.knowledge_export import KnowledgeExporter
 
 __all__ = [
     "TelemetryHub",
@@ -27,4 +28,5 @@ __all__ = [
     "AccountRecord",
     "PasswordSync",
     "VaultItem",
+    "KnowledgeExporter",
 ]
