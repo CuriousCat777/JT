@@ -156,6 +156,10 @@ agents:
       - security_scans          # WebArchitect
       - devices                 # DeviceAgent
       - network                 # DeviceAgent
+      # VM-level default read access
+      - filesystem_read         # Read access across all VM systems
+      - process_list            # Running processes visibility
+      - system_metrics          # CPU, memory, disk, network stats
     custom:
       auto_encrypt_sensitive: true
       retention_check_daily: true
