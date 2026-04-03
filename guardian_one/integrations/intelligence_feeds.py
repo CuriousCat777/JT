@@ -247,6 +247,33 @@ class IntelligencePipeline:
         """Ingest multiple items. Returns count of new items."""
         return sum(1 for item in items if self.ingest(item))
 
+    def refresh(self, fetcher: Any = None) -> dict[str, Any]:
+        """Fetch all active feeds and ingest new items.
+
+        Pass a FeedFetcher instance. If None, returns an error dict
+        (won't crash — just can't fetch without a fetcher).
+        """
+        if fetcher is None:
+            return {"error": "No fetcher provided — cannot refresh."}
+
+        total_new = 0
+        sources_checked = 0
+        errors: list[str] = []
+
+        for source in self.active_sources:
+            try:
+                items = fetcher.fetch(source)
+                total_new += self.ingest_batch(items)
+                sources_checked += 1
+            except Exception as exc:
+                errors.append(f"{source.name}: {exc}")
+
+        return {
+            "new_items": total_new,
+            "sources_checked": sources_checked,
+            "errors": errors,
+        }
+
     # ------------------------------------------------------------------
     # Querying
     # ------------------------------------------------------------------

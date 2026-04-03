@@ -348,13 +348,88 @@ class Archivist(BaseAgent):
         }
 
     def credential_audit(self) -> dict[str, Any]:
-        """Audit all credential mappings across interfaces."""
+        """Audit all credential mappings across interfaces.
+
+        When Varys mode is active, also pulls Vault health data
+        (rotation status, credential age) for a complete picture.
+        """
         total = sum(len(v) for v in self._password_store.values())
-        return {
+        audit: dict[str, Any] = {
             "interfaces": len(self._password_store),
             "total_credentials": total,
             "by_interface": {k: len(v) for k, v in self._password_store.items()},
         }
+        if self.varys_mode:
+            audit["vault"] = self._guardian.vault.health_report()
+        return audit
+
+    def discover_credentials(self) -> list[str]:
+        """Scan Vault for credentials not yet tracked by the Archivist.
+
+        Returns a list of orphaned vault keys — keys that exist in
+        Vault but aren't mapped to any interface.
+        """
+        if not self.varys_mode:
+            return []
+
+        tracked_keys = set()
+        for creds in self._password_store.values():
+            tracked_keys.update(creds.values())
+
+        vault_keys = set(self._guardian.vault.list_keys())
+        orphaned = sorted(vault_keys - tracked_keys)
+
+        if orphaned:
+            self.log("orphaned_credentials_found", severity=Severity.WARNING, details={
+                "count": len(orphaned),
+                "keys": orphaned,
+            })
+        return orphaned
+
+    # ------------------------------------------------------------------
+    # AI-powered intelligence
+    # ------------------------------------------------------------------
+
+    def ai_briefing(self) -> str:
+        """Generate an AI-powered intelligence summary.
+
+        Takes the top 10 unread Palantir items and asks the AI
+        to produce a 3-sentence CIO briefing. Falls back to a
+        deterministic summary when AI is offline.
+        """
+        items = self._palantir.unread()[:10]
+        if not items:
+            return "No unread intelligence items."
+
+        if not self.ai_enabled:
+            # Deterministic fallback
+            critical = [i for i in items if i.priority.value == "critical"]
+            high = [i for i in items if i.priority.value == "high"]
+            parts = []
+            if critical:
+                parts.append(f"{len(critical)} critical alert(s): {critical[0].title}")
+            if high:
+                parts.append(f"{len(high)} high-priority item(s)")
+            parts.append(f"{len(items)} total unread across {len(set(i.source for i in items))} sources")
+            return " | ".join(parts)
+
+        context = {
+            "items": [
+                {
+                    "title": i.title,
+                    "source": i.source,
+                    "priority": i.priority.value,
+                    "category": i.category.value,
+                    "summary": i.summary[:100],
+                }
+                for i in items
+            ]
+        }
+        return self.think_quick(
+            "Summarise these intelligence items in 3 concise sentences. "
+            "Lead with critical items. Name sources. Be direct.",
+            context=context,
+        )
 
     # ------------------------------------------------------------------
     # File management

@@ -35,6 +35,9 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --archivist            # Full Archivist report (sovereignty, feeds, platforms)
+    python main.py --feeds               # Palantir intelligence briefing
+    python main.py --sovereignty         # Data sovereignty score + cross-agent sweep
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
 """
 
@@ -310,6 +313,12 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--archivist", action="store_true",
+                        help="Run Archivist with full report (sovereignty, feeds, platforms)")
+    parser.add_argument("--feeds", action="store_true",
+                        help="Palantir intelligence briefing (unread feeds)")
+    parser.add_argument("--sovereignty", action="store_true",
+                        help="Data sovereignty report (cross-agent sweep)")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -319,6 +328,98 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # ------------------------------------------------------------------
+    # Archivist commands
+    # ------------------------------------------------------------------
+    if args.archivist:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = guardian.run_agent("archivist")
+            print("=" * 60)
+            print("  ARCHIVIST REPORT — Data Sovereignty Intelligence")
+            print("=" * 60)
+            print(f"  Status: {report.status}")
+            print(f"  Summary: {report.summary}")
+            if report.alerts:
+                print("\n  ALERTS:")
+                for a in report.alerts:
+                    print(f"    [!] {a}")
+            if report.recommendations:
+                print("\n  RECOMMENDATIONS:")
+                for r in report.recommendations:
+                    print(f"    - {r}")
+            if report.actions_taken:
+                print("\n  ACTIONS:")
+                for a in report.actions_taken:
+                    print(f"    > {a}")
+            sov = report.data.get("sovereignty", {})
+            if sov:
+                print(f"\n  SOVEREIGNTY SCORE: {sov.get('data_sovereignty_score', '?')}/100")
+            pal = report.data.get("palantir", {})
+            if pal:
+                print(f"  PALANTIR: {pal.get('unread', 0)} unread | {pal.get('critical', 0)} critical")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.feeds:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            briefing = archivist.intelligence_briefing()
+            print("=" * 60)
+            print("  PALANTIR INTELLIGENCE BRIEFING")
+            print("=" * 60)
+            print(f"  Generated: {briefing['generated_at']}")
+            print(f"  Sources: {briefing['sources_active']}/{briefing['sources_total']} active")
+            print(f"  Unread: {briefing['total_unread']} | Critical: {briefing['critical_count']} | High: {briefing['high_priority_count']}")
+            if briefing["critical_alerts"]:
+                print("\n  CRITICAL ALERTS:")
+                for a in briefing["critical_alerts"]:
+                    print(f"    [!!!] {a['source']}: {a['title']}")
+            for cat, items in briefing.get("by_category", {}).items():
+                print(f"\n  {cat.upper()}:")
+                for item in items[:5]:
+                    pri = f"[{item['priority'].upper()}]" if item["priority"] != "medium" else ""
+                    print(f"    {pri} {item['source']}: {item['title']}")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.sovereignty:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = archivist.sovereignty_report()
+            score = report["data_sovereignty_score"]
+            print("=" * 60)
+            print("  DATA SOVEREIGNTY REPORT")
+            print("=" * 60)
+            grade = "A+" if score >= 90 else "A" if score >= 80 else "B" if score >= 70 else "C" if score >= 60 else "F"
+            print(f"  Score: {score}/100 (Grade: {grade})")
+            print(f"  Files tracked: {report['files_tracked']}")
+            print(f"  Files due for deletion: {report['files_due_for_deletion']}")
+            if report["cross_agent_issues"]:
+                print("\n  ISSUES:")
+                for issue in report["cross_agent_issues"]:
+                    print(f"    [!] {issue}")
+            if report["recommendations"]:
+                print("\n  RECOMMENDATIONS:")
+                for rec in report["recommendations"]:
+                    print(f"    - {rec}")
+            vault = report.get("vault", {})
+            if vault:
+                print(f"\n  VAULT: {vault.get('total_credentials', 0)} credentials")
+                if vault.get("due_for_rotation"):
+                    print(f"    ** {vault['due_for_rotation']} due for rotation **")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")
