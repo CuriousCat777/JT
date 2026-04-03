@@ -286,20 +286,19 @@ class IoTController:
     # Docker Compose lifecycle
     # ------------------------------------------------------------------
 
-    def docker_available(self) -> bool:
-        """Check if Docker and a Compose implementation are available.
+    def _resolve_compose_cmd(self) -> list[str] | None:
+        """Resolve the Docker Compose command (v1 or v2).
 
-        Accepts either legacy docker-compose binary or Docker Compose v2
-        via ``docker compose``.
+        Returns the command list (e.g. ``["docker-compose"]`` or
+        ``["docker", "compose"]``) or ``None`` if unavailable.
         """
+        if shutil.which("docker-compose") is not None:
+            return ["docker-compose"]
+
         docker_path = shutil.which("docker")
         if docker_path is None:
-            return False
+            return None
 
-        if shutil.which("docker-compose") is not None:
-            return True
-
-        # Fallback: check for Docker Compose v2
         try:
             result = subprocess.run(
                 [docker_path, "compose", "version"],
@@ -307,9 +306,15 @@ class IoTController:
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
-            return result.returncode == 0
+            if result.returncode == 0:
+                return [docker_path, "compose"]
         except OSError:
-            return False
+            pass
+        return None
+
+    def docker_available(self) -> bool:
+        """Check if Docker and a Compose implementation are available."""
+        return self._resolve_compose_cmd() is not None
 
     def generate_compose(self, zigbee_device: str = "/dev/ttyUSB0",
                          tailscale_authkey: str = "") -> str:
@@ -328,13 +333,14 @@ class IoTController:
                     "image": "eclipse-mosquitto",
                     "container_name": "mosquitto",
                     "ports": ["1883:1883"],
-                    "volumes": ["./mosquitto:/mosquitto"],
+                    "volumes": ["./mosquitto/config:/mosquitto/config"],
                     "restart": "unless-stopped",
                 },
                 "zigbee2mqtt": {
                     "image": "koenkk/zigbee2mqtt",
                     "container_name": "zigbee2mqtt",
                     "depends_on": ["mosquitto"],
+                    "ports": ["8080:8080"],
                     "volumes": ["./zigbee2mqtt:/app/data"],
                     "devices": [f"{zigbee_device}:{zigbee_device}"],
                     "restart": "unless-stopped",
@@ -404,8 +410,9 @@ class IoTController:
         self.compose_path.write_text(compose_content)
         created.append(str(self.compose_path))
 
-        # Mosquitto config
-        mosquitto_conf = self._stack_dir / "mosquitto" / "mosquitto.conf"
+        # Mosquitto config (under config/ subdir to match compose mount)
+        (self._stack_dir / "mosquitto" / "config").mkdir(parents=True, exist_ok=True)
+        mosquitto_conf = self._stack_dir / "mosquitto" / "config" / "mosquitto.conf"
         mosquitto_conf.write_text(
             "# Secure-by-default Mosquitto configuration\n"
             "listener 1883\n"
@@ -461,7 +468,8 @@ class IoTController:
         if not self.compose_path.exists():
             return {"success": False, "error": "docker-compose.yml not found. Run scaffold first."}
 
-        if not self.docker_available():
+        compose_cmd = self._resolve_compose_cmd()
+        if compose_cmd is None:
             return {"success": False, "error": "Docker or docker-compose not found on PATH."}
 
         self._audit.record(
@@ -474,7 +482,7 @@ class IoTController:
 
         try:
             result = subprocess.run(
-                ["docker-compose", "up", "-d"],
+                [*compose_cmd, "up", "-d"],
                 cwd=str(self._stack_dir),
                 capture_output=True,
                 text=True,
@@ -497,14 +505,18 @@ class IoTController:
                 "error": result.stderr if not success else "",
             }
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": "docker-compose up timed out (120s)"}
+            return {"success": False, "error": "Compose up timed out (120s)"}
         except FileNotFoundError:
-            return {"success": False, "error": "docker-compose not found on PATH"}
+            return {"success": False, "error": "Compose command not found on PATH"}
 
     def stop_stack(self) -> dict[str, Any]:
         """Stop the IoT Docker Compose stack."""
         if not self.compose_path.exists():
             return {"success": False, "error": "docker-compose.yml not found."}
+
+        compose_cmd = self._resolve_compose_cmd()
+        if compose_cmd is None:
+            return {"success": False, "error": "Docker or docker-compose not found on PATH."}
 
         self._audit.record(
             agent="homelink_iot",
@@ -516,7 +528,7 @@ class IoTController:
 
         try:
             result = subprocess.run(
-                ["docker-compose", "down"],
+                [*compose_cmd, "down"],
                 cwd=str(self._stack_dir),
                 capture_output=True,
                 text=True,
@@ -528,9 +540,9 @@ class IoTController:
                 "error": result.stderr if result.returncode != 0 else "",
             }
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": "docker-compose down timed out (60s)"}
+            return {"success": False, "error": "Compose down timed out (60s)"}
         except FileNotFoundError:
-            return {"success": False, "error": "docker-compose not found on PATH"}
+            return {"success": False, "error": "Compose command not found on PATH"}
 
     def service_ps(self) -> list[dict[str, Any]]:
         """Get running status of each container via docker ps."""

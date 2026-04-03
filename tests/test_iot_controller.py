@@ -113,7 +113,7 @@ def test_scaffold_creates_mosquitto_conf():
         iot = IoTController(stack_dir=Path(tmpdir), audit=audit)
         iot.initialize()
         iot.scaffold_stack()
-        conf = Path(tmpdir) / "mosquitto" / "mosquitto.conf"
+        conf = Path(tmpdir) / "mosquitto" / "config" / "mosquitto.conf"
         assert conf.exists()
         content = conf.read_text()
         assert "listener 1883" in content
