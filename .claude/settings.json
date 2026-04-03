@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(python *)",
+      "Bash(pytest *)",
+      "Bash(pip *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(ls *)",
+      "Bash(mkdir *)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
+    ]
+  },
+  "hooks": {
+    "on_session_start": [
+      {
+        "command": "echo '🛡️ Guardian One — Session Active | Branch: '$(git -C /home/user/JT branch --show-current 2>/dev/null || echo 'unknown')",
+        "description": "Show active branch on session start"
+      }
+    ],
+    "pre_commit": [
+      {
+        "command": "cd /home/user/JT && python -m pytest tests/ -x -q --tb=short 2>&1 | tail -5",
+        "description": "Run tests before committing"
+      }
+    ]
+  }
+}

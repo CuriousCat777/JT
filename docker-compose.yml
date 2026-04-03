@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  guardian:
+    build: .
+    container_name: guardian-one
+    restart: unless-stopped
+    ports:
+      - "5000:5000"   # Web dashboard
+      - "8080:8080"   # Health API (daemon mode)
+    volumes:
+      - ./data:/app/data           # Persistent state
+      - ./logs:/app/logs           # Audit + telemetry logs
+      - ./config:/app/config       # Configuration
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_MASTER_PASSPHRASE=${GUARDIAN_MASTER_PASSPHRASE}
+    command: ["python", "main.py", "--daemon"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Optional: Ollama for local AI
+  ollama:
+    image: ollama/ollama:latest
+    container_name: guardian-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Optional: Wazuh manager for VARYS
+  # Uncomment when ready to deploy SIEM
+  # wazuh:
+  #   image: wazuh/wazuh-manager:4.7.0
+  #   container_name: guardian-wazuh
+  #   restart: unless-stopped
+  #   ports:
+  #     - "1514:1514/udp"
+  #     - "1515:1515"
+  #     - "55000:55000"
+  #   volumes:
+  #     - wazuh_data:/var/ossec/data
+
+volumes:
+  ollama_data:
+  # wazuh_data:
