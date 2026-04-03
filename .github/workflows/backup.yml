@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger database backup
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PROD_DEPLOY_HOST }}
           username: ${{ secrets.PROD_DEPLOY_USER }}
@@ -26,9 +26,18 @@ jobs:
             # Backup postgres database
             docker compose exec -T postgres pg_dump -U n8n -Fc n8n > "${BACKUP_DIR}/n8n_db.dump"
 
-            # Backup n8n data volume
+            # Backup n8n data volume with explicit name and guard
+            N8N_DATA_VOLUME="n8n_data"
+            N8N_VOLUME_MATCHES=$(docker volume ls --format '{{.Name}}' | grep -Fx "${N8N_DATA_VOLUME}" || true)
+            N8N_VOLUME_COUNT=$(printf '%s\n' "${N8N_VOLUME_MATCHES}" | grep -c . || true)
+
+            if [ "${N8N_VOLUME_COUNT}" -ne 1 ]; then
+              echo "Expected exactly one Docker volume named '${N8N_DATA_VOLUME}', found ${N8N_VOLUME_COUNT}."
+              exit 1
+            fi
+
             docker run --rm \
-              -v $(docker volume ls -q | grep n8n_data):/data:ro \
+              -v "${N8N_DATA_VOLUME}:/data:ro" \
               -v "$(pwd)/${BACKUP_DIR}":/backup \
               alpine tar czf /backup/n8n_data.tar.gz -C /data .
 

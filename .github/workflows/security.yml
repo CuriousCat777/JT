@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scan for secrets
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.82.0
         with:
           extra_args: --only-verified
 
@@ -41,14 +41,18 @@ jobs:
           FOUND=0
           for f in docker-compose*.yml; do
             if [ -f "$f" ]; then
-              if grep -iE '(password|secret|api_key|token)\s*[:=]\s*["\x27]?[a-zA-Z0-9]' "$f" | grep -v '\$\{' | grep -v 'changeme' | grep -v 'example'; then
+              if grep -qiE '(password|secret|api_key|token)\s*[:=]\s*["\x27]?[a-zA-Z0-9]' "$f" && \
+                 grep -iE '(password|secret|api_key|token)\s*[:=]\s*["\x27]?[a-zA-Z0-9]' "$f" | grep -v '\$\{' | grep -v 'changeme' | grep -qv 'example'; then
                 echo "Potential hardcoded secret in $f"
+                grep -niE '(password|secret|api_key|token)\s*[:=]\s*["\x27]?[a-zA-Z0-9]' "$f" | grep -v '\$\{' | grep -v 'changeme' | grep -v 'example' | cut -d: -f1 | while read -r line_no; do
+                  echo "  Match at $f:$line_no"
+                done
                 FOUND=1
               fi
             fi
           done
           if [ "$FOUND" = "1" ]; then
-            echo "Review the above for hardcoded secrets"
+            echo "Review the reported file(s) and line number(s) for hardcoded secrets"
             exit 1
           fi
           echo "No hardcoded secrets found"

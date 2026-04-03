@@ -24,9 +24,9 @@ jobs:
           tags: n8n-local:scan
 
       - name: Run Trivy on built image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: n8n-local:scan
           format: table
-          exit-code: '0'
+          exit-code: '1'
           severity: CRITICAL,HIGH

@@ -39,8 +39,8 @@ jobs:
             echo "compose_file=docker-compose.staging.yml" >> $GITHUB_OUTPUT
           fi
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Capture pre-deploy revision and deploy
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ steps.vars.outputs.host }}
           username: ${{ steps.vars.outputs.user }}
@@ -48,6 +48,8 @@ jobs:
           port: ${{ steps.vars.outputs.port }}
           script: |
             cd ${{ steps.vars.outputs.path }}
+            # Save current revision for rollback
+            git rev-parse HEAD > .pre-deploy-revision
             git pull origin main
             export IMAGE_TAG=${{ github.event.inputs.image_tag }}
             docker compose -f ${{ steps.vars.outputs.compose_file }} pull
@@ -56,7 +58,7 @@ jobs:
             sleep 15
 
       - name: Health check after deploy
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ steps.vars.outputs.host }}
           username: ${{ steps.vars.outputs.user }}
@@ -66,6 +68,7 @@ jobs:
             for i in $(seq 1 12); do
               if curl -sf http://localhost:5678/healthz > /dev/null 2>&1; then
                 echo "Health check passed"
+                rm -f ${{ steps.vars.outputs.path }}/.pre-deploy-revision
                 exit 0
               fi
               echo "Attempt $i/12, waiting..."
@@ -73,9 +76,11 @@ jobs:
             done
             echo "Health check failed, initiating rollback..."
             cd ${{ steps.vars.outputs.path }}
+            ROLLBACK_REV=$(cat .pre-deploy-revision 2>/dev/null || echo "HEAD~1")
             docker compose -f ${{ steps.vars.outputs.compose_file }} down
-            git checkout HEAD~1
+            git checkout "$ROLLBACK_REV"
             docker compose -f ${{ steps.vars.outputs.compose_file }} up -d
+            rm -f .pre-deploy-revision
             exit 1
 
       - name: Notify Slack

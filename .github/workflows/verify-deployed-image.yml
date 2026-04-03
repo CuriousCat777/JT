@@ -15,13 +15,14 @@ jobs:
 
       - name: Pull and test published image
         run: |
-          docker pull ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:latest
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:${{ github.event.workflow_run.head_sha }}"
+          docker pull "$IMAGE"
           docker run --rm \
             --health-cmd="curl -f http://localhost:5678/healthz || exit 1" \
             --health-interval=5s \
             --health-retries=3 \
             -p 5678:5678 \
-            ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:latest &
+            "$IMAGE" &
 
           sleep 10
           curl -f http://localhost:5678/healthz || exit 1

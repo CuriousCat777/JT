@@ -16,7 +16,7 @@ jobs:
         run: |
           for f in .github/workflows/*.yml; do
             echo "Validating $f..."
-            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+            ruby -ryaml -e "YAML.load_file('$f')" || exit 1
           done
           echo "All workflow files are valid YAML"
 
@@ -33,7 +33,7 @@ jobs:
       - name: Validate Dockerfile
         if: hashFiles('Dockerfile') != ''
         run: |
-          docker build --check . 2>/dev/null || docker build --no-cache --target=validate . 2>/dev/null || { echo "Dockerfile validation failed"; exit 1; }
+          docker build --check . 2>/dev/null || { echo "Dockerfile validation failed"; exit 1; }
 
       - name: Test Docker build
         if: hashFiles('Dockerfile') != ''

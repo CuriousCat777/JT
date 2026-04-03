@@ -22,17 +22,31 @@ jobs:
 
       - name: List and prune old tags
         run: |
+          set -eu
+
           echo "Fetching tags for ${{ env.IMAGE_NAME }}..."
 
-          # Get all tags via Docker Hub API
-          TOKEN=$(curl -s "https://hub.docker.com/v2/users/login/" \
+          # Get Docker Hub API token
+          AUTH_RESPONSE=$(curl -fsS "https://hub.docker.com/v2/users/login/" \
             -H "Content-Type: application/json" \
-            -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}" \
-            | jq -r '.token')
+            -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}")
 
-          TAGS=$(curl -s "https://hub.docker.com/v2/repositories/${{ env.IMAGE_NAME }}/tags/?page_size=100" \
-            -H "Authorization: JWT ${TOKEN}" \
-            | jq -r '.results[] | select(.name != "latest" and .name != "main") | select(now - (.last_updated | fromdateiso8601) > 2592000) | .name')
+          TOKEN=$(printf '%s' "$AUTH_RESPONSE" | jq -r '.token // empty')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: Failed to authenticate with Docker Hub; token was empty." >&2
+            exit 1
+          fi
+
+          TAGS_RESPONSE=$(curl -fsS "https://hub.docker.com/v2/repositories/${{ env.IMAGE_NAME }}/tags/?page_size=100" \
+            -H "Authorization: JWT ${TOKEN}")
+
+          if ! printf '%s' "$TAGS_RESPONSE" | jq -e '.results | arrays' >/dev/null; then
+            echo "ERROR: Failed to fetch tags from Docker Hub or received an unexpected response." >&2
+            exit 1
+          fi
+
+          TAGS=$(printf '%s' "$TAGS_RESPONSE" | jq -r '.results[] | select(.name != "latest" and .name != "main") | select(now - (.last_updated | fromdateiso8601) > 2592000) | .name')
 
           if [ -z "$TAGS" ]; then
             echo "No old tags to clean up"
