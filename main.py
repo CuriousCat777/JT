@@ -321,7 +321,9 @@ def main() -> None:
                         help="Bank name for CSV import (auto-detected if omitted)")
     parser.add_argument("--import-account", type=str, default="",
                         help="Account name for CSV import (auto-generated if omitted)")
-    parser.add_argument("--import-type", type=str, default="checking",
+    parser.add_argument("--import-type", type=str.lower,
+                        choices=["checking", "savings", "credit_card", "loan", "investment", "retirement"],
+                        default="checking",
                         help="Account type for CSV import: checking, savings, credit_card, loan, investment, retirement")
     parser.add_argument("--teller-status", action="store_true",
                         help="Show Teller.io connection status")
@@ -683,8 +685,8 @@ def main() -> None:
             print(f"  Accounts updated: {result['accounts_updated']}")
             print(f"  Transactions added: {result['transactions_added']}")
             print(f"\n  Net worth: ${cfo.net_worth():,.2f}")
-            print(f"  Total accounts: {len(cfo._accounts)}")
-            print(f"  Total transactions: {len(cfo._transactions)}")
+            print(f"  Total accounts: {cfo.account_count}")
+            print(f"  Total transactions: {cfo.transaction_count}")
         else:
             print("CFO agent not available.")
     elif args.import_ofx:
@@ -696,8 +698,8 @@ def main() -> None:
             print(f"  Accounts updated: {result['accounts_updated']}")
             print(f"  Transactions added: {result['transactions_added']}")
             print(f"\n  Net worth: ${cfo.net_worth():,.2f}")
-            print(f"  Total accounts: {len(cfo._accounts)}")
-            print(f"  Total transactions: {len(cfo._transactions)}")
+            print(f"  Total accounts: {cfo.account_count}")
+            print(f"  Total transactions: {cfo.transaction_count}")
         else:
             print("CFO agent not available.")
     elif args.teller_status:

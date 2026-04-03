@@ -1,7 +1,6 @@
 """Tests for Teller, bank CSV, and OFX providers + CFO integration."""
 
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -46,12 +45,16 @@ def _clean_financial_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
-def _make_audit() -> AuditLog:
-    return AuditLog(log_dir=Path(tempfile.mkdtemp()))
+@pytest.fixture
+def audit(tmp_path):
+    return AuditLog(log_dir=tmp_path / "audit")
 
 
-def _make_data_dir() -> Path:
-    return Path(tempfile.mkdtemp())
+@pytest.fixture
+def data_dir(tmp_path):
+    d = tmp_path / "data"
+    d.mkdir()
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -447,38 +450,26 @@ class TestSGMLConversion:
 # ---------------------------------------------------------------------------
 
 class TestCFOTellerIntegration:
-    def test_cfo_has_teller(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_cfo_has_teller(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         assert hasattr(cfo, '_teller')
         assert hasattr(cfo, '_teller_connected')
         assert isinstance(cfo.teller, TellerProvider)
 
-    def test_teller_status(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_teller_status(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         status = cfo.teller_status()
         assert status["provider"] == "teller"
         assert "connected" in status
 
-    def test_sync_teller_not_connected(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_sync_teller_not_connected(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         result = cfo.sync_teller()
         assert result["source"] == "teller"
         assert not result["connected"]
 
-    def test_sync_all_includes_teller(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_sync_all_includes_teller(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
         results = cfo.sync_all()
         assert "teller" in results
@@ -486,17 +477,14 @@ class TestCFOTellerIntegration:
 
 
 class TestCFOCSVImport:
-    def test_import_bank_csv(self, tmp_path):
+    def test_import_bank_csv(self, tmp_path, audit, data_dir):
         csv_file = tmp_path / "chase.csv"
         csv_file.write_text(
             "Date,Description,Amount\n"
             "2026-01-15,PAYCHECK,2500\n"
             "2026-01-16,RENT,-1200\n"
         )
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
 
         result = cfo.import_bank_csv(csv_file, institution="Chase")
@@ -506,7 +494,7 @@ class TestCFOCSVImport:
 
 
 class TestCFOOFXImport:
-    def test_import_ofx(self, tmp_path):
+    def test_import_ofx(self, tmp_path, audit, data_dir):
         ofx_file = tmp_path / "statement.ofx"
         ofx_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
 <OFX>
@@ -533,10 +521,7 @@ class TestCFOOFXImport:
     </STMTTRNRS>
   </BANKMSGSRSV1>
 </OFX>""")
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
 
         result = cfo.import_ofx(ofx_file)
@@ -544,7 +529,7 @@ class TestCFOOFXImport:
         assert result["accounts_added"] == 1
         assert result["transactions_added"] == 1
 
-    def test_import_deduplicates(self, tmp_path):
+    def test_import_deduplicates(self, tmp_path, audit, data_dir):
         ofx_file = tmp_path / "statement.ofx"
         ofx_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
 <OFX>
@@ -569,10 +554,7 @@ class TestCFOOFXImport:
     </STMTTRNRS>
   </BANKMSGSRSV1>
 </OFX>""")
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
 
         result1 = cfo.import_ofx(ofx_file)
@@ -584,20 +566,14 @@ class TestCFOOFXImport:
 
 
 class TestCFODashboardIncludesTeller:
-    def test_dashboard_has_teller(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_dashboard_has_teller(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
         dashboard = cfo.dashboard()
         assert "teller" in dashboard
 
-    def test_validation_report_has_teller(self):
-        cfg = AgentConfig(name="cfo")
-        audit = _make_audit()
-        data_dir = _make_data_dir()
-        cfo = CFO(config=cfg, audit=audit, data_dir=data_dir)
+    def test_validation_report_has_teller(self, audit, data_dir):
+        cfo = CFO(config=AgentConfig(name="cfo"), audit=audit, data_dir=data_dir)
         cfo.initialize()
         report = cfo.validation_report()
         assert "teller" in report

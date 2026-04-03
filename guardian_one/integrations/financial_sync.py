@@ -1325,8 +1325,18 @@ class TellerProvider(FinancialProvider):
             institution = item.get("institution", {})
             inst_name = institution.get("name", "") if isinstance(institution, dict) else str(institution)
 
+            # Build unique name: "Institution AccountName (***last4)"
+            raw_name = item.get("name", "")
+            acct_last4 = item.get("last_four", "")
+            if inst_name and raw_name:
+                display_name = f"{inst_name} {raw_name}"
+            else:
+                display_name = raw_name or inst_name or "Unknown Account"
+            if acct_last4:
+                display_name = f"{display_name} (***{acct_last4})"
+
             accounts.append(SyncedAccount(
-                name=item.get("name", ""),
+                name=display_name,
                 account_type=acct_type,
                 balance=balance,
                 institution=inst_name,

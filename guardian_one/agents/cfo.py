@@ -34,6 +34,28 @@ from guardian_one.integrations.financial_sync import (
 )
 
 
+def _balance_was_provided(sa: SyncedAccount) -> bool:
+    """Determine whether the source actually provided a balance value.
+
+    Avoids overwriting a real balance with 0.0 when the source has no
+    balance info (e.g. bank CSV without a balance column), while still
+    allowing legitimate zero balances (e.g. paid-off credit card) when
+    the source explicitly provides them.
+    """
+    raw = sa.raw
+    if isinstance(raw, dict):
+        # Explicit flag set by parsers that know they have balance data
+        if "balance_provided" in raw:
+            return bool(raw["balance_provided"])
+        # Check if any common balance field exists in the raw data
+        for key in ("balance", "current_balance", "available_balance",
+                     "ledger_balance", "balances"):
+            if key in raw and raw[key] is not None:
+                return True
+    # Fallback: treat non-zero as "provided" for sources without raw metadata
+    return sa.balance != 0.0
+
+
 class AccountType(Enum):
     CHECKING = "checking"
     SAVINGS = "savings"
@@ -460,6 +482,14 @@ class CFO(BaseAgent):
 
     def net_worth(self) -> float:
         return sum(a.balance for a in self._accounts.values())
+
+    @property
+    def account_count(self) -> int:
+        return len(self._accounts)
+
+    @property
+    def transaction_count(self) -> int:
+        return len(self._transactions)
 
     def balances_by_type(self) -> dict[str, float]:
         totals: dict[str, float] = {}
@@ -1103,11 +1133,11 @@ class CFO(BaseAgent):
 
         # Merge transactions (deduplicate by date + description + amount)
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
         tx_added = 0
         for st in synced_transactions:
-            key = (st.date, st.description, st.amount)
+            key = (st.date, st.description, st.amount, st.account)
             if key not in existing_keys:
                 try:
                     cat = TransactionCategory(st.category)
@@ -1224,12 +1254,12 @@ class CFO(BaseAgent):
 
         # Deduplicate against existing transactions
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
 
         tx_added = 0
         for date_str, desc, amt, cat, acct in new_transactions:
-            key = (date_str, desc, amt)
+            key = (date_str, desc, amt, acct)
             if key not in existing_keys:
                 try:
                     tx_cat = TransactionCategory(cat)
@@ -1341,11 +1371,11 @@ class CFO(BaseAgent):
 
         # Merge transactions (deduplicate)
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
         tx_added = 0
         for st in synced_transactions:
-            key = (st.date, st.description, st.amount)
+            key = (st.date, st.description, st.amount, st.account)
             if key not in existing_keys:
                 try:
                     cat = TransactionCategory(st.category)
@@ -1449,11 +1479,11 @@ class CFO(BaseAgent):
 
         # Merge transactions (deduplicate)
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
         tx_added = 0
         for st in synced_transactions:
-            key = (st.date, st.description, st.amount)
+            key = (st.date, st.description, st.amount, st.account)
             if key not in existing_keys:
                 try:
                     cat = TransactionCategory(st.category)
@@ -1544,11 +1574,11 @@ class CFO(BaseAgent):
 
         # Merge transactions (deduplicate)
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
         tx_added = 0
         for st in synced_transactions:
-            key = (st.date, st.description, st.amount)
+            key = (st.date, st.description, st.amount, st.account)
             if key not in existing_keys:
                 try:
                     cat = TransactionCategory(st.category)
@@ -1641,7 +1671,7 @@ class CFO(BaseAgent):
         for sa in synced_accounts:
             existing = self._accounts.get(sa.name)
             if existing:
-                if sa.balance != 0.0:
+                if _balance_was_provided(sa):
                     existing.balance = sa.balance
                 existing.last_synced = sa.last_updated
                 accounts_updated += 1
@@ -1660,11 +1690,11 @@ class CFO(BaseAgent):
                 accounts_added += 1
 
         existing_keys = {
-            (tx.date, tx.description, tx.amount) for tx in self._transactions
+            (tx.date, tx.description, tx.amount, tx.account) for tx in self._transactions
         }
         tx_added = 0
         for st in synced_transactions:
-            key = (st.date, st.description, st.amount)
+            key = (st.date, st.description, st.amount, st.account)
             if key not in existing_keys:
                 try:
                     cat = TransactionCategory(st.category)
