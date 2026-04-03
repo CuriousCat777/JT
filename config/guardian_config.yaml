@@ -161,6 +161,15 @@ agents:
       retention_check_daily: true
       varys_mode: true               # Cross-agent intelligence gathering
       cross_agent_read_only: true    # Read, never write, other domains
+      palantir:
+        enabled: true
+        refresh_minutes: 15          # Real-time intelligence cycle
+        max_items_per_source: 50
+        feed_categories:
+          - tech_news               # HN, TechCrunch, Ars, Verge, Wired
+          - ai_company              # Anthropic, OpenAI, DeepMind, Meta, Mistral
+          - github                  # Trending repos, release tracking
+          - financial               # Yahoo Finance, SEC EDGAR
 
   cfo:
     enabled: true

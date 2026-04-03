@@ -18,6 +18,8 @@ Core Responsibilities:
     4. RETENTION ENGINE — Enforce time-based retention policies (delete-after-use → 7yr legal hold)
     5. PRIVACY POSTURE  — Audit encryption gaps, VPN config, data-broker removal status
     6. BACKUP CADENCE   — Schedule backups by category (financial=daily, legal=monthly)
+    7. PALANTÍR         — Strategic intelligence feeds (RSS, AI blogs, GitHub, finance)
+                          15-min refresh, priority-scored, CIO-level briefings
 
 Credential Access:
     All secrets via homelink/vault.py. No caching. No hardcoding. No exceptions.
@@ -34,6 +36,12 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.intelligence_feeds import (
+    FeedCategory,
+    FeedItem,
+    FeedPriority,
+    IntelligencePipeline,
+)
 
 
 class RetentionPolicy(Enum):
@@ -98,6 +106,7 @@ class Archivist(BaseAgent):
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
         self._guardian: Any = None  # Injected post-registration for Varys mode
+        self._palantir = IntelligencePipeline()  # Strategic intelligence feeds
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
@@ -261,6 +270,31 @@ class Archivist(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Palantír — strategic intelligence feeds
+    # ------------------------------------------------------------------
+
+    @property
+    def palantir(self) -> IntelligencePipeline:
+        """Direct access to the intelligence pipeline."""
+        return self._palantir
+
+    def ingest_feed_items(self, items: list[FeedItem]) -> int:
+        """Ingest a batch of feed items into the Palantír."""
+        count = self._palantir.ingest_batch(items)
+        if count:
+            self.log("palantir_ingested", details={"new_items": count})
+        return count
+
+    def intelligence_briefing(self, max_items: int = 20) -> dict[str, Any]:
+        """CIO-level intelligence briefing — the morning Palantír read."""
+        briefing = self._palantir.briefing(max_items=max_items)
+        self.log("palantir_briefing", details={
+            "critical": briefing["critical_count"],
+            "unread": briefing["total_unread"],
+        })
+        return briefing
+
+    # ------------------------------------------------------------------
     # Varys mode — cross-agent intelligence
     # ------------------------------------------------------------------
 
@@ -398,6 +432,18 @@ class Archivist(BaseAgent):
                 f"sovereignty score {sovereignty.get('data_sovereignty_score', '?')}/100."
             )
 
+        # Palantír — strategic intelligence pipeline
+        palantir_stats = self._palantir.stats()
+        critical = self._palantir.critical_alerts()
+        if critical:
+            for item in critical:
+                alerts.append(f"[PALANTÍR CRITICAL] {item.source}: {item.title}")
+        if palantir_stats["unread"]:
+            actions.append(
+                f"Palantír: {palantir_stats['unread']} unread items "
+                f"across {palantir_stats['active_sources']} sources."
+            )
+
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
             agent_name=self.name,
@@ -411,18 +457,26 @@ class Archivist(BaseAgent):
                 "sources": len(self._data_sources),
                 "privacy": privacy,
                 "sovereignty": sovereignty,
+                "palantir": palantir_stats,
             },
         )
 
     def report(self) -> AgentReport:
+        palantir = self._palantir.stats()
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
-            summary=f"Managing {len(self._file_index)} files, {len(self._data_sources)} sources, {len(self._privacy_tools)} privacy tools.",
+            summary=(
+                f"Managing {len(self._file_index)} files, "
+                f"{len(self._data_sources)} sources, "
+                f"{len(self._privacy_tools)} privacy tools, "
+                f"{palantir['total_items']} intel items."
+            ),
             data={
                 "files": len(self._file_index),
                 "sources": list(self._data_sources.keys()),
                 "privacy_tools": list(self._privacy_tools.keys()),
                 "profile_fields": len(self._master_profile),
+                "palantir": palantir,
             },
         )
