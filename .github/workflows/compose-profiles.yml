@@ -21,10 +21,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if compose file exists
+        id: check
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No docker-compose.yml found, skipping"
+          fi
+
       - name: Test profile '${{ matrix.profile }}'
+        if: steps.check.outputs.exists == 'true'
         run: |
           if [ "${{ matrix.profile }}" = "default" ]; then
-            docker compose config --quiet 2>/dev/null && echo "Default profile valid" || echo "No default compose file"
+            docker compose config --quiet
+            echo "Default profile valid"
           else
-            docker compose --profile ${{ matrix.profile }} config --quiet 2>/dev/null && echo "Profile '${{ matrix.profile }}' valid" || echo "Profile '${{ matrix.profile }}' not defined, skipping"
+            # Check if profile is defined; skip if not, fail if config is invalid
+            if docker compose --profile ${{ matrix.profile }} config --services 2>/dev/null | grep -q .; then
+              docker compose --profile ${{ matrix.profile }} config --quiet
+              echo "Profile '${{ matrix.profile }}' valid"
+            else
+              echo "Profile '${{ matrix.profile }}' has no services, skipping"
+            fi
           fi

@@ -8,6 +8,9 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
       - 'config/**'
+      - 'guardian_one/**'
+      - 'requirements.txt'
+      - 'pyproject.toml'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence
