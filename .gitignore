@@ -61,8 +61,12 @@ credentials.json
 token.json
 *.backup.json
 
-# Claude workspace
-.claude/
+# Claude workspace — ignore everything except shared config
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/session-start.sh
 
 # Data exports (may contain PII)
 data/*.xlsx
