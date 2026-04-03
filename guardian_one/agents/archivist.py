@@ -37,6 +37,12 @@ class BackupStatus(Enum):
     VERIFIED = "verified" # Backup verified intact
 
 
+class DevicePlatform(Enum):
+    LINUX = "linux"
+    MACOS = "macos"
+    WINDOWS = "windows"
+
+
 @dataclass
 class FileRecord:
     """Metadata for a tracked file."""
@@ -75,6 +81,20 @@ class PrivacyTool:
 
 
 @dataclass
+class DeviceRecord:
+    """A registered device in the multi-device backup network."""
+    device_id: str           # Unique key: "linux_primary", "macos_macbook", "windows_rog_x"
+    name: str                # Human name: "Linux Primary", "MacBook", "ASUS ROG X"
+    platform: DevicePlatform
+    hostname: str = ""
+    priority: int = 0        # Lower = higher priority (Linux=0, macOS=1, Windows=2)
+    storage_path: str = ""   # Root path for backups on this device
+    last_seen: str | None = None
+    online: bool = False
+    specs: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class BackupRecord:
     """Tracks a database or file backup."""
     name: str                # e.g. "cfo_ledger", "vault", "guardian_config"
@@ -82,6 +102,7 @@ class BackupRecord:
     backup_path: str         # Where the backup is stored
     category: str            # financial, config, credentials, system
     schedule: str            # daily, weekly, monthly
+    device: str = ""         # Device ID this backup belongs to (empty = current)
     last_backup: str | None = None
     last_verified: str | None = None
     backup_status: BackupStatus = BackupStatus.MISSING
@@ -94,6 +115,14 @@ class BackupRecord:
 class Archivist(BaseAgent):
     """Data management agent for Jeremy's digital life."""
 
+    # Platform priority: Linux (0) > Windows (1) > macOS (2)
+    # Linux is the sovereign primary — all backups consolidate here.
+    PLATFORM_PRIORITY = {
+        DevicePlatform.LINUX: 0,
+        DevicePlatform.WINDOWS: 1,
+        DevicePlatform.MACOS: 2,
+    }
+
     def __init__(self, config: AgentConfig, audit: AuditLog) -> None:
         super().__init__(config, audit)
         self._file_index: dict[str, FileRecord] = {}
@@ -102,16 +131,19 @@ class Archivist(BaseAgent):
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
         self._backups: dict[str, BackupRecord] = {}
+        self._devices: dict[str, DeviceRecord] = {}
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._setup_default_sources()
         self._setup_privacy_tools()
         self._setup_file_categories()
+        self._setup_devices()
         self._setup_default_backups()
         self.log("initialized", details={
             "sources": len(self._data_sources),
             "privacy_tools": len(self._privacy_tools),
+            "devices": len(self._devices),
             "backups_tracked": len(self._backups),
         })
 
@@ -158,39 +190,196 @@ class Archivist(BaseAgent):
             "legal": "monthly",
         }
 
+    def _setup_devices(self) -> None:
+        """Register all devices in the multi-device backup network.
+
+        Priority order: Linux (0) > Windows (1) > macOS (2)
+        Linux is the sovereign primary — the consolidation target for
+        all cross-device backups.
+        """
+        self._devices = {
+            "linux_primary": DeviceRecord(
+                device_id="linux_primary",
+                name="Linux Primary",
+                platform=DevicePlatform.LINUX,
+                priority=0,
+                storage_path="/home/user/JT/data/backups",
+                specs={
+                    "role": "sovereign_primary",
+                    "description": "Primary development and backup consolidation server",
+                },
+            ),
+            "windows_rog_x": DeviceRecord(
+                device_id="windows_rog_x",
+                name="ASUS ROG X",
+                platform=DevicePlatform.WINDOWS,
+                priority=1,
+                storage_path="C:\\Users\\Jeremy\\JT\\data\\backups",
+                specs={
+                    "role": "power_workstation",
+                    "ram_gb": 64,
+                    "description": "ASUS ROG X 64GB — AI training, heavy compute",
+                    "features": ["wsl2", "ollama_local", "gpu_compute"],
+                    "archivist_duties": [
+                        "file_system_integrity",
+                        "data_sovereignty_enforcement",
+                        "backup_verification",
+                        "claude_md_stewardship",
+                        "audit_trail",
+                    ],
+                },
+            ),
+            "macos_macbook": DeviceRecord(
+                device_id="macos_macbook",
+                name="MacBook",
+                platform=DevicePlatform.MACOS,
+                priority=2,
+                storage_path="~/JT/data/backups",
+                specs={
+                    "role": "mobile_workstation",
+                    "description": "macOS laptop — iMessage, Xcode, mobile dev",
+                    "features": ["imessage", "keychain", "time_machine"],
+                },
+            ),
+        }
+
     def _setup_default_backups(self) -> None:
-        """Register the known databases and critical files for backup tracking."""
+        """Register per-device backup targets for all critical files.
+
+        Organization: Linux on top (consolidation target), then
+        Windows ROG X, then macOS.  Every device's critical data
+        backs up to the Linux primary.
+        """
         defaults = [
+            # ── Linux Primary (sovereign hub) ──
             BackupRecord(
-                name="cfo_ledger",
+                name="linux:cfo_ledger",
                 source_path="data/cfo_ledger.json",
-                backup_path="data/backups/cfo_ledger",
+                backup_path="data/backups/linux/cfo_ledger",
                 category="financial",
                 schedule="daily",
+                device="linux_primary",
                 retention=RetentionPolicy.KEEP_7_YEARS,
             ),
             BackupRecord(
-                name="vault",
+                name="linux:vault",
                 source_path="data/vault.enc",
-                backup_path="data/backups/vault",
+                backup_path="data/backups/linux/vault",
                 category="credentials",
                 schedule="daily",
+                device="linux_primary",
                 retention=RetentionPolicy.KEEP_FOREVER,
             ),
             BackupRecord(
-                name="guardian_config",
+                name="linux:guardian_config",
                 source_path="config/guardian_config.yaml",
-                backup_path="data/backups/guardian_config",
+                backup_path="data/backups/linux/guardian_config",
                 category="config",
                 schedule="weekly",
+                device="linux_primary",
                 retention=RetentionPolicy.KEEP_1_YEAR,
             ),
             BackupRecord(
-                name="audit_log",
+                name="linux:audit_log",
                 source_path="logs/",
-                backup_path="data/backups/audit_log",
+                backup_path="data/backups/linux/audit_log",
                 category="system",
                 schedule="daily",
+                device="linux_primary",
+                retention=RetentionPolicy.KEEP_3_YEARS,
+            ),
+            BackupRecord(
+                name="linux:guardian_repo",
+                source_path="~/JT/",
+                backup_path="data/backups/linux/guardian_repo",
+                category="system",
+                schedule="daily",
+                device="linux_primary",
+                retention=RetentionPolicy.KEEP_1_YEAR,
+            ),
+
+            # ── Windows ASUS ROG X (64GB) — priority 1 ──
+            BackupRecord(
+                name="rog:guardian_repo",
+                source_path="C:\\Users\\Jeremy\\JT\\",
+                backup_path="data/backups/rog/guardian_repo",
+                category="system",
+                schedule="daily",
+                device="windows_rog_x",
+                retention=RetentionPolicy.KEEP_1_YEAR,
+            ),
+            BackupRecord(
+                name="rog:ollama_models",
+                source_path="C:\\Users\\Jeremy\\.ollama\\models\\",
+                backup_path="data/backups/rog/ollama_models",
+                category="ai",
+                schedule="weekly",
+                device="windows_rog_x",
+                retention=RetentionPolicy.KEEP_1_YEAR,
+            ),
+            BackupRecord(
+                name="rog:documents",
+                source_path="C:\\Users\\Jeremy\\Documents\\",
+                backup_path="data/backups/rog/documents",
+                category="personal",
+                schedule="weekly",
+                device="windows_rog_x",
+                retention=RetentionPolicy.KEEP_3_YEARS,
+            ),
+            BackupRecord(
+                name="rog:wsl_home",
+                source_path="\\\\wsl$\\Ubuntu\\home\\jeremy\\",
+                backup_path="data/backups/rog/wsl_home",
+                category="system",
+                schedule="weekly",
+                device="windows_rog_x",
+                retention=RetentionPolicy.KEEP_1_YEAR,
+            ),
+            BackupRecord(
+                name="rog:vault",
+                source_path="C:\\Users\\Jeremy\\JT\\data\\vault.enc",
+                backup_path="data/backups/rog/vault",
+                category="credentials",
+                schedule="daily",
+                device="windows_rog_x",
+                retention=RetentionPolicy.KEEP_FOREVER,
+            ),
+
+            # ── macOS MacBook — priority 2 ──
+            BackupRecord(
+                name="macos:keychain",
+                source_path="~/Library/Keychains/",
+                backup_path="data/backups/macos/keychain",
+                category="credentials",
+                schedule="weekly",
+                device="macos_macbook",
+                retention=RetentionPolicy.KEEP_FOREVER,
+            ),
+            BackupRecord(
+                name="macos:documents",
+                source_path="~/Documents/",
+                backup_path="data/backups/macos/documents",
+                category="personal",
+                schedule="weekly",
+                device="macos_macbook",
+                retention=RetentionPolicy.KEEP_3_YEARS,
+            ),
+            BackupRecord(
+                name="macos:guardian_repo",
+                source_path="~/JT/",
+                backup_path="data/backups/macos/guardian_repo",
+                category="system",
+                schedule="daily",
+                device="macos_macbook",
+                retention=RetentionPolicy.KEEP_1_YEAR,
+            ),
+            BackupRecord(
+                name="macos:imessage_db",
+                source_path="~/Library/Messages/chat.db",
+                backup_path="data/backups/macos/imessage_db",
+                category="personal",
+                schedule="weekly",
+                device="macos_macbook",
                 retention=RetentionPolicy.KEEP_3_YEARS,
             ),
         ]
@@ -335,7 +524,7 @@ class Archivist(BaseAgent):
         return stale
 
     def backup_summary(self) -> dict[str, Any]:
-        """Return a summary of all tracked backups."""
+        """Return a summary of all tracked backups, organized by device."""
         total = len(self._backups)
         by_status: dict[str, int] = {}
         for record in self._backups.values():
@@ -343,23 +532,116 @@ class Archivist(BaseAgent):
             by_status[status] = by_status.get(status, 0) + 1
 
         stale = self.stale_backups()
+
+        # Group by device, ordered by priority
+        by_device: dict[str, list[dict[str, Any]]] = {}
+        for name, r in self._backups.items():
+            device_id = r.device or "unassigned"
+            if device_id not in by_device:
+                by_device[device_id] = []
+            by_device[device_id].append({
+                "name": name,
+                "status": r.backup_status.value,
+                "source": r.source_path,
+                "schedule": r.schedule,
+                "last_backup": r.last_backup or "never",
+                "last_verified": r.last_verified or "never",
+                "size_bytes": r.size_bytes,
+                "history_count": len(r.history),
+            })
+
+        # Sort devices by priority
+        sorted_devices: dict[str, Any] = {}
+        for dev_id in sorted(
+            by_device.keys(),
+            key=lambda d: self._devices[d].priority if d in self._devices else 99,
+        ):
+            device = self._devices.get(dev_id)
+            sorted_devices[dev_id] = {
+                "device_name": device.name if device else dev_id,
+                "platform": device.platform.value if device else "unknown",
+                "priority": device.priority if device else 99,
+                "targets": by_device[dev_id],
+                "target_count": len(by_device[dev_id]),
+            }
+
         return {
             "total": total,
             "by_status": by_status,
             "stale_count": len(stale),
             "stale_names": [r.name for r in stale],
-            "backups": {
-                name: {
+            "devices_registered": len(self._devices),
+            "by_device": sorted_devices,
+        }
+
+    # ------------------------------------------------------------------
+    # Device management
+    # ------------------------------------------------------------------
+
+    def register_device(self, device: DeviceRecord) -> None:
+        """Register a new device in the backup network."""
+        self._devices[device.device_id] = device
+        self.log("device_registered", details={
+            "device_id": device.device_id,
+            "platform": device.platform.value,
+            "priority": device.priority,
+        })
+
+    def get_device(self, device_id: str) -> DeviceRecord | None:
+        return self._devices.get(device_id)
+
+    def list_devices(self) -> list[DeviceRecord]:
+        """Return all devices sorted by priority (lowest number = highest priority)."""
+        return sorted(self._devices.values(), key=lambda d: d.priority)
+
+    def mark_device_online(self, device_id: str) -> None:
+        """Mark a device as online (seen now)."""
+        device = self._devices.get(device_id)
+        if device:
+            device.online = True
+            device.last_seen = datetime.now(timezone.utc).isoformat()
+
+    def mark_device_offline(self, device_id: str) -> None:
+        device = self._devices.get(device_id)
+        if device:
+            device.online = False
+
+    def backups_for_device(self, device_id: str) -> list[BackupRecord]:
+        """Get all backup targets for a specific device."""
+        return [r for r in self._backups.values() if r.device == device_id]
+
+    def device_backup_status(self, device_id: str) -> dict[str, Any]:
+        """Get backup health summary for a single device."""
+        device = self._devices.get(device_id)
+        if device is None:
+            return {"error": f"Unknown device: {device_id}"}
+
+        targets = self.backups_for_device(device_id)
+        stale = [r for r in targets if r.backup_status in (
+            BackupStatus.STALE, BackupStatus.MISSING,
+        )]
+        failed = [r for r in targets if r.backup_status == BackupStatus.FAILED]
+
+        return {
+            "device_id": device_id,
+            "device_name": device.name,
+            "platform": device.platform.value,
+            "priority": device.priority,
+            "online": device.online,
+            "last_seen": device.last_seen or "never",
+            "total_targets": len(targets),
+            "stale": len(stale),
+            "failed": len(failed),
+            "healthy": len(targets) - len(stale) - len(failed),
+            "targets": [
+                {
+                    "name": r.name,
                     "status": r.backup_status.value,
                     "source": r.source_path,
-                    "schedule": r.schedule,
                     "last_backup": r.last_backup or "never",
-                    "last_verified": r.last_verified or "never",
-                    "size_bytes": r.size_bytes,
-                    "history_count": len(r.history),
                 }
-                for name, r in self._backups.items()
-            },
+                for r in targets
+            ],
         }
 
     # ------------------------------------------------------------------
@@ -509,7 +791,10 @@ class Archivist(BaseAgent):
                 f"Run backups for {len(stale)} stale/missing target(s): "
                 + ", ".join(r.name for r in stale) + "."
             )
-        actions.append(f"Checked {len(self._backups)} backup targets.")
+        actions.append(
+            f"Checked {len(self._backups)} backup targets "
+            f"across {len(self._devices)} devices."
+        )
 
         failed = [r for r in self._backups.values()
                   if r.backup_status == BackupStatus.FAILED]
@@ -528,7 +813,8 @@ class Archivist(BaseAgent):
             summary=(
                 f"Tracking {len(self._file_index)} files, "
                 f"{len(self._data_sources)} data sources, "
-                f"{len(self._backups)} backup targets."
+                f"{len(self._backups)} backup targets "
+                f"across {len(self._devices)} devices."
             ),
             actions_taken=actions,
             recommendations=recommendations,
@@ -549,13 +835,15 @@ class Archivist(BaseAgent):
                 f"Managing {len(self._file_index)} files, "
                 f"{len(self._data_sources)} sources, "
                 f"{len(self._privacy_tools)} privacy tools, "
-                f"{len(self._backups)} backup targets."
+                f"{len(self._backups)} backup targets "
+                f"across {len(self._devices)} devices."
             ),
             data={
                 "files": len(self._file_index),
                 "sources": list(self._data_sources.keys()),
                 "privacy_tools": list(self._privacy_tools.keys()),
                 "profile_fields": len(self._master_profile),
+                "devices": [d.device_id for d in self.list_devices()],
                 "backups": self.backup_summary(),
             },
         )
