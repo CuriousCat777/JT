@@ -1325,15 +1325,22 @@ class TellerProvider(FinancialProvider):
             institution = item.get("institution", {})
             inst_name = institution.get("name", "") if isinstance(institution, dict) else str(institution)
 
-            # Build unique name: "Institution AccountName (***last4)"
+            # Build stable unique name: "Institution AccountName (***last4)"
+            # and fall back to a masked Teller account id when last_four is absent.
             raw_name = item.get("name", "")
             acct_last4 = item.get("last_four", "")
+            account_id = str(item.get("id", "") or "")
+            masked_account_id = account_id[-6:] if account_id else ""
+
             if inst_name and raw_name:
                 display_name = f"{inst_name} {raw_name}"
             else:
                 display_name = raw_name or inst_name or "Unknown Account"
+
             if acct_last4:
                 display_name = f"{display_name} (***{acct_last4})"
+            elif masked_account_id:
+                display_name = f"{display_name} (id:***{masked_account_id})"
 
             accounts.append(SyncedAccount(
                 name=display_name,
@@ -1797,6 +1804,8 @@ def _sgml_ofx_to_xml(raw: str) -> str:
             tag = m.group(1)
             value = m.group(2).strip()
             if tag.upper() in data_tags and not value.startswith("<"):
+                # XML-escape special characters in values
+                value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 result.append(f"<{tag}>{value}</{tag}>")
                 continue
         result.append(stripped)

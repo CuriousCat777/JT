@@ -49,7 +49,7 @@ WorkingDirectory=/GUARDIAN_DIR
 ExecStart=/GUARDIAN_DIR/scripts/guardian_daemon.sh
 
 # ── Restart policy ──────────────────────────────────────────────────
-# Auto-restart on crash with exponential backoff (5s → 10s → 20s ...)
+# Auto-restart on crash with a fixed 5-second delay between attempts
 Restart=on-failure
 RestartSec=5
 StartLimitIntervalSec=300

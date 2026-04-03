@@ -315,8 +315,13 @@ class Scheduler:
             print("  Scheduler running in daemon mode (headless). Send SIGTERM to stop.")
             print()
 
-            # Block until stop signal — no interactive prompt
-            self._stop_event.wait()
+            # Block until stop signal, but monitor the scheduler thread
+            # so the process exits if the background worker dies unexpectedly.
+            while not self._stop_event.wait(timeout=1):
+                if self._scheduler_thread and not self._scheduler_thread.is_alive():
+                    print("\n  Scheduler thread exited unexpectedly. Shutting down.")
+                    self._stop_event.set()
+                    break
         else:
             print()
             print("  Scheduler running. Type 'help' for commands, 'stop' to quit.")

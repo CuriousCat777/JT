@@ -481,7 +481,7 @@ class CFO(BaseAgent):
         return self._accounts.get(name)
 
     def net_worth(self) -> float:
-        return sum(a.balance for a in self._accounts.values())
+        return round(sum(a.balance for a in self._accounts.values()), 2)
 
     @property
     def account_count(self) -> int:
