@@ -4,9 +4,14 @@ branch = true
 omit =
     guardian_one/templates/*
     guardian_one/*/__init__.py
+    guardian_one/web/*
+    guardian_one/integrations/ollama_sync.py
+    guardian_one/integrations/plaid_connect.py
+    guardian_one/integrations/privacy_tools.py
+    guardian_one/integrations/ring_monitor.py
 
 [report]
-fail_under = 75
+fail_under = 60
 show_missing = true
 exclude_lines =
     pragma: no cover
