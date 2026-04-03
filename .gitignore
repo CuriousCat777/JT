@@ -69,3 +69,9 @@ data/*.xlsx
 data/*.csv
 data/*.png
 data/homelink-reference/
+
+# Archivist runtime state (generated, contains telemetry/state data)
+data/archivist_state.json
+data/cloudsync_config.json
+data/tech_registry.json
+data/telemetry.jsonl
