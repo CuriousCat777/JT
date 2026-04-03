@@ -226,3 +226,213 @@ The suite is strong on unit tests but lacks end-to-end flows:
 3. **Expand `test_audit.py`** — add 5 tests for rotation, search, export
 4. **`test_lan_security.py`** — pure logic, no external deps, easy to mock
 5. **`test_drivers.py`** — mock all hardware libs, test result format consistency
+
+---
+
+## Industry Practices Review
+
+### Test Pattern Quality
+
+#### What's Done Well
+
+| Practice | Status | Evidence |
+|----------|--------|----------|
+| **AAA Pattern** (Arrange-Act-Assert) | Strong | Consistent across all 25 files; clear separation of setup, action, verification |
+| **Test Isolation** | Excellent | No shared state; each test creates fresh instances; `tempfile.mkdtemp()` for disk isolation |
+| **Mock Strategy** | Excellent | External deps (APIs, SMTP, Ollama, Anthropic) properly isolated via `unittest.mock.patch`; zero flaky network calls |
+| **Security Testing** | Excellent | Threat model validation, access control boundaries, crypto roundtrips, read-only enforcement (Plaid), TLS enforcement, rate limiting |
+| **Test Naming** | Strong | `test_[component]_[scenario]` convention; descriptive and scannable |
+| **Error Resilience** | Strong | `test_manager_survives_channel_exception` pattern; gateway rejects unregistered services; vault wrong-passphrase handling |
+| **Persistence Roundtrips** | Good | CFO data reload, audit disk persistence, vault encrypt/decrypt, Plaid token store |
+| **Idempotency Testing** | Good | `test_cfo_csv_sync_deduplicates` — syncs same CSV twice, verifies no duplication |
+
+#### What Needs Improvement
+
+| Practice | Status | Gap | Industry Standard |
+|----------|--------|-----|-------------------|
+| **`pytest.fixture` usage** | Weak | Helper functions (`_make_audit()`, `_make_cfo()`) used instead of fixtures | Fixtures provide scoping (session/module/function), automatic teardown, dependency injection, and IDE support. Convert helpers to `@pytest.fixture` in `conftest.py` |
+| **`@pytest.mark.parametrize`** | Minimal | Nearly zero parametrized tests across 850+ cases | Data-driven tests reduce duplication. Email commands (10 separate functions) should be 1 parametrized test. Urgency levels, filter operations, category mappings are all candidates |
+| **Negative/Error Path Coverage** | Inconsistent | Security tests strong; agent tests lack invalid-input and failure-mode tests | Industry ratio: ~30% negative tests. Missing: invalid dates, malformed CSV, duplicate IDs, agent crash during run, corrupted encrypted data |
+| **Boundary/Edge Case Testing** | Fair | Some boundary tests exist (Chronos conflicts, CFO down-payment gap) but not systematic | Test at boundaries: empty collections, max-size inputs, off-by-one timestamps, midnight/DST transitions, zero-length strings |
+| **Fragile Assertions** | Minor | String matching like `"healthy" in analysis["recommendation"].lower()` | Prefer structured assertions: check enum values, dict keys, or use `pytest.approx()` for floats |
+| **Hardcoded Paths** | Minor | `parse_rocket_money_csv("/tmp/does_not_exist.csv")` in `test_financial_sync.py` | Use `tempfile.TemporaryDirectory()` or `tmp_path` fixture for portability |
+| **`os.environ` patching** | Minor | `patch.dict("os.environ", {}, clear=True)` removes ALL env vars | Patch only the specific vars needed; `clear=True` is brittle if test runner sets vars |
+
+### Test Infrastructure Gaps
+
+#### Missing: `conftest.py` — HIGH Priority
+
+No shared fixture file exists. Industry standard is a `tests/conftest.py` providing:
+
+```python
+# Reusable fixtures with proper scoping
+@pytest.fixture
+def audit_log(tmp_path):
+    return AuditLog(log_dir=tmp_path / "audit")
+
+@pytest.fixture
+def guardian_config():
+    return GuardianConfig(owner="test", ...)
+
+@pytest.fixture
+def vault(tmp_path):
+    return Vault(vault_path=tmp_path / "vault", passphrase="test")
+
+# Session-scoped for expensive setup
+@pytest.fixture(scope="session")
+def sample_cfo_data():
+    ...
+```
+
+**Impact:** Eliminates duplicated `_make_audit()` helpers across 10+ files.
+
+#### Missing: Coverage Measurement — HIGH Priority
+
+No `.coveragerc`, no `pytest-cov` in dependencies. Cannot measure or enforce coverage thresholds.
+
+**Recommended `.coveragerc`:**
+```ini
+[run]
+source = guardian_one
+branch = true
+omit =
+    */templates/*
+    */__init__.py
+
+[report]
+fail_under = 75
+show_missing = true
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__
+    raise NotImplementedError
+```
+
+**Recommended addition to `pyproject.toml`:**
+```toml
+[tool.pytest.ini_options]
+addopts = "--cov=guardian_one --cov-report=term-missing --cov-fail-under=75"
+```
+
+#### Missing: CI/CD Pipeline — HIGH Priority
+
+No `.github/workflows/`, no `tox.ini`, no `Makefile`. Tests only run manually.
+
+**Recommended `.github/workflows/tests.yml`:**
+```yaml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/ -v --cov=guardian_one --cov-report=xml
+      - uses: codecov/codecov-action@v4  # optional
+```
+
+#### Missing: Test Tooling — MEDIUM Priority
+
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `pytest-cov` | Coverage measurement and thresholds | **Missing** |
+| `pytest-mock` | Cleaner `mocker` fixture instead of `unittest.mock` | **Missing** |
+| `pytest-xdist` | Parallel test execution (`-n auto`) | **Missing** — 850+ tests would benefit |
+| `pytest-timeout` | Kill hanging tests (integration tests, thread tests) | **Missing** |
+| `pytest-randomly` | Detect hidden test-order dependencies | **Missing** |
+| `hypothesis` | Property-based / fuzz testing for parsers and validators | **Missing** |
+
+#### Missing: Test Data Organization — MEDIUM Priority
+
+No `tests/fixtures/` or `tests/data/` directory. Test data is either inline or in the top-level `data/` folder.
+
+**Recommended structure:**
+```
+tests/
+├── conftest.py              # Shared fixtures
+├── fixtures/
+│   ├── sample_config.yaml   # Valid config for config.py tests
+│   ├── sample_csv/          # Rocket Money CSV samples
+│   └── sample_responses/    # Mock API response payloads
+├── data/                    # Larger test datasets
+└── ...
+```
+
+#### Missing: Makefile — MEDIUM Priority
+
+```makefile
+.PHONY: test coverage lint typecheck
+
+test:
+	pytest tests/ -v
+
+coverage:
+	pytest tests/ --cov=guardian_one --cov-report=html
+	open htmlcov/index.html
+
+lint:
+	ruff check guardian_one/ tests/
+	black --check guardian_one/ tests/
+
+typecheck:
+	mypy guardian_one/
+```
+
+### Testing Pyramid Assessment
+
+Industry standard testing pyramid recommends a ratio of roughly **70% unit / 20% integration / 10% E2E**.
+
+| Layer | Current State | Target |
+|-------|--------------|--------|
+| **Unit Tests** | ~830 tests (98%) — Strong | Maintain; fill gaps in untested modules |
+| **Integration Tests** | ~20 tests (2%) — Weak | Add cross-agent flows (CFO+Gmail, Chronos+CFO, Guardian orchestration) |
+| **E2E / Smoke Tests** | 0 tests (0%) — Missing | Add CLI smoke tests (`main.py` subcommands), full boot-to-summary cycle |
+
+The suite is **bottom-heavy** — excellent unit coverage but almost no integration or end-to-end validation.
+
+### Property-Based Testing Candidates
+
+The `hypothesis` library would add significant value for these modules:
+
+| Module | Property to Test |
+|--------|-----------------|
+| `utils/encryption.py` | `decrypt(encrypt(data)) == data` for arbitrary bytes |
+| `core/config.py` | `load_config(write_config(cfg)) == cfg` roundtrip |
+| `integrations/financial_sync.py` | `map_category()` never raises for arbitrary strings |
+| `integrations/notion_sync.py` | `classify_content()` blocks all PHI/PII patterns (fuzz SSN, CC, email variants) |
+| `homelink/email_commands.py` | Parser never crashes on arbitrary email body strings |
+| `core/mediator.py` | No proposal is silently dropped (all proposals appear in resolution or conflict) |
+
+### Recommended Test Markers
+
+```python
+# pyproject.toml
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests that take >1s (deselect with '-m not slow')",
+    "integration: cross-agent or multi-component tests",
+    "security: security-focused test cases",
+    "smoke: minimal sanity checks for CI fast-path",
+]
+```
+
+### Summary: Priority Action Items
+
+| # | Action | Priority | Effort | Impact |
+|---|--------|----------|--------|--------|
+| 1 | Create `tests/conftest.py` with shared fixtures | HIGH | Low | Eliminates duplication, enables fixture scoping |
+| 2 | Add `pytest-cov` + `.coveragerc` with 75% threshold | HIGH | Low | Measurable coverage, CI gate |
+| 3 | Add GitHub Actions CI workflow | HIGH | Low | Automated test runs on every push/PR |
+| 4 | Write `test_config.py` and `test_base_agent.py` | HIGH | Medium | Covers 2 foundational modules |
+| 5 | Add `@pytest.mark.parametrize` to 5 key test files | HIGH | Medium | Reduce duplication, increase data coverage |
+| 6 | Write integration tests for 3 cross-agent flows | MEDIUM | Medium | Validate system behavior, not just components |
+| 7 | Add `pytest-timeout`, `pytest-randomly` | MEDIUM | Low | Catch hanging tests and order dependencies |
+| 8 | Write `test_drivers.py` and `test_lan_security.py` | MEDIUM | Medium | Cover hardware control and network security |
+| 9 | Add `hypothesis` property-based tests for parsers | MEDIUM | Medium | Catch edge cases humans miss |
+| 10 | Add Makefile with `test`, `coverage`, `lint` targets | MEDIUM | Low | Standardize developer workflow |
+| 11 | Add CLI smoke tests for `main.py` subcommands | LOW | Medium | E2E confidence for top-level entry point |
+| 12 | Add `pytest-xdist` for parallel execution | LOW | Low | Faster CI runs as test count grows |
