@@ -37,7 +37,13 @@ jobs:
           python -c "from guardian_one.core.audit import AuditLog; print('audit OK')"
           python -c "from guardian_one.core.guardian import GuardianOne; print('guardian OK')"
 
-      - name: Run tests
+      - name: Run smoke test
+        env:
+          GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
+        run: |
+          pytest tests/test_config.py tests/test_base_agent.py -v --tb=long
+
+      - name: Run full tests
         env:
           GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
         run: |
