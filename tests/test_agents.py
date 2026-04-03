@@ -8,7 +8,9 @@ from guardian_one.core.audit import AuditLog
 from guardian_one.core.base_agent import AgentStatus
 from guardian_one.core.config import AgentConfig
 from guardian_one.agents.chronos import CalendarEvent, Chronos, SleepRecord
-from guardian_one.agents.archivist import Archivist, FileRecord, RetentionPolicy
+from guardian_one.agents.archivist import (
+    Archivist, FileRecord, RetentionPolicy, BackupRecord, BackupStatus,
+)
 from guardian_one.agents.cfo import (
     Account,
     AccountType,
@@ -145,6 +147,114 @@ def test_archivist_run():
     agent.initialize()
     report = agent.run()
     assert report.agent_name == "archivist"
+    # Run cycle should include backup info
+    assert "backups" in report.data
+
+
+def test_archivist_default_backups_registered():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    backups = agent.list_backups()
+    assert "cfo_ledger" in backups
+    assert "vault" in backups
+    assert "guardian_config" in backups
+    assert "audit_log" in backups
+    assert backups["cfo_ledger"].schedule == "daily"
+    assert backups["vault"].retention == RetentionPolicy.KEEP_FOREVER
+
+
+def test_archivist_register_custom_backup():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    agent.register_backup(BackupRecord(
+        name="custom_db",
+        source_path="data/custom.db",
+        backup_path="data/backups/custom_db",
+        category="system",
+        schedule="weekly",
+    ))
+    assert agent.get_backup("custom_db") is not None
+    assert agent.get_backup("custom_db").schedule == "weekly"
+
+
+def test_archivist_record_and_verify_backup():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Record a successful backup
+    record = agent.record_backup("cfo_ledger", size_bytes=1700000, checksum="abc123")
+    assert record is not None
+    assert record.backup_status == BackupStatus.OK
+    assert record.size_bytes == 1700000
+    assert len(record.history) == 1
+
+    # Verify it
+    assert agent.verify_backup("cfo_ledger") is True
+    assert record.backup_status == BackupStatus.VERIFIED
+    assert len(record.history) == 2
+
+
+def test_archivist_verify_checksum_mismatch():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup("cfo_ledger", checksum="correct_hash")
+    assert agent.verify_backup("cfo_ledger", checksum="wrong_hash") is False
+    assert agent.get_backup("cfo_ledger").backup_status == BackupStatus.FAILED
+
+
+def test_archivist_stale_backups_detected():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # All defaults are MISSING (never backed up) — should all be stale
+    stale = agent.stale_backups()
+    assert len(stale) == len(agent.list_backups())
+    assert all(r.backup_status == BackupStatus.MISSING for r in stale)
+
+
+def test_archivist_backup_not_stale_after_recording():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Record a fresh backup — should NOT be stale
+    agent.record_backup("cfo_ledger", size_bytes=100)
+    stale = agent.stale_backups()
+    stale_names = [r.name for r in stale]
+    assert "cfo_ledger" not in stale_names
+
+
+def test_archivist_backup_failure_tracked():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup_failure("vault", error="Permission denied")
+    record = agent.get_backup("vault")
+    assert record.backup_status == BackupStatus.FAILED
+    assert len(record.history) == 1
+    assert record.history[0]["error"] == "Permission denied"
+
+
+def test_archivist_backup_summary():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup("cfo_ledger", size_bytes=1000)
+    summary = agent.backup_summary()
+    assert summary["total"] == 4
+    assert "cfo_ledger" in summary["backups"]
+    assert summary["backups"]["cfo_ledger"]["status"] == "ok"
+    assert summary["backups"]["cfo_ledger"]["size_bytes"] == 1000
+
+
+def test_archivist_run_alerts_on_missing_backups():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    report = agent.run()
+    # Should alert about missing backups (none have been run)
+    backup_alerts = [a for a in report.alerts if "NEVER been backed up" in a]
+    assert len(backup_alerts) > 0
 
 
 # ---- CFO ----
