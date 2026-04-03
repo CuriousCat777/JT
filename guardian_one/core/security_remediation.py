@@ -278,6 +278,8 @@ def _jtmdai_remediation_tasks() -> list[RemediationTask]:
             category=RemediationCategory.INFRASTRUCTURE,
             severity=RemediationSeverity.MEDIUM,
             due_date="2026-03-14",
+            # NOTE: "VARYS" is an external CVE monitoring label, NOT a Guardian One
+            # agent or service. It has no routes, no chat UI, no devpanel integration.
             notes="VARYS alert: CVE-2025-68613 is active. "
                   "Upgrade n8n at drdaddychaos88.app.n8n.cloud immediately.",
             verification_method="version_check",
