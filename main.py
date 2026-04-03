@@ -275,6 +275,8 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--n8n-sync", action="store_true", help="Push n8n workflow status to Notion dashboard")
+    parser.add_argument("--n8n-status", action="store_true", help="Show n8n connection and workflow status")
     parser.add_argument("--devices", action="store_true",
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
@@ -1041,6 +1043,58 @@ def main() -> None:
             services=services_data,
             deliverables=deliverables,
         ))
+
+    elif args.n8n_sync:
+        if not guardian.notion_sync:
+            print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+        else:
+            print("\n  Syncing n8n workflow status to Notion...")
+            result = guardian.sync_n8n_to_notion()
+            if result:
+                status = "OK" if result.success else "FAILED"
+                print(f"  [{status}] {result.pages_created} pages created, "
+                      f"{result.pages_updated} updated, "
+                      f"{result.blocks_written} blocks written "
+                      f"({result.duration_ms:.0f}ms)")
+                if result.errors:
+                    for err in result.errors:
+                        print(f"    [ERROR] {err}")
+
+    elif args.n8n_status:
+        from guardian_one.integrations.n8n_sync import N8nWorkflow
+        print("\n  n8n Workflow Engine Status")
+        print("  " + "=" * 40)
+
+        connected = False
+        if guardian.n8n_provider.has_credentials:
+            connected = guardian.n8n_provider.authenticate()
+
+        print(f"  Connection: {'Connected' if connected else 'Disconnected'}")
+        print(f"  Gateway service: {'registered' if guardian.n8n_provider.has_credentials else 'not found'}")
+
+        if connected:
+            workflows = guardian.n8n_provider.list_workflows()
+            active = sum(1 for w in workflows if w.active)
+            print(f"  Workflows: {len(workflows)} total, {active} active")
+            for wf in workflows:
+                icon = "[ON] " if wf.active else "[OFF]"
+                print(f"    {icon} {wf.name} (id: {wf.id})")
+        else:
+            print("  Set N8N_BASE_URL and N8N_API_KEY in .env to connect.")
+
+        # Show local workflows from WebArchitect if available
+        wa = guardian.get_agent("web_architect")
+        if wa and hasattr(wa, "list_workflows"):
+            local_wfs = wa.list_workflows()
+            if local_wfs:
+                print(f"\n  Local workflows (WebArchitect): {len(local_wfs)}")
+                for wf_id, wf in local_wfs.items():
+                    print(f"    [{wf_id}] {wf.name}")
+
+        print(f"\n  Notion sync: {'available' if guardian.notion_sync else 'not configured'}")
+        if guardian.notion_sync:
+            print("  Run --n8n-sync to push workflow status to Notion.")
+        print()
 
     elif args.connector_audit:
         audit_report = guardian.registry.connector_audit()
