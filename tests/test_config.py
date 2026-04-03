@@ -47,8 +47,10 @@ class TestDataclassDefaults:
 class TestLoadConfig:
     """Tests for load_config() function."""
 
-    def test_missing_config_file_returns_defaults(self, tmp_path):
+    def test_missing_config_file_returns_defaults(self, tmp_path, monkeypatch):
         """When config file doesn't exist, all defaults are used."""
+        monkeypatch.delenv("GUARDIAN_DATA_DIR", raising=False)
+        monkeypatch.delenv("GUARDIAN_LOG_DIR", raising=False)
         cfg = load_config(tmp_path / "nonexistent.yaml")
         assert cfg.owner == "Jeremy Paulo Salvino Tabernero"
         assert cfg.timezone == "America/Chicago"

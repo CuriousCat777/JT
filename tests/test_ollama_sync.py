@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-httpx = pytest.importorskip("httpx", reason="httpx not installed")
 from guardian_one.core.audit import AuditLog
 from guardian_one.integrations.ollama_sync import (
     BenchmarkResult,

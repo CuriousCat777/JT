@@ -217,7 +217,6 @@ def test_validate():
 
 
 def test_excel():
-    pytest.importorskip("openpyxl", reason="openpyxl not installed")
     r = _router()
     result = r.handle("generate excel dashboard")
     assert result.intent == "excel"

@@ -208,7 +208,7 @@ class TestAccessControlBoundaries:
     def _register_agents(self, guardian):
         """Register agents so their access policies are created."""
         chronos = Chronos(guardian.config.agents["chronos"], guardian.audit)
-        cfo = CFO(guardian.config.agents["cfo"], guardian.audit)
+        cfo = CFO(guardian.config.agents["cfo"], guardian.audit, data_dir=guardian.config.data_dir)
         guardian.register_agent(chronos)
         guardian.register_agent(cfo)
 
