@@ -40,5 +40,11 @@ jobs:
       - name: Run tests with coverage
         env:
           GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
+        shell: bash
         run: |
-          pytest tests/ -v --tb=long --cov=guardian_one --cov-report=term-missing --cov-fail-under=65
+          set -o pipefail
+          pytest tests/ -v --tb=long --cov=guardian_one --cov-report=term-missing --cov-fail-under=65 2>&1 | tee /tmp/pytest-output.txt
+
+      - name: Show test summary on failure
+        if: failure()
+        run: tail -80 /tmp/pytest-output.txt
