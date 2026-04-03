@@ -19,7 +19,7 @@ main.py                         # CLI entry point (25+ commands)
 guardian_one/
 ├── agents/                     # Subordinate agents
 │   ├── chronos.py              # Schedule & calendar management
-│   ├── archivist.py            # File & data sovereignty
+│   ├── archivist.py            # File & data sovereignty (Varys + Palantír + McGonagall)
 │   ├── cfo.py                  # Financial intelligence (Plaid, Empower, Rocket Money)
 │   ├── cfo_dashboard.py        # Excel financial dashboards
 │   ├── doordash.py             # Meal delivery coordination
@@ -37,6 +37,9 @@ guardian_one/
 │   ├── security.py             # Access control
 │   └── config.py               # Configuration management
 ├── integrations/               # External service connectors
+│   ├── intelligence_feeds.py   # Palantír — RSS/blog/GitHub/finance feed pipeline
+│   ├── data_transmuter.py      # McGonagall — format detection & transformation
+│   ├── data_platforms.py       # Databricks, Zapier Tables, Notion DB connectors
 │   ├── notion_sync.py          # Write-only Notion workspace sync
 │   ├── notion_website_sync.py  # Per-site Notion dashboards
 │   ├── n8n_sync.py             # n8n workflow automation
@@ -78,6 +81,59 @@ python main.py --website-sync          # Push dashboards to Notion
 Each site gets its own Notion dashboard page under a "Website Management" parent,
 showing build status, page inventory, security posture, and deploy history.
 All data passes through the content classification gate (no PHI/PII ever leaves).
+
+## Archivist — Full Capability Spec
+
+The Archivist (codename: Varys) is the most capable subordinate agent.
+Seven core duties, four capability layers:
+
+### Capability Layers
+
+| Layer | Codename | What It Does |
+|-------|----------|--------------|
+| **Cross-agent intelligence** | Varys | Reads all agent domains, audit logs, vault metadata, gateway status |
+| **Strategic feeds** | Palantír | RSS/blog/GitHub/finance monitoring, 15-min cycle, priority scoring |
+| **Data transformation** | McGonagall | Auto-detect + transform: JSON ↔ YAML ↔ CSV ↔ Markdown ↔ KV |
+| **Data platforms** | — | Databricks, Zapier Tables, Notion DB: create → map → monitor → record |
+
+### Access & Security
+
+- **Secrecy protocol**: Only `guardian_one`, `jeremy`, and `root` may query capabilities
+- **Password management**: Cross-interface credential tracking via Vault
+- **Varys-level access**: Read across all agent domains + VM filesystem, processes, metrics
+- **Write-only Notion**: Follows Guardian policy — push only, never read for decisions
+
+### Palantír Feed Sources (13 default)
+
+- **Tech news**: HN, TechCrunch, Ars Technica, The Verge, Wired
+- **AI blogs**: Anthropic, OpenAI, DeepMind, Meta AI, Mistral
+- **GitHub**: Trending repos
+- **Financial**: Yahoo Finance, SEC EDGAR
+
+### Data Platform Connections
+
+| Platform | Direction | Credential Key |
+|----------|-----------|----------------|
+| Databricks | Push | `DATABRICKS_TOKEN` |
+| Zapier Tables | Bidirectional | `ZAPIER_TABLES_TOKEN` |
+| Notion DB | Push (write-only) | `NOTION_TOKEN` |
+
+### Tests
+
+```bash
+pytest tests/test_agents.py -k archivist          # Core + Varys (9 tests)
+pytest tests/test_intelligence_feeds.py            # Palantír (21 tests)
+pytest tests/test_archivist_advanced.py            # Transmuter, secrecy, platforms, passwords (31 tests)
+```
+
+### Next Session TODO
+
+- [ ] Wire real HTTP fetcher for Palantír feeds (feedparser or httpx + XML parsing)
+- [ ] Implement actual Databricks/Zapier/Notion API calls through Gateway
+- [ ] Add Archivist CLI commands to main.py (--archivist, --feeds, --sovereignty)
+- [ ] Integrate password management with Vault rotate/health methods
+- [ ] Add AI-powered feed summarisation via think() for the briefing
+- [ ] Build comprehensive integration tests with full GuardianOne bootstrap
 
 ## Key Design Principles
 
