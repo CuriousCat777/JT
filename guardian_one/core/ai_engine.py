@@ -305,6 +305,10 @@ class AnthropicBackend:
                 if hasattr(block, "text"):
                     content += block.text
 
+            # If the loop exhausted without a final text response, note it
+            if not content and resp.stop_reason == "tool_use":
+                content = "[AI reached tool-call limit without producing a final answer. Try a simpler query.]"
+
             return AIResponse(
                 content=content,
                 provider="anthropic",

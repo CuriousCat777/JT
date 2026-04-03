@@ -19,13 +19,16 @@ from guardian_one.core.logging import (
 
 @pytest.fixture(autouse=True)
 def reset_logging_state():
-    """Clean up between tests to avoid logger re-use."""
+    """Clean up between tests to avoid logger re-use and handler leaks."""
     yield
     # Clear initialized set so each test can create fresh loggers.
-    _initialized.discard("test_mod")
-    _initialized.discard("test_file")
-    _initialized.discard("test_console")
-    _initialized.discard("test_corr")
+    for name in ("test_mod", "test_file", "test_console", "test_corr"):
+        _initialized.discard(name)
+        # Remove and close any handlers attached to the singleton logger
+        logger = logging.getLogger(f"guardian.{name}")
+        for handler in logger.handlers[:]:
+            handler.close()
+            logger.removeHandler(handler)
     # Reset correlation ID.
     import guardian_one.core.logging as mod
     if hasattr(mod._context, "correlation_id"):

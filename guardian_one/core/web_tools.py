@@ -194,8 +194,15 @@ def web_search(query: str, max_results: int = 5) -> str:
     return "\n\n".join(lines)
 
 
+_MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB max download
+
+
 def web_fetch(url: str) -> str:
-    """Fetch a web page and return its text content."""
+    """Fetch a web page and return its text content.
+
+    Security: validates URL scheme + DNS resolution against private IPs,
+    resolves once to avoid TOCTOU/DNS-rebinding, limits response size.
+    """
     safe, reason = _is_safe_url(url)
     if not safe:
         return f"URL blocked: {reason}"
@@ -204,13 +211,45 @@ def web_fetch(url: str) -> str:
         import httpx
         from bs4 import BeautifulSoup
 
+        # Resolve hostname once and connect to the resolved IP to prevent
+        # DNS rebinding between validation and fetch.
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        infos = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                   socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not infos:
+            return f"URL blocked: cannot resolve {hostname}"
+        resolved_ip = infos[0][4][0]
+
+        # Re-check the resolved IP (defence in depth)
+        ip = ipaddress.ip_address(resolved_ip)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return f"URL blocked: resolved to private IP {ip}"
+
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; GuardianOne/1.0)",
+            "Host": hostname,
         }
-        resp = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=False)
-        resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        # Build URL with resolved IP to prevent DNS rebinding
+        fetch_url = parsed._replace(netloc=f"{resolved_ip}:{parsed.port}" if parsed.port
+                                    else resolved_ip).geturl()
+
+        with httpx.stream("GET", fetch_url, headers=headers, timeout=15.0,
+                          follow_redirects=False, verify=False if resolved_ip != hostname else True) as resp:
+            resp.raise_for_status()
+
+            # Stream with size limit
+            chunks = []
+            total = 0
+            for chunk in resp.iter_bytes(chunk_size=8192):
+                total += len(chunk)
+                if total > _MAX_FETCH_BYTES:
+                    break
+                chunks.append(chunk)
+            body = b"".join(chunks).decode("utf-8", errors="replace")
+
+        soup = BeautifulSoup(body, "html.parser")
 
         # Remove script/style/nav elements
         for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):

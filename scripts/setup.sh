@@ -40,7 +40,7 @@ for candidate in python3 python; do
         version=$("$candidate" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)
         major=$("$candidate" -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
         minor=$("$candidate" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
+        if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; }; then
             PYTHON="$candidate"
             break
         fi

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_PORT = 5200
 _MAX_CONSECUTIVE_FAILURES = 5
-_AUTO_RESUME_CYCLES = 3  # Resume paused agents after this many scheduler ticks
+_AUTO_RESUME_SECONDS = 300  # Resume paused agents after 5 minutes of cool-down
 _STATE_FILE = "daemon_state.json"
 
 
@@ -43,7 +43,7 @@ class GuardianDaemon:
         self._running = False
         self._start_time: float = 0.0
         self._lock = threading.Lock()
-        self._cycle_count: int = 0
+        self._cycle_count: int = 0  # kept for metrics, not used for resume timing
 
         # Per-agent tracking: {"agent_name": {"last_run": iso|null, "errors": int, "runs": int, "paused": bool}}
         self._agent_state: dict[str, dict] = {}
@@ -130,7 +130,7 @@ class GuardianDaemon:
         state["errors"] = state.get("errors", 0) + 1
         if state["errors"] >= _MAX_CONSECUTIVE_FAILURES and not state.get("paused"):
             state["paused"] = True
-            state["paused_at_cycle"] = self._cycle_count
+            state["paused_at"] = datetime.now(timezone.utc).isoformat()
             self._guardian.audit.record(
                 agent="daemon",
                 action="agent_auto_paused",
@@ -139,27 +139,42 @@ class GuardianDaemon:
                     "agent": name,
                     "consecutive_errors": state["errors"],
                     "reason": detail or "too many consecutive failures",
-                    "will_retry_after_cycles": _AUTO_RESUME_CYCLES,
+                    "will_resume_after_seconds": _AUTO_RESUME_SECONDS,
                 },
             )
 
     def _try_resume_paused(self) -> None:
-        """Auto-resume agents paused by transient failures after a cool-down period."""
+        """Auto-resume agents paused by transient failures after a cool-down period.
+
+        Cool-down is ``_AUTO_RESUME_SECONDS`` (default 300 = 5 minutes).
+        Uses wall-clock timestamps, not tick counts, for accurate timing.
+        """
+        now = datetime.now(timezone.utc)
         with self._lock:
             for name, state in self._agent_state.items():
                 if not state.get("paused"):
                     continue
-                paused_at = state.get("paused_at_cycle", 0)
-                if self._cycle_count - paused_at >= _AUTO_RESUME_CYCLES:
+                paused_at_iso = state.get("paused_at")
+                if not paused_at_iso:
+                    continue
+                try:
+                    paused_at = datetime.fromisoformat(paused_at_iso)
+                    elapsed = (now - paused_at).total_seconds()
+                except (ValueError, TypeError):
+                    continue
+                if elapsed >= _AUTO_RESUME_SECONDS:
                     state["paused"] = False
                     state["errors"] = 0
-                    state.pop("paused_at_cycle", None)
+                    state.pop("paused_at", None)
                     self._save_state()
                     self._guardian.audit.record(
                         agent="daemon",
                         action="agent_auto_resumed",
                         severity=Severity.INFO,
-                        details={"agent": name, "cool_down_cycles": _AUTO_RESUME_CYCLES},
+                        details={
+                            "agent": name,
+                            "cool_down_seconds": round(elapsed),
+                        },
                     )
 
     # ------------------------------------------------------------------
