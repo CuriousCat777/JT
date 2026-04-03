@@ -69,3 +69,4 @@ data/*.xlsx
 data/*.csv
 data/*.png
 data/homelink-reference/
+coverage.xml
