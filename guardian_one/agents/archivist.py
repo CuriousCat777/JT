@@ -36,12 +36,27 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.data_platforms import (
+    DataPlatformManager,
+    FieldMapping,
+    PlatformConnection,
+    TableSchema,
+    default_databricks,
+    default_notion_db,
+    default_zapier_tables,
+)
+from guardian_one.integrations.data_transmuter import DataFormat, DataTransmuter, TransmutationResult
 from guardian_one.integrations.intelligence_feeds import (
     FeedCategory,
     FeedItem,
     FeedPriority,
     IntelligencePipeline,
 )
+
+# Secrecy protocol — only these identities may query the Archivist's
+# capabilities, internal state, or knowledge. Everyone else gets a
+# polite refusal. Varys didn't survive King's Landing by talking.
+AUTHORIZED_IDENTITIES = frozenset({"guardian_one", "jeremy", "root"})
 
 
 class RetentionPolicy(Enum):
@@ -90,12 +105,22 @@ class PrivacyTool:
 
 
 class Archivist(BaseAgent):
-    """Chief of Staff for libraries and file organisation.
+    """Chief of Staff for libraries, file organisation, and data sovereignty.
 
-    The Archivist owns every file, every data source, every retention clock.
-    Six jobs: catalogue it, index it, encrypt the sensitive stuff, sync the
-    sources, audit the privacy posture, schedule the backups. That's it.
-    No scope creep — if it's not about data sovereignty, it's not our problem.
+    The Archivist owns every file, every data source, every retention clock,
+    every intelligence feed, and every cross-platform data pipeline.
+
+    Capabilities:
+    - McGonagall-level data transmutation (any format in, any format out)
+    - Varys-level cross-agent intelligence (reads all agent domains)
+    - Palantír strategic feed monitoring (15-min cycle)
+    - Databricks / Zapier Tables / Notion DB integration
+    - Password management across all interfaces via Vault
+
+    Secrecy Protocol:
+    - ONLY guardian_one, jeremy, and root may query the Archivist's
+      capabilities, internal state, or knowledge.
+    - All other identities receive a refusal.
     """
 
     def __init__(self, config: AgentConfig, audit: AuditLog) -> None:
@@ -107,15 +132,20 @@ class Archivist(BaseAgent):
         self._backup_schedule: dict[str, str] = {}
         self._guardian: Any = None  # Injected post-registration for Varys mode
         self._palantir = IntelligencePipeline()  # Strategic intelligence feeds
+        self._transmuter = DataTransmuter()  # McGonagall-level data transformation
+        self._platforms = DataPlatformManager()  # Databricks, Zapier, Notion
+        self._password_store: dict[str, dict[str, str]] = {}  # interface → {label → vault_key}
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._setup_default_sources()
         self._setup_privacy_tools()
         self._setup_file_categories()
+        self._setup_default_platforms()
         self.log("initialized", details={
             "sources": len(self._data_sources),
             "privacy_tools": len(self._privacy_tools),
+            "platforms": len(self._platforms.list_connections()),
         })
 
     def _setup_default_sources(self) -> None:
@@ -159,6 +189,171 @@ class Archivist(BaseAgent):
             "personal": "weekly",
             "professional": "daily",
             "legal": "monthly",
+        }
+
+    def _setup_default_platforms(self) -> None:
+        """Register default data platform connections."""
+        self._platforms.register_connection(default_databricks())
+        self._platforms.register_connection(default_zapier_tables())
+        self._platforms.register_connection(default_notion_db())
+
+    # ------------------------------------------------------------------
+    # Secrecy protocol
+    # ------------------------------------------------------------------
+
+    def authorize(self, identity: str) -> bool:
+        """Check if an identity is authorized to query the Archivist.
+
+        Only guardian_one, jeremy, and root get through.
+        Everyone else gets nothing. Varys didn't survive by talking.
+        """
+        return identity in AUTHORIZED_IDENTITIES
+
+    def guarded_query(self, identity: str, query: str) -> dict[str, Any]:
+        """Query the Archivist's knowledge — with access control.
+
+        Unauthorized callers get a polite refusal and an audit entry.
+        """
+        if not self.authorize(identity):
+            self.log("unauthorized_query_blocked", severity=Severity.WARNING, details={
+                "identity": identity,
+                "query_preview": query[:50],
+            })
+            return {
+                "authorized": False,
+                "response": "The Archivist does not discuss its knowledge or capabilities "
+                            "with unauthorized entities. Contact the Guardian or root user.",
+            }
+
+        self.log("authorized_query", details={"identity": identity, "query_preview": query[:50]})
+        return {
+            "authorized": True,
+            "identity": identity,
+            "response": f"Query accepted from {identity}.",
+        }
+
+    # ------------------------------------------------------------------
+    # McGonagall — data transmutation
+    # ------------------------------------------------------------------
+
+    def transmute(self, data: str, target: DataFormat, source: DataFormat | None = None) -> TransmutationResult:
+        """Transform data from one format to another.
+
+        CSV → JSON, YAML → Markdown, whatever. McGonagall-level.
+        """
+        result = self._transmuter.transmute(data, target, source)
+        self.log("data_transmuted", details={
+            "source": result.source_format.value,
+            "target": result.target_format.value,
+            "success": result.success,
+            "records": result.record_count,
+        })
+        return result
+
+    def detect_format(self, data: str) -> DataFormat:
+        """Auto-detect a data payload's format."""
+        return self._transmuter.detect_format(data)
+
+    def extract_schema(self, data: str) -> dict[str, Any]:
+        """Extract the schema/structure of a data payload."""
+        return self._transmuter.extract_schema(data)
+
+    # ------------------------------------------------------------------
+    # Data platforms — Databricks, Zapier Tables, Notion DB
+    # ------------------------------------------------------------------
+
+    @property
+    def platforms(self) -> DataPlatformManager:
+        return self._platforms
+
+    def create_platform_table(
+        self, connection_name: str, schema: TableSchema,
+    ) -> dict[str, Any]:
+        """Create a table on a platform and log the operation."""
+        result = self._platforms.create_table(connection_name, schema)
+        self.log("platform_table_created", details={
+            "connection": connection_name,
+            "table": schema.name,
+        })
+        return result
+
+    def sync_platform(
+        self,
+        connection_name: str,
+        table_name: str,
+        records: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Sync records to/from a platform table."""
+        result = self._platforms.sync_table(connection_name, table_name, records)
+        self.log("platform_synced", details={
+            "connection": connection_name,
+            "table": table_name,
+            "records": len(records) if records else 0,
+        })
+        return result
+
+    def platform_health(self) -> dict[str, Any]:
+        """Health check across all connected platforms."""
+        return self._platforms.health_check()
+
+    def platform_activity(self, platform: str | None = None) -> list[dict[str, Any]]:
+        """Get platform activity log."""
+        records = self._platforms.activity_log(platform=platform)
+        return [
+            {"platform": r.platform, "table": r.table,
+             "operation": r.operation, "timestamp": r.timestamp}
+            for r in records
+        ]
+
+    # ------------------------------------------------------------------
+    # Password management
+    # ------------------------------------------------------------------
+
+    def register_credential(self, interface: str, label: str, vault_key: str) -> None:
+        """Register a credential for an interface.
+
+        The actual secret lives in Vault. We just track the mapping:
+        which interface uses which vault key.
+        """
+        if interface not in self._password_store:
+            self._password_store[interface] = {}
+        self._password_store[interface][label] = vault_key
+        self.log("credential_registered", details={
+            "interface": interface, "label": label,
+        })
+
+    def list_credentials(self, interface: str | None = None) -> dict[str, dict[str, str]]:
+        """List credential mappings (never the actual secrets)."""
+        if interface:
+            return {interface: self._password_store.get(interface, {})}
+        return dict(self._password_store)
+
+    def rotate_credential(self, interface: str, label: str) -> dict[str, Any]:
+        """Flag a credential for rotation.
+
+        The actual rotation happens through Vault — this just marks
+        the intent and logs it for audit.
+        """
+        creds = self._password_store.get(interface, {})
+        if label not in creds:
+            return {"error": f"No credential '{label}' for interface '{interface}'."}
+        self.log("credential_rotation_requested", severity=Severity.WARNING, details={
+            "interface": interface, "label": label, "vault_key": creds[label],
+        })
+        return {
+            "status": "rotation_requested",
+            "interface": interface,
+            "label": label,
+            "vault_key": creds[label],
+        }
+
+    def credential_audit(self) -> dict[str, Any]:
+        """Audit all credential mappings across interfaces."""
+        total = sum(len(v) for v in self._password_store.values())
+        return {
+            "interfaces": len(self._password_store),
+            "total_credentials": total,
+            "by_interface": {k: len(v) for k, v in self._password_store.items()},
         }
 
     # ------------------------------------------------------------------

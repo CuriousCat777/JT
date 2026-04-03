@@ -165,6 +165,21 @@ agents:
       retention_check_daily: true
       varys_mode: true               # Cross-agent intelligence gathering
       cross_agent_read_only: true    # Read, never write, other domains
+      secrecy_protocol: true         # Only guardian_one, jeremy, root can query
+      data_platforms:
+        databricks:
+          enabled: true
+          credential_key: DATABRICKS_TOKEN
+          sync_direction: push
+        zapier_tables:
+          enabled: true
+          credential_key: ZAPIER_TABLES_TOKEN
+          sync_direction: bidirectional
+        notion_db:
+          enabled: true
+          credential_key: NOTION_TOKEN
+          sync_direction: push       # Write-only per Guardian policy
+      password_management: true      # Cross-interface credential tracking via Vault
       palantir:
         enabled: true
         refresh_minutes: 15          # Real-time intelligence cycle
