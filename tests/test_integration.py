@@ -1,6 +1,5 @@
 """Cross-agent integration tests — validate multi-component flows."""
 
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,7 +22,7 @@ from guardian_one.agents.cfo import (
 
 
 @pytest.fixture
-def guardian():
+def guardian(tmp_path):
     """Boot a full GuardianOne instance with config."""
     config = GuardianConfig(
         owner="Test Owner",
@@ -42,8 +41,8 @@ def guardian():
                 allowed_resources=["file_index"],
             ),
         },
-        data_dir=tempfile.mkdtemp(),
-        log_dir=tempfile.mkdtemp(),
+        data_dir=str(tmp_path / "data"),
+        log_dir=str(tmp_path / "logs"),
     )
     return GuardianOne(config=config, vault_passphrase="test-passphrase-for-ci")
 

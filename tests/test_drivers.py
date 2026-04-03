@@ -46,22 +46,20 @@ class TestKasaDriver:
     def test_turn_on_import_error(self):
         """When python-kasa is not installed, returns graceful failure."""
         driver = KasaDriver(ip="192.168.1.50")
-        with patch.dict("sys.modules", {"kasa": None, "kasa.discover": None}):
-            import importlib
-            with patch("builtins.__import__", side_effect=ImportError("No module named 'kasa'")):
-                result = driver.turn_on()
-                assert result["success"] is False
-                assert "python-kasa" in result["error"]
+        with patch.dict("sys.modules", {"kasa": None}):
+            result = driver.turn_on()
+            assert result["success"] is False
+            assert "python-kasa" in result["error"]
 
     def test_turn_off_import_error(self):
         driver = KasaDriver(ip="192.168.1.50")
-        with patch("builtins.__import__", side_effect=ImportError("No module named 'kasa'")):
+        with patch.dict("sys.modules", {"kasa": None}):
             result = driver.turn_off()
             assert result["success"] is False
 
     def test_get_status_import_error(self):
         driver = KasaDriver(ip="192.168.1.50")
-        with patch("builtins.__import__", side_effect=ImportError("No module named 'kasa'")):
+        with patch.dict("sys.modules", {"kasa": None}):
             result = driver.get_status()
             assert result["success"] is False
 

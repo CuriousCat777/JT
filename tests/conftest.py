@@ -1,6 +1,5 @@
 """Shared pytest fixtures for Guardian One test suite."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
