@@ -37,14 +37,15 @@ jobs:
           python -c "from guardian_one.core.audit import AuditLog; print('audit OK')"
           python -c "from guardian_one.core.guardian import GuardianOne; print('guardian OK')"
 
-      - name: Run tests with coverage
+      - name: Run tests
         env:
           GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
-        shell: bash
         run: |
-          set -o pipefail
-          pytest tests/ -v --tb=long --cov=guardian_one --cov-report=term-missing --cov-fail-under=65 2>&1 | tee /tmp/pytest-output.txt
+          pytest tests/ -v --tb=long
 
-      - name: Show test summary on failure
-        if: failure()
-        run: tail -80 /tmp/pytest-output.txt
+      - name: Check coverage
+        if: success()
+        env:
+          GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
+        run: |
+          pytest tests/ -q --cov=guardian_one --cov-report=term-missing --cov-fail-under=65
