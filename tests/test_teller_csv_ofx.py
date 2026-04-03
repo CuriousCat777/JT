@@ -156,9 +156,20 @@ class TestBankCSV:
         accounts, transactions = parse_bank_csv(csv_file, institution="Chase")
         assert len(accounts) == 1
         assert accounts[0].institution == "Chase"
+        assert accounts[0].balance == 0.0  # no balance column → 0 (don't corrupt net worth)
         assert len(transactions) == 3
         assert transactions[0].amount == 2500.00
         assert transactions[1].amount == -85.50
+
+    def test_parse_csv_with_balance_column(self, tmp_path):
+        csv_file = tmp_path / "bank.csv"
+        csv_file.write_text(
+            "Date,Description,Amount,Balance\n"
+            "2026-01-15,PAYCHECK,2500,5000.00\n"
+            "2026-01-16,RENT,-1200,3800.00\n"
+        )
+        accounts, _ = parse_bank_csv(csv_file)
+        assert accounts[0].balance == 3800.00  # last row's balance column
 
     def test_parse_debit_credit_columns(self, tmp_path):
         csv_file = tmp_path / "bofa_statement.csv"

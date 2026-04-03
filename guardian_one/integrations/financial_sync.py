@@ -1447,6 +1447,7 @@ _CSV_AMOUNT_COLS = ("amount", "transaction amount", "value")
 _CSV_DEBIT_COLS = ("debit", "withdrawals", "withdrawal", "debit amount")
 _CSV_CREDIT_COLS = ("credit", "deposits", "deposit", "credit amount")
 _CSV_CATEGORY_COLS = ("category", "type", "transaction type", "trans type")
+_CSV_BALANCE_COLS = ("balance", "running balance", "running bal", "ending balance", "available balance")
 
 
 def _find_column(headers: list[str], aliases: tuple[str, ...]) -> str | None:
@@ -1524,13 +1525,14 @@ def parse_bank_csv(
     debit_col = _find_column(headers, _CSV_DEBIT_COLS)
     credit_col = _find_column(headers, _CSV_CREDIT_COLS)
     category_col = _find_column(headers, _CSV_CATEGORY_COLS)
+    balance_col = _find_column(headers, _CSV_BALANCE_COLS)
 
     if not date_col:
         return [], []  # Can't parse without a date column
 
     now = datetime.now(timezone.utc).isoformat()
     transactions: list[SyncedTransaction] = []
-    running_balance = 0.0
+    last_balance = 0.0  # only used if a balance column is present
 
     for row in rows:
         # Parse date
@@ -1551,7 +1553,9 @@ def parse_bank_csv(
         else:
             continue  # Can't determine amount
 
-        running_balance += amount
+        # Track balance from dedicated column if present
+        if balance_col:
+            last_balance = _parse_amount(row.get(balance_col, "0"))
 
         # Description
         desc = row.get(desc_col, "") if desc_col else ""
@@ -1570,10 +1574,12 @@ def parse_bank_csv(
             raw=dict(row),
         ))
 
+    # Use real balance from CSV column if available; otherwise 0.0
+    # to avoid corrupting net worth with sum-of-transactions.
     account = SyncedAccount(
         name=account_name,
         account_type=account_type,
-        balance=running_balance,
+        balance=last_balance if balance_col else 0.0,
         institution=institution,
         last_updated=now,
     )

@@ -1,18 +1,21 @@
 # Guardian One — systemd service unit
 #
 # Install:
-#   # 1. Create dedicated service user (or use your own user — see note below)
+#   # 1. Set your project path and generate the service file
+#   sed 's|/GUARDIAN_DIR|/home/youruser/JT|g' scripts/guardian-one.service > /tmp/guardian-one.service
+#
+#   # 2. Create dedicated service user (or change User/Group to your own)
 #   sudo useradd -r -s /usr/sbin/nologin guardian
 #
-#   # 2. Ensure startup script is executable
-#   chmod +x /home/user/JT/scripts/guardian_daemon.sh
+#   # 3. Ensure startup script is executable
+#   chmod +x scripts/guardian_daemon.sh
 #
-#   # 3. Ensure the guardian user can access the project directory
-#   #    Option A: Run as your own user — change User/Group below
-#   #    Option B: Grant guardian access — sudo chown -R guardian:guardian /home/user/JT
+#   # 4. Ensure the guardian user can access the project directory
+#   #    Option A: Run as your own user — change User/Group in the service file
+#   #    Option B: Grant guardian access — sudo chown -R guardian:guardian ~/JT
 #
-#   # 4. Install and enable
-#   sudo cp scripts/guardian-one.service /etc/systemd/system/
+#   # 5. Install and enable
+#   sudo cp /tmp/guardian-one.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable guardian-one    # start on boot
 #   sudo systemctl start guardian-one     # start now
@@ -24,9 +27,8 @@
 #   sudo systemctl stop guardian-one      # graceful stop (SIGTERM)
 #
 # Paths:
-#   All paths below assume the project lives at /home/user/JT.
-#   Update WorkingDirectory, ExecStart, EnvironmentFile, and ReadWritePaths
-#   if your deployment path differs (e.g. /opt/guardian-one or /home/guardian/JT).
+#   All paths use /GUARDIAN_DIR as a placeholder. Replace with your actual
+#   project path using the sed command in step 1 above.
 #
 # Security:
 #   - Runs as dedicated 'guardian' user (or change User/Group to your own)
@@ -43,8 +45,8 @@ Wants=network-online.target
 Type=simple
 User=guardian
 Group=guardian
-WorkingDirectory=/home/user/JT
-ExecStart=/home/user/JT/scripts/guardian_daemon.sh
+WorkingDirectory=/GUARDIAN_DIR
+ExecStart=/GUARDIAN_DIR/scripts/guardian_daemon.sh
 
 # ── Restart policy ──────────────────────────────────────────────────
 # Auto-restart on crash with exponential backoff (5s → 10s → 20s ...)
@@ -62,7 +64,7 @@ TimeoutStopSec=30
 # ── Environment ─────────────────────────────────────────────────────
 # Secrets and API keys are loaded by the startup script from .env
 # but can also be set here for systemd-native credential management
-EnvironmentFile=-/home/user/JT/.env
+EnvironmentFile=-/GUARDIAN_DIR/.env
 
 # ── Logging ─────────────────────────────────────────────────────────
 # stdout/stderr → journald (view with: journalctl -u guardian-one)
@@ -75,7 +77,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/user/JT/data /home/user/JT/logs
+ReadWritePaths=/GUARDIAN_DIR/data /GUARDIAN_DIR/logs
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

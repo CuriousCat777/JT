@@ -272,8 +272,9 @@ class Scheduler:
 
     def start(self) -> None:
         """Start the scheduler and enter the interactive command loop."""
-        # Handle Ctrl+C gracefully
+        # Save original signal handlers so we can restore them on exit
         original_sigint = signal.getsignal(signal.SIGINT)
+        original_sigterm = signal.getsignal(signal.SIGTERM)
 
         def _shutdown_handler(signum, frame):
             sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
@@ -347,8 +348,9 @@ class Scheduler:
         )
         print("\n  Scheduler stopped. Goodbye, Jeremy.")
 
-        # Restore original handler
+        # Restore original handlers
         signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
 
 
 # ------------------------------------------------------------------

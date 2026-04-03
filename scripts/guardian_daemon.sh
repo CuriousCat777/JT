@@ -26,12 +26,51 @@ DATA_DIR="$PROJECT_DIR/data"
 # ── Ensure directories ──────────────────────────────────────────────
 mkdir -p "$LOG_DIR" "$DATA_DIR"
 
-# ── Load environment ────────────────────────────────────────────────
+# ── Load environment (safe parser — never source/eval) ──────────────
 if [ -f "$ENV_FILE" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$ENV_FILE"
-    set +a
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip leading whitespace
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+
+        # Skip blank lines and comments
+        case "$trimmed" in
+            ""|\#*) continue ;;
+        esac
+
+        # Strip optional 'export ' prefix
+        case "$trimmed" in
+            export[[:space:]]*)
+                trimmed="${trimmed#export }"
+                trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"
+                ;;
+        esac
+
+        # Must contain '='
+        if [[ "$trimmed" != *=* ]]; then
+            echo "[guardian-daemon] WARNING: skipping invalid line in $ENV_FILE: $line"
+            continue
+        fi
+
+        key="${trimmed%%=*}"
+        value="${trimmed#*=}"
+
+        # Trim whitespace
+        key="${key%"${key##*[![:space:]]}"}"
+        value="${value#"${value%%[![:space:]]*}"}"
+
+        # Validate variable name
+        if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "[guardian-daemon] WARNING: skipping invalid var name in $ENV_FILE: $key"
+            continue
+        fi
+
+        # Strip surrounding quotes
+        if [[ "$value" =~ ^\".*\"$ ]] || [[ "$value" =~ ^\'.*\'$ ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+
+        export "$key=$value"
+    done < "$ENV_FILE"
 else
     echo "[guardian-daemon] WARNING: $ENV_FILE not found — running with inherited env"
 fi
