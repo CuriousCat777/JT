@@ -963,15 +963,25 @@ def create_app() -> Flask:
 
         subnet = request.args.get("subnet", "192.168.1.0/24")
 
-        # Validate subnet — must be valid IPv4 CIDR
+        # Validate subnet — must be valid IPv4 CIDR within RFC1918, /20 or smaller
+        _rfc1918 = (
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        )
+        _min_prefix = 20
         try:
             network = ipaddress.ip_network(subnet, strict=False)
             if network.version != 4:
                 raise ValueError("IPv6 is not supported")
+            if network.prefixlen < _min_prefix:
+                raise ValueError(f"Subnet too large; minimum prefix is /{_min_prefix}")
+            if not any(network.subnet_of(priv) for priv in _rfc1918):
+                raise ValueError("Subnet must be within RFC1918 private ranges")
             subnet = str(network)
         except ValueError:
             def _bad_subnet():
-                yield f"data: {json.dumps({'type': 'error', 'line': 'Invalid subnet format. Use IPv4 CIDR notation like 192.168.1.0/24'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'line': f'Invalid subnet. Use a private IPv4 CIDR (/{_min_prefix} or smaller), e.g. 192.168.1.0/24'})}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
             return Response(_bad_subnet(), mimetype="text/event-stream")
 
@@ -1033,8 +1043,7 @@ def create_app() -> Flask:
                 devices = []
                 try:
                     from guardian_one.homelink.iot_controller import IoTController
-                    ctrl = IoTController.__new__(IoTController)
-                    parsed = ctrl._parse_nmap_xml(xml_output)
+                    parsed = IoTController._parse_nmap_xml(xml_output)
                     devices = [
                         {"ip": d.ip_address, "mac": d.mac_address,
                          "hostname": d.hostname, "vendor": d.vendor,

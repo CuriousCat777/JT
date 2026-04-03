@@ -331,8 +331,8 @@ def main() -> None:
                         help="Start the IoT Docker Compose stack")
     parser.add_argument("--iot-stop", action="store_true",
                         help="Stop the IoT Docker Compose stack")
-    parser.add_argument("--iot-scan", nargs="?", const="192.168.1.0/24", default=None,
-                        help="Scan LAN for devices (default: 192.168.1.0/24)")
+    parser.add_argument("--iot-scan", nargs="?", const="__CONFIG__", default=None,
+                        help="Scan LAN for devices (default: subnet from config or 192.168.1.0/24)")
     parser.add_argument("--iot-security", action="store_true",
                         help="IoT security hardening checklist + VLAN policy")
     parser.add_argument("--iot-workflows", type=str, default=None,
@@ -525,7 +525,7 @@ def main() -> None:
                 print(f"  [FAILED] {result['error']}")
 
         elif args.iot_scan is not None:
-            subnet = args.iot_scan
+            subnet = custom.get("subnet", "192.168.1.0/24") if args.iot_scan == "__CONFIG__" else args.iot_scan
             print(f"\n  Scanning LAN: {subnet}...")
             devices = iot.scan_network(subnet)
             if not devices:
