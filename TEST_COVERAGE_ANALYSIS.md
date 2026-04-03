@@ -1,7 +1,7 @@
 # Test Coverage Analysis — Guardian One
 
 **Date:** 2026-04-03
-**Current State:** 25 test files, ~850+ test cases
+**Current State:** 30 test files, ~1000+ test cases
 
 ## Coverage Summary
 
@@ -26,8 +26,8 @@
 | `core/security.py` | `test_security.py` | Covered | 11 |
 | `core/cfo_router.py` | `test_cfo_router.py` | Covered | 39 |
 | `core/security_remediation.py` | `test_security_remediation.py` | Covered | 57 |
-| `core/config.py` | — | **NO TESTS** | 0 |
-| `core/base_agent.py` | — | **NO TESTS** | 0 |
+| `core/config.py` | `test_config.py` | Covered | 12 |
+| `core/base_agent.py` | `test_base_agent.py` | Covered | 31 |
 | `homelink/vault.py` | `test_homelink.py` | Covered | 7 |
 | `homelink/gateway.py` | `test_homelink.py` | Covered | 9 |
 | `homelink/registry.py` | `test_homelink.py` | Covered | 12 |
@@ -35,8 +35,8 @@
 | `homelink/email_commands.py` | `test_homelink.py` | Covered | 23 |
 | `homelink/devices.py` | `test_devices.py` | Covered | 153 |
 | `homelink/automations.py` | `test_devices.py` | **Partial** | ~14 |
-| `homelink/drivers.py` | — | **NO TESTS** | 0 |
-| `homelink/lan_security.py` | — | **NO TESTS** | 0 |
+| `homelink/drivers.py` | `test_drivers.py` | Covered | 44 |
+| `homelink/lan_security.py` | `test_lan_security.py` | Covered | 34 |
 | `integrations/calendar_sync.py` | `test_calendar_sync.py` | Covered | 97 |
 | `integrations/financial_sync.py` | `test_financial_sync.py` | Covered | 95 |
 | `integrations/notion_sync.py` | `test_notion_sync.py` | Covered | 77 |
@@ -56,51 +56,14 @@
 
 ## Modules with NO Tests (Priority Order)
 
-### 1. `core/config.py` — HIGH Priority
-Every agent depends on `load_config()`. A regression here breaks everything.
+> **Note:** Items 1-4 below have been addressed in this PR with new test files.
+> See `test_config.py` (12 tests), `test_base_agent.py` (31 tests),
+> `test_drivers.py` (44 tests), and `test_lan_security.py` (34 tests).
 
-**Recommended tests:**
-- Load valid YAML config and verify defaults
-- Handle missing config file (falls back to defaults)
-- Environment variable overrides (`GUARDIAN_DATA_DIR`, `GUARDIAN_LOG_DIR`)
-- Nested agent config parsing with custom properties
-- Invalid YAML handling
-
-### 2. `core/base_agent.py` — HIGH Priority
-Foundation for all 7 agents — lifecycle, AI injection, audit logging.
-
-**Recommended tests:**
-- Full lifecycle: init → initialize → run → report → shutdown
-- Status transitions: IDLE → RUNNING → ERROR → DISABLED
-- `think()` returns deterministic fallback when AI unavailable
-- `think_quick()` extracts content correctly
-- `set_ai_engine()` injection and removal
-- `log()` helper delegates to audit correctly
-- `shutdown()` records audit entry
-
-### 3. `homelink/drivers.py` — HIGH Priority
-Controls real smart home hardware; incorrect behavior = lights/locks misbehaving. 6 drivers + `DriverFactory` with 25+ methods.
-
-**Recommended tests:**
-- Each driver's `turn_on/off()` success/failure result format
-- `DriverFactory.for_device()` routing by device type
-- Missing library detection (graceful `_fail()` response)
-- Hue brightness scaling (0-100 → 0-254)
-- Govee LAN UDP packet construction
-- Govee cloud API auth header injection
-- LG WebOS async-to-sync conversion
-
-### 4. `homelink/lan_security.py` — MEDIUM Priority
-VLAN violations, default credentials, DNS blocklist auditing.
-
-**Recommended tests:**
-- VLAN violation detection logic
-- Cloud-dependent device flagging
-- Default password device detection
-- Risk scoring (1-5 scale)
-- DNS blocklist domain/wildcard aggregation
-- `full_audit()` report structure
-- Pi-hole/NextDNS detection
+### ~~1. `core/config.py`~~ — DONE (test_config.py)
+### ~~2. `core/base_agent.py`~~ — DONE (test_base_agent.py)
+### ~~3. `homelink/drivers.py`~~ — DONE (test_drivers.py)
+### ~~4. `homelink/lan_security.py`~~ — DONE (test_lan_security.py)
 
 ### 5. `integrations/doordash_sync.py` — MEDIUM Priority
 JWT generation, token refresh, delivery CRUD.
@@ -260,7 +223,7 @@ The suite is strong on unit tests but lacks end-to-end flows:
 
 ### Test Infrastructure Gaps
 
-#### Missing: `conftest.py` — HIGH Priority
+#### ~~Missing:~~ `conftest.py` — DONE
 
 No shared fixture file exists. Industry standard is a `tests/conftest.py` providing:
 
@@ -286,7 +249,7 @@ def sample_cfo_data():
 
 **Impact:** Eliminates duplicated `_make_audit()` helpers across 10+ files.
 
-#### Missing: Coverage Measurement — HIGH Priority
+#### ~~Missing:~~ Coverage Measurement — DONE
 
 No `.coveragerc`, no `pytest-cov` in dependencies. Cannot measure or enforce coverage thresholds.
 
@@ -314,7 +277,7 @@ exclude_lines =
 addopts = "--cov=guardian_one --cov-report=term-missing --cov-fail-under=75"
 ```
 
-#### Missing: CI/CD Pipeline — HIGH Priority
+#### ~~Missing:~~ CI/CD Pipeline — DONE
 
 No `.github/workflows/`, no `tox.ini`, no `Makefile`. Tests only run manually.
 

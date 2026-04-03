@@ -48,8 +48,14 @@ def registry():
 
 class TestDnsBlocklists:
 
-    def test_all_blocklists_count(self):
-        assert len(ALL_BLOCKLISTS) == 7
+    def test_all_known_blocklists_present(self):
+        expected = [
+            KASA_BLOCKLIST, HUE_BLOCKLIST, GOVEE_BLOCKLIST,
+            LG_TV_BLOCKLIST, RING_BLOCKLIST, ECHO_BLOCKLIST, RYSE_BLOCKLIST,
+        ]
+        for bl in expected:
+            assert bl in ALL_BLOCKLISTS
+        assert len(ALL_BLOCKLISTS) >= len(expected)
 
     @pytest.mark.parametrize("blocklist,vendor", [
         (KASA_BLOCKLIST, "TP-Link Kasa"),

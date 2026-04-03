@@ -153,13 +153,12 @@ class TestAIIntegration:
         assert response.provider == "none"
         assert response.model == "none"
 
-    def test_think_quick_without_engine_returns_empty(self, audit_log, agent_config):
-        """think_quick returns empty string when AI unavailable (success=False)."""
+    def test_think_quick_without_engine_returns_fallback_message(self, audit_log, agent_config):
+        """think_quick returns the fallback message when AI is unavailable."""
         agent = StubAgent(agent_config("test"), audit_log)
-        # The fallback response has content but provider="none" — success is True
-        # because content is non-empty. Verify the content is the fallback message.
         result = agent.think_quick("anything")
         assert isinstance(result, str)
+        assert "not available" in result.lower()
 
     def test_set_ai_engine(self, audit_log, agent_config):
         agent = StubAgent(agent_config("test"), audit_log)

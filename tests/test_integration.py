@@ -53,7 +53,8 @@ class TestGuardianOrchestration:
 
     def test_register_and_run_all(self, guardian):
         chronos = Chronos(guardian.config.agents["chronos"], guardian.audit)
-        cfo = CFO(guardian.config.agents["cfo"], guardian.audit)
+        cfo = CFO(guardian.config.agents["cfo"], guardian.audit,
+                  data_dir=guardian.config.data_dir)
         archivist = Archivist(guardian.config.agents["archivist"], guardian.audit)
 
         guardian.register_agent(chronos)
@@ -67,7 +68,8 @@ class TestGuardianOrchestration:
 
     def test_daily_summary_includes_all_agents(self, guardian):
         chronos = Chronos(guardian.config.agents["chronos"], guardian.audit)
-        cfo = CFO(guardian.config.agents["cfo"], guardian.audit)
+        cfo = CFO(guardian.config.agents["cfo"], guardian.audit,
+                  data_dir=guardian.config.data_dir)
 
         guardian.register_agent(chronos)
         guardian.register_agent(cfo)
@@ -93,13 +95,12 @@ class TestCFOChronosIntegration:
     def test_cfo_bills_and_chronos_events_coexist(self, guardian):
         """Both agents can run independently in the same system."""
         chronos = Chronos(guardian.config.agents["chronos"], guardian.audit)
-        cfo = CFO(guardian.config.agents["cfo"], guardian.audit)
+        cfo = CFO(guardian.config.agents["cfo"], guardian.audit,
+                  data_dir=guardian.config.data_dir)
 
+        # register_agent calls initialize(), so no extra init needed
         guardian.register_agent(chronos)
         guardian.register_agent(cfo)
-
-        chronos.initialize()
-        cfo.initialize()
 
         # Add data to both agents
         cfo.add_bill(Bill(
@@ -179,7 +180,8 @@ class TestAuditTrailIntegrity:
 
     def test_multi_agent_audit_trail(self, guardian):
         chronos = Chronos(guardian.config.agents["chronos"], guardian.audit)
-        cfo = CFO(guardian.config.agents["cfo"], guardian.audit)
+        cfo = CFO(guardian.config.agents["cfo"], guardian.audit,
+                  data_dir=guardian.config.data_dir)
 
         guardian.register_agent(chronos)
         guardian.register_agent(cfo)

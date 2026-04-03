@@ -228,11 +228,10 @@ class TestGoveeLanDriver:
     ])
     def test_brightness_clamping(self, brightness, expected):
         driver = GoveeLanDriver(device_ip="192.168.1.60")
-        with patch("socket.socket") as mock_socket_cls:
-            mock_sock = MagicMock()
-            mock_socket_cls.return_value = mock_sock
-            mock_sock.recvfrom.side_effect = Exception("timeout")
+        with patch.object(driver, "_send_command", return_value=_ok("brightness")) as mock_cmd:
             driver.set_brightness(brightness)
+            sent_value = mock_cmd.call_args[0][0]["msg"]["data"]["value"]
+            assert sent_value == expected
 
     def test_set_color_rgb(self):
         driver = GoveeLanDriver(device_ip="192.168.1.60")
@@ -242,19 +241,18 @@ class TestGoveeLanDriver:
             mock_sock.recvfrom.side_effect = Exception("timeout")
             driver.set_color(r=255, g=0, b=128)
 
-    @pytest.mark.parametrize("kelvin,clamped_min,clamped_max", [
-        (2000, 2000, 2000),
-        (9000, 9000, 9000),
-        (1000, 2000, 2000),   # clamped to min
-        (15000, 9000, 9000),  # clamped to max
+    @pytest.mark.parametrize("kelvin,expected", [
+        (2000, 2000),
+        (9000, 9000),
+        (1000, 2000),   # clamped to min
+        (15000, 9000),  # clamped to max
     ])
-    def test_color_temperature_clamping(self, kelvin, clamped_min, clamped_max):
+    def test_color_temperature_clamping(self, kelvin, expected):
         driver = GoveeLanDriver(device_ip="192.168.1.60")
-        with patch("socket.socket") as mock_socket_cls:
-            mock_sock = MagicMock()
-            mock_socket_cls.return_value = mock_sock
-            mock_sock.recvfrom.side_effect = Exception("timeout")
+        with patch.object(driver, "_send_command", return_value=_ok("colorwc")) as mock_cmd:
             driver.set_color_temperature(kelvin)
+            sent_kelvin = mock_cmd.call_args[0][0]["msg"]["data"]["colorTemInKelvin"]
+            assert sent_kelvin == expected
 
 
 # --- Govee Cloud Driver ---
@@ -293,7 +291,8 @@ class TestGoveeCloudDriver:
             mock_urlopen.return_value = mock_resp
             driver.turn_on()
             req = mock_urlopen.call_args[0][0]
-            assert req.get_header("Govee-api-key") == "my_secret_key"
+            headers = {key.lower(): value for key, value in req.header_items()}
+            assert headers["govee-api-key"] == "my_secret_key"
 
 
 # --- LG WebOS Driver ---
@@ -305,14 +304,16 @@ class TestLgWebOsDriver:
         assert driver._ip == "192.168.1.70"
         assert driver._client_key == "abc"
 
-    def test_volume_clamping(self):
+    @pytest.mark.parametrize("input_level,expected_level", [
+        (-5, 0),
+        (150, 100),
+        (50, 50),
+    ])
+    def test_volume_clamping(self, input_level, expected_level):
         driver = LgWebOsDriver(ip="192.168.1.70")
-        # set_volume clamps to 0-100 before calling _run
-        # We can't easily test the async chain without aiowebostv,
-        # but we verify the clamping logic
-        assert max(0, min(100, -5)) == 0
-        assert max(0, min(100, 150)) == 100
-        assert max(0, min(100, 50)) == 50
+        with patch.object(driver, "_run", return_value=_ok("set_volume")) as mock_run:
+            driver.set_volume(input_level)
+            mock_run.assert_called_once()
 
 
 # --- Driver Factory ---
