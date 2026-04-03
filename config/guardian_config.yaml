@@ -228,6 +228,30 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
+  varys:
+    enabled: true
+    schedule_interval_minutes: 5
+    allowed_resources:
+      - security_events
+      - auth_logs
+      - syslog
+      - wazuh_alerts
+      - network_telemetry
+    custom:
+      dry_run: true                    # Safe mode — log actions, don't execute
+      z_threshold: 3.0                 # Z-score threshold for anomaly detection
+      auth_log: true                   # Monitor /var/log/auth.log
+      auth_log_path: "/var/log/auth.log"
+      syslog: true                     # Monitor /var/log/syslog
+      syslog_path: "/var/log/syslog"
+      wazuh_enabled: false             # Enable after Wazuh deployment
+      llm_triage: true                 # Use AI for alert triage
+      auto_block_threshold: "critical" # Auto-block IPs only for critical alerts
+      alert_channels:
+        - audit_log
+        - email
+        - slack
+
   device_agent:
     enabled: true
     schedule_interval_minutes: 15
