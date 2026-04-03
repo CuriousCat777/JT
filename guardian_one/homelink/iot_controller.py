@@ -22,7 +22,6 @@ import json
 import shutil
 import subprocess
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -371,9 +370,12 @@ class IoTController:
                     "image": "tailscale/tailscale",
                     "container_name": "tailscale",
                     "network_mode": "host",
-                    "cap_add": ["NET_ADMIN"],
+                    "cap_add": ["NET_ADMIN", "NET_RAW"],
+                    "devices": ["/dev/net/tun:/dev/net/tun"],
+                    "volumes": ["./tailscale:/var/lib/tailscale"],
                     "environment": [
-                        f"TS_AUTHKEY={tailscale_authkey or 'YOUR_KEY_HERE'}"
+                        f"TS_AUTHKEY={tailscale_authkey or 'YOUR_KEY_HERE'}",
+                        "TS_STATE_DIR=/var/lib/tailscale",
                     ],
                     "restart": "unless-stopped",
                 },
@@ -395,7 +397,7 @@ class IoTController:
         # Create subdirectories
         subdirs = [
             "homeassistant", "mosquitto", "zigbee2mqtt",
-            "nodered", "n8n", "ollama",
+            "nodered", "n8n", "ollama", "tailscale",
         ]
         for d in subdirs:
             path = self._stack_dir / d
@@ -459,7 +461,7 @@ class IoTController:
                 "Access Home Assistant at http://<host-ip>:8123",
                 "Access Node-RED at http://<host-ip>:1880",
                 "Access n8n at http://<host-ip>:5678",
-                "Secure MQTT: disable allow_anonymous after testing",
+                "Secure MQTT: create password file (see mosquitto.conf comments)",
             ],
         }
 
@@ -990,7 +992,8 @@ class IoTController:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _parse_nmap_xml(self, xml_output: str) -> list[DiscoveredDevice]:
+    @staticmethod
+    def _parse_nmap_xml(xml_output: str) -> list[DiscoveredDevice]:
         """Parse nmap -oX output into a list of DiscoveredDevice objects.
 
         Uses xml.etree.ElementTree to safely parse the XML and only extracts
