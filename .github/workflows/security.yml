@@ -1,0 +1,62 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  dockerfile-scan:
+    runs-on: ubuntu-latest
+    if: hashFiles('Dockerfile') != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+  compose-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded secrets in compose files
+        run: |
+          FOUND=0
+          for f in docker-compose*.yml; do
+            if [ -f "$f" ]; then
+              if grep -iE '(password|secret|api_key|token)\s*[:=]\s*["\x27]?[a-zA-Z0-9]' "$f" | grep -v '\$\{' | grep -v 'changeme' | grep -v 'example'; then
+                echo "Potential hardcoded secret in $f"
+                FOUND=1
+              fi
+            fi
+          done
+          if [ "$FOUND" = "1" ]; then
+            echo "Review the above for hardcoded secrets"
+            exit 1
+          fi
+          echo "No hardcoded secrets found"
+
+      - name: Check .env not committed
+        run: |
+          if [ -f ".env" ]; then
+            echo ".env file should not be committed"
+            exit 1
+          fi
+          echo ".env not in repository"

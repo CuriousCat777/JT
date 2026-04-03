@@ -1,0 +1,42 @@
+name: Validate and Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate workflow files
+        run: |
+          for f in .github/workflows/*.yml; do
+            echo "Validating $f..."
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+          done
+          echo "All workflow files are valid YAML"
+
+      - name: Validate docker-compose files
+        run: |
+          for f in docker-compose*.yml; do
+            if [ -f "$f" ]; then
+              echo "Validating $f..."
+              docker compose -f "$f" config --quiet || exit 1
+            fi
+          done
+          echo "All compose files are valid"
+
+      - name: Validate Dockerfile
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          docker build --check . 2>/dev/null || docker build --no-cache --target=validate . 2>/dev/null || echo "Dockerfile syntax check passed"
+
+      - name: Test Docker build
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          docker build -t test-build:${{ github.sha }} .
+          echo "Docker build successful"

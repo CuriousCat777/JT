@@ -1,0 +1,48 @@
+name: Image Scan
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence
+
+jobs:
+  scan-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull latest image
+        run: docker pull ${{ env.IMAGE_NAME }}:latest || echo "Image not found, skipping"
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:latest
+          format: table
+          exit-code: '0'
+          severity: CRITICAL,HIGH
+          output: trivy-report.txt
+
+      - name: Check for critical vulnerabilities
+        run: |
+          if grep -q "CRITICAL" trivy-report.txt 2>/dev/null; then
+            echo "Critical vulnerabilities found"
+            cat trivy-report.txt
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-type: application/json' \
+              -d '{"text":":shield: *Critical vulnerabilities detected* in latest Docker image. Review the Image Scan workflow run."}' \
+              2>/dev/null || true
+          else
+            echo "No critical vulnerabilities found"
+          fi
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
+          retention-days: 30

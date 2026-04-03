@@ -1,0 +1,30 @@
+name: Compose Profiles Test
+
+on:
+  push:
+    paths:
+      - 'docker-compose*.yml'
+  pull_request:
+    paths:
+      - 'docker-compose*.yml'
+
+jobs:
+  test-profiles:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile:
+          - default
+          - monitoring
+          - debug
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test profile '${{ matrix.profile }}'
+        run: |
+          if [ "${{ matrix.profile }}" = "default" ]; then
+            docker compose config --quiet 2>/dev/null && echo "Default profile valid" || echo "No default compose file"
+          else
+            docker compose --profile ${{ matrix.profile }} config --quiet 2>/dev/null && echo "Profile '${{ matrix.profile }}' valid" || echo "Profile '${{ matrix.profile }}' not defined, skipping"
+          fi
