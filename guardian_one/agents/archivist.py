@@ -97,6 +97,7 @@ class Archivist(BaseAgent):
         self._privacy_tools: dict[str, PrivacyTool] = {}
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
+        self._guardian: Any = None  # Injected post-registration for Varys mode
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
@@ -260,6 +261,112 @@ class Archivist(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Varys mode — cross-agent intelligence
+    # ------------------------------------------------------------------
+
+    def set_guardian(self, guardian: Any) -> None:
+        """Inject the GuardianOne reference for cross-agent reads.
+
+        Called after registration. Gives the Archivist read access to
+        every agent's reports, the audit log, vault metadata, and gateway
+        status — Varys's little birds, basically.
+        """
+        self._guardian = guardian
+        self.log("varys_mode_active", details={"cross_agent_access": True})
+
+    @property
+    def varys_mode(self) -> bool:
+        return self._guardian is not None
+
+    def gather_intelligence(self) -> dict[str, Any]:
+        """Read-only sweep across all agent domains.
+
+        Returns a consolidated view: every agent's latest report,
+        audit summary, vault health, and gateway status.
+        This is the Archivist's primary value-add — one agent that
+        sees everything so Jeremy doesn't have to check each one.
+        """
+        if not self.varys_mode:
+            return {"error": "Varys mode inactive — no guardian reference."}
+
+        intel: dict[str, Any] = {}
+
+        # Agent reports — ask each sibling for their status
+        agent_reports: dict[str, dict[str, Any]] = {}
+        for name in self._guardian.list_agents():
+            if name == self.name:
+                continue
+            agent = self._guardian.get_agent(name)
+            if agent is not None:
+                try:
+                    rpt = agent.report()
+                    agent_reports[name] = {
+                        "status": rpt.status,
+                        "summary": rpt.summary,
+                        "alerts": rpt.alerts,
+                    }
+                except Exception as exc:
+                    agent_reports[name] = {"error": str(exc)}
+        intel["agents"] = agent_reports
+
+        # Audit log — recent entries
+        intel["audit_summary"] = self._guardian.audit.summary(last_n=20)
+
+        # Vault health — credential count and rotation status (never values)
+        intel["vault_health"] = self._guardian.vault.health_report()
+
+        # Gateway — service circuit states
+        services = self._guardian.gateway.list_services()
+        gateway_status: dict[str, Any] = {}
+        for svc in services:
+            gateway_status[svc] = self._guardian.gateway.service_status(svc)
+        intel["gateway"] = gateway_status
+
+        self.log("intelligence_gathered", details={
+            "agents_scanned": len(agent_reports),
+            "services_checked": len(gateway_status),
+        })
+        return intel
+
+    def sovereignty_report(self) -> dict[str, Any]:
+        """High-level data sovereignty assessment.
+
+        Combines the Archivist's own privacy audit with cross-agent
+        intelligence to produce a single "how secure is Jeremy's data?" answer.
+        """
+        privacy = self.privacy_audit()
+        intel = self.gather_intelligence()
+        due = self.files_due_for_deletion()
+
+        issues = list(privacy.get("issues", []))
+        recommendations = list(privacy.get("recommendations", []))
+
+        # Flag agents in error state
+        for name, data in intel.get("agents", {}).items():
+            if data.get("status") == "error":
+                issues.append(f"Agent '{name}' is in error state.")
+            for alert in data.get("alerts", []):
+                issues.append(f"[{name}] {alert}")
+
+        # Vault rotation check
+        vault = intel.get("vault_health", {})
+        if vault.get("due_for_rotation"):
+            recommendations.append(
+                f"{vault['due_for_rotation']} credentials due for rotation."
+            )
+
+        return {
+            "data_sovereignty_score": max(0, 100 - len(issues) * 10),
+            "files_tracked": len(self._file_index),
+            "files_due_for_deletion": len(due),
+            "privacy": privacy,
+            "cross_agent_issues": issues,
+            "recommendations": recommendations,
+            "vault": vault,
+            "gateway": intel.get("gateway", {}),
+        }
+
+    # ------------------------------------------------------------------
     # BaseAgent interface
     # ------------------------------------------------------------------
 
@@ -280,6 +387,17 @@ class Archivist(BaseAgent):
         recommendations.extend(privacy.get("recommendations", []))
         actions.append("Ran privacy audit.")
 
+        # Varys mode — cross-agent intelligence sweep
+        sovereignty = {}
+        if self.varys_mode:
+            sovereignty = self.sovereignty_report()
+            alerts.extend(sovereignty.get("cross_agent_issues", []))
+            recommendations.extend(sovereignty.get("recommendations", []))
+            actions.append(
+                f"Varys sweep: scanned sibling agents, "
+                f"sovereignty score {sovereignty.get('data_sovereignty_score', '?')}/100."
+            )
+
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
             agent_name=self.name,
@@ -292,6 +410,7 @@ class Archivist(BaseAgent):
                 "files": len(self._file_index),
                 "sources": len(self._data_sources),
                 "privacy": privacy,
+                "sovereignty": sovereignty,
             },
         )
 

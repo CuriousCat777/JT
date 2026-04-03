@@ -134,15 +134,33 @@ agents:
 
   archivist:
     enabled: true
-    schedule_interval_minutes: 60
+    schedule_interval_minutes: 30
     allowed_resources:
+      # Core domain — Archivist's own data
       - file_index
       - data_sources
       - privacy_tools
       - master_profile
+      # Varys-level: read access across all agent domains
+      - audit_log
+      - agent_reports
+      - vault_metadata          # credential names/scopes, never plaintext values
+      - gateway_status
+      - config_readonly
+      # Cross-agent domain reads (intelligence gathering)
+      - calendar                # Chronos
+      - accounts                # CFO
+      - transactions            # CFO
+      - orders                  # DoorDash
+      - deployments             # WebArchitect
+      - security_scans          # WebArchitect
+      - devices                 # DeviceAgent
+      - network                 # DeviceAgent
     custom:
       auto_encrypt_sensitive: true
       retention_check_daily: true
+      varys_mode: true               # Cross-agent intelligence gathering
+      cross_agent_read_only: true    # Read, never write, other domains
 
   cfo:
     enabled: true
