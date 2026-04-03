@@ -7,9 +7,6 @@ let package = Package(
         .iOS(.v17),
         .macOS(.v14),
     ],
-    products: [
-        .library(name: "GuardianOne", targets: ["GuardianOne"]),
-    ],
     targets: [
         .executableTarget(
             name: "GuardianOne",

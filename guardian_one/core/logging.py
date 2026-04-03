@@ -56,7 +56,7 @@ class JSONFormatter(logging.Formatter):
                 log_entry[key] = val
         if record.exc_info and record.exc_info[1]:
             log_entry["exception"] = str(record.exc_info[1])
-        return json.dumps(log_entry)
+        return json.dumps(log_entry, default=str)
 
 
 class ConsoleFormatter(logging.Formatter):
@@ -95,6 +95,11 @@ def get_logger(
         # Double-check under lock to prevent races
         if name in _initialized:
             return logger
+
+        # Clear any stale handlers (e.g., from tests clearing _initialized)
+        for h in logger.handlers[:]:
+            h.close()
+            logger.removeHandler(h)
 
         logger.setLevel(level)
         logger.propagate = False

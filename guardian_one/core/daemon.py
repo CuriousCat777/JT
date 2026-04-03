@@ -60,25 +60,47 @@ class GuardianDaemon:
     # State persistence
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_agent_state(raw: object) -> dict:
+        """Return a validated per-agent state dict with safe defaults."""
+        if not isinstance(raw, dict):
+            raw = {}
+        last_run = raw.get("last_run")
+        if last_run is not None and not isinstance(last_run, str):
+            last_run = None
+        errors = raw.get("errors", 0)
+        if not isinstance(errors, int) or isinstance(errors, bool):
+            errors = 0
+        runs = raw.get("runs", 0)
+        if not isinstance(runs, int) or isinstance(runs, bool):
+            runs = 0
+        paused = raw.get("paused", False)
+        if not isinstance(paused, bool):
+            paused = False
+        result = {"last_run": last_run, "errors": errors, "runs": runs, "paused": paused}
+        # Preserve paused_at timestamp if present
+        paused_at = raw.get("paused_at")
+        if isinstance(paused_at, str):
+            result["paused_at"] = paused_at
+        return result
+
     def _load_state(self) -> None:
         """Restore agent state from disk if available."""
+        self._agent_state = {}
         if self._state_path.exists():
             try:
                 data = json.loads(self._state_path.read_text())
                 if isinstance(data, dict):
-                    self._agent_state = data
+                    for name, state in data.items():
+                        if isinstance(name, str):
+                            self._agent_state[name] = self._normalize_agent_state(state)
             except (json.JSONDecodeError, OSError):
                 self._agent_state = {}
 
         # Ensure every registered agent has a state entry.
         for name in self._guardian.list_agents():
             if name not in self._agent_state:
-                self._agent_state[name] = {
-                    "last_run": None,
-                    "errors": 0,
-                    "runs": 0,
-                    "paused": False,
-                }
+                self._agent_state[name] = self._normalize_agent_state({})
 
     def _save_state(self) -> None:
         """Persist agent state to disk."""
@@ -282,9 +304,10 @@ class GuardianDaemon:
         self._running = True
         self._start_time = time.monotonic()
 
-        # Wire up graceful shutdown on SIGTERM / SIGINT.
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGINT, self._handle_signal)
+        # Wire up graceful shutdown on SIGTERM / SIGINT (main thread only).
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, self._handle_signal)
+            signal.signal(signal.SIGINT, self._handle_signal)
 
         self._schedule_agents()
         self._start_health_server()
