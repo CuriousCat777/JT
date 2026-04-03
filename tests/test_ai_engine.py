@@ -7,8 +7,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from guardian_one.core.ai_engine import (
     AIConfig,
     AIEngine,

@@ -308,8 +308,8 @@ class TestFullAudit:
         ))
         auditor = LanSecurityAuditor(registry)
         audit = auditor.full_audit()
-        assert "1 VLAN violation" in audit["summary"]
-        assert "1 default credential" in audit["summary"]
+        assert "1 VLAN violations" in audit["summary"]
+        assert "1 default credentials" in audit["summary"]
 
     @patch("guardian_one.homelink.lan_security._dns_blocking_deployed", return_value=True)
     def test_action_items_generated(self, mock_dns, registry):

@@ -45,7 +45,7 @@ def _make_urlopen_response(payload: dict | bytes, status: int = 200) -> MagicMoc
 
     mock_resp = MagicMock()
     mock_resp.read.return_value = body
-    mock_resp.__enter__ = lambda s: s
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
     mock_resp.__exit__ = MagicMock(return_value=False)
     return mock_resp
 

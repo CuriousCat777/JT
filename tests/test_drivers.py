@@ -275,7 +275,7 @@ class TestGoveeCloudDriver:
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
             mock_resp.read.return_value = b'{"data": []}'
-            mock_resp.__enter__ = lambda s: s
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
             mock_resp.__exit__ = MagicMock(return_value=False)
             mock_urlopen.return_value = mock_resp
             result = driver.list_devices()
@@ -286,7 +286,7 @@ class TestGoveeCloudDriver:
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_resp = MagicMock()
             mock_resp.read.return_value = b'{"data": "ok"}'
-            mock_resp.__enter__ = lambda s: s
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
             mock_resp.__exit__ = MagicMock(return_value=False)
             mock_urlopen.return_value = mock_resp
             driver.turn_on()
