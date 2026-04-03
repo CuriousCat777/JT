@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.config import AgentConfig
 from guardian_one.core.reasoning import (
-    PretextPrompt,
     ReActConfig,
     ReActEngine,
     ReActTrace,
@@ -238,6 +237,14 @@ class BaseAgent(abc.ABC):
         Returns:
             AIResponse with the AI's structured reasoning.
         """
+        if self._ai is None:
+            from guardian_one.core.ai_engine import AIResponse
+            return AIResponse(
+                content="[AI not available — running in deterministic mode]",
+                provider="none",
+                model="none",
+            )
+
         role = AGENT_SYSTEM_PROMPTS.get(self._name, DEFAULT_SYSTEM_PROMPT)
 
         pretext = build_pretext(
@@ -251,14 +258,6 @@ class BaseAgent(abc.ABC):
         )
 
         system_prompt, user_prompt = pretext.render()
-
-        if self._ai is None:
-            from guardian_one.core.ai_engine import AIResponse
-            return AIResponse(
-                content="[AI not available — running in deterministic mode]",
-                provider="none",
-                model="none",
-            )
 
         response = self._ai.reason(
             agent_name=self._name,

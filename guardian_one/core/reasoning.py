@@ -128,19 +128,20 @@ class ReActTrace:
     """Complete trace of a ReAct reasoning chain."""
     steps: list[ReActStep] = field(default_factory=list)
     conclusion: str = ""
-    max_iterations: int = 10
     completed: bool = False
+    _thought_count: int = field(default=0, repr=False)
 
     @property
     def iteration_count(self) -> int:
-        """Number of complete Thought→Action→Observation cycles."""
-        return sum(1 for s in self.steps if s.step_type == ReActStepType.THOUGHT)
+        """Number of Thought steps recorded."""
+        return self._thought_count
 
     def add_thought(self, content: str) -> ReActStep:
+        self._thought_count += 1
         step = ReActStep(
             step_type=ReActStepType.THOUGHT,
             content=content,
-            step_number=self.iteration_count + 1,
+            step_number=self._thought_count,
         )
         self.steps.append(step)
         return step
@@ -149,7 +150,7 @@ class ReActTrace:
         step = ReActStep(
             step_type=ReActStepType.ACTION,
             content=content,
-            step_number=self.iteration_count,
+            step_number=self._thought_count,
             metadata=metadata or {},
         )
         self.steps.append(step)
@@ -159,7 +160,7 @@ class ReActTrace:
         step = ReActStep(
             step_type=ReActStepType.OBSERVATION,
             content=content,
-            step_number=self.iteration_count,
+            step_number=self._thought_count,
         )
         self.steps.append(step)
         return step
@@ -186,7 +187,6 @@ class ReActTrace:
         return "\n".join(lines)
 
 
-# Action registry — maps action names to callables
 ActionHandler = Callable[[str], str]
 
 
@@ -320,11 +320,11 @@ class ReActEngine:
         Returns:
             ReActTrace with the full reasoning chain and conclusion.
         """
-        trace = ReActTrace(max_iterations=self.config.max_iterations)
-        system = self._build_system()
+        trace = ReActTrace()
+        system_instructions = self._build_system()
 
-        # Initial prompt with the task
-        initial_prompt = f"Task: {task}"
+        # Prepend ReAct instructions so the AI knows the expected format
+        initial_prompt = f"{system_instructions}\n\nTask: {task}"
         if context:
             ctx_str = json.dumps(context, indent=2, default=str)
             initial_prompt += f"\n\nContext:\n```json\n{ctx_str}\n```"
