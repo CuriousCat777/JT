@@ -12,6 +12,12 @@ all with encryption, audit trails, and zero data exploitation.
 Jeremy Paulo Salvino Tabernero
 Timezone: America/Chicago
 
+## CLAUDE.md Maintenance
+
+This file is maintained by the **Archivist** agent (`guardian_one/agents/archivist.py`).
+The Archivist is responsible for keeping this document in sync with the current state of
+the codebase whenever structural changes occur (new agents, modules, integrations, etc.).
+
 ## Architecture
 
 ```
@@ -240,3 +246,13 @@ cd ~/JT
 
 Both machines (current + ROG X 64GB) share context through this repo.
 Always pull latest before starting work on a new device.
+
+### ASUS ROG X (64GB) — Archivist Duties
+
+The Archivist agent secures, maintains, monitors, and guards the file system on the
+ASUS ROG machine. Responsibilities include:
+- **File system integrity** — Monitor for unauthorized changes, corruption, or drift
+- **Data sovereignty enforcement** — Ensure sensitive files remain encrypted at rest
+- **Backup verification** — Validate that critical data and config are recoverable
+- **CLAUDE.md stewardship** — Keep this file accurate as the codebase evolves
+- **Audit trail** — Log all file system operations through the immutable audit log
