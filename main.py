@@ -35,6 +35,12 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --power-tools          # Rails + Gin power tools status
+    python main.py --rails-new APP        # Scaffold a new Rails app
+    python main.py --gin-new APP          # Scaffold a new Gin app
+    python main.py --rails-server PATH    # Start Rails dev server
+    python main.py --gin-server PATH      # Start Gin dev server
+    python main.py --rails-install        # Install Ruby on Rails via gem
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
 """
 
@@ -308,6 +314,29 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    # Power Tools — Rails + Gin
+    parser.add_argument("--power-tools", action="store_true",
+                        help="Show Rails + Gin power tools status")
+    parser.add_argument("--rails-new", type=str, default=None,
+                        help="Scaffold a new Rails app (name)")
+    parser.add_argument("--rails-api", action="store_true",
+                        help="Generate API-only Rails app (use with --rails-new)")
+    parser.add_argument("--rails-db", type=str, default="sqlite3",
+                        help="Database adapter for Rails (sqlite3/postgresql/mysql)")
+    parser.add_argument("--rails-server", type=str, default=None,
+                        help="Start Rails dev server (path to app)")
+    parser.add_argument("--rails-port", type=int, default=3000,
+                        help="Rails server port (default: 3000)")
+    parser.add_argument("--rails-install", action="store_true",
+                        help="Install Ruby on Rails via gem")
+    parser.add_argument("--gin-new", type=str, default=None,
+                        help="Scaffold a new Gin (Go) app (name)")
+    parser.add_argument("--gin-module", type=str, default=None,
+                        help="Go module path for Gin app (default: app name)")
+    parser.add_argument("--gin-server", type=str, default=None,
+                        help="Start Gin dev server (path to app)")
+    parser.add_argument("--gin-port", type=int, default=8080,
+                        help="Gin server port (default: 8080)")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -434,6 +463,110 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    # --- Power Tools: Rails + Gin ---
+    if (args.power_tools or args.rails_new or args.rails_server
+            or args.rails_install or args.gin_new or args.gin_server):
+        from guardian_one.integrations.rails_gin import (
+            power_tools_status, scaffold_rails, scaffold_gin,
+            start_rails_server, start_gin_server, install_rails,
+        )
+
+        if args.power_tools:
+            status = power_tools_status()
+            print()
+            print("  POWER TOOLS — Rails + Gin")
+            print("  " + "=" * 50)
+            print(f"  Ruby:   {status['ruby']['status']:<16} {status['ruby']['version']}")
+            print(f"  Rails:  {status['rails']['status']:<16} {status['rails']['version']}")
+            print(f"  Go:     {status['go']['status']:<16} {status['go']['version']}")
+            print(f"  Gin:    {status['gin']['status']:<16} {status['gin'].get('note', '')}")
+            print()
+            print("  RAILS CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["rails"]:
+                print(f"    - {cap}")
+            print()
+            print("  GIN CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["gin"]:
+                print(f"    - {cap}")
+            print()
+            print("  USE CASES")
+            print("  " + "-" * 50)
+            for key, desc in status["use_cases"].items():
+                label = key.replace("_", " ").title()
+                print(f"    {label}:")
+                print(f"      {desc}")
+            print()
+
+        elif args.rails_install:
+            print("\n  Installing Ruby on Rails...")
+            result = install_rails()
+            if result["success"]:
+                if result.get("already_installed"):
+                    print(f"  Rails already installed: {result['version']}")
+                else:
+                    print(f"  Rails installed: {result['version']}")
+            else:
+                print(f"  Installation failed: {result['error']}")
+
+        elif args.rails_new:
+            app_name = args.rails_new
+            print(f"\n  Scaffolding Rails app: {app_name}")
+            if args.rails_api:
+                print("  Mode: API-only")
+            print(f"  Database: {args.rails_db}")
+            result = scaffold_rails(
+                app_name=app_name,
+                api_only=args.rails_api,
+                database=args.rails_db,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --rails-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_new:
+            app_name = args.gin_new
+            module = args.gin_module or app_name
+            print(f"\n  Scaffolding Gin app: {app_name}")
+            print(f"  Module: {module}")
+            print(f"  Port: {args.gin_port}")
+            result = scaffold_gin(
+                app_name=app_name,
+                module_path=module,
+                port=args.gin_port,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --gin-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.rails_server:
+            app_path = args.rails_server
+            port = args.rails_port
+            print(f"\n  Starting Rails server: {app_path} on port {port}")
+            result = start_rails_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_server:
+            app_path = args.gin_server
+            port = args.gin_port
+            print(f"\n  Starting Gin server: {app_path} on port {port}")
+            result = start_gin_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
         guardian.shutdown()
         return
 
