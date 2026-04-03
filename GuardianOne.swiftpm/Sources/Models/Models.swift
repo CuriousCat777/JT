@@ -90,7 +90,10 @@ struct AgentRunAllResult: Codable {
 // MARK: - Audit
 
 struct AuditEntry: Codable, Identifiable {
-    var id: String { "\(timestamp)-\(agent)-\(action)" }
+    var id: String {
+        [timestamp, agent, action, severity, details ?? "", String(requiresReview ?? false)]
+            .joined(separator: "|")
+    }
     let timestamp: String
     let agent: String
     let action: String

@@ -42,7 +42,7 @@ struct MorningBriefView: View {
                         StatCard("Services", value: "\(health.count)",
                                 subtitle: "\(health.filter { $0.circuitState == "closed" }.count) healthy",
                                 color: .green)
-                        let avgSuccess = health.isEmpty ? 100 : health.map(\.successRate).reduce(0, +) / Double(health.count)
+                        let avgSuccess = health.isEmpty ? 1.0 : health.map(\.successRate).reduce(0, +) / Double(health.count)
                         StatCard("Success Rate", value: "\(Int(avgSuccess * 100))%",
                                 subtitle: "across all services",
                                 color: avgSuccess > 0.95 ? .green : .orange)
