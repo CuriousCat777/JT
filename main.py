@@ -64,6 +64,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.dev_coach import DevCoach
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -91,6 +92,9 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    dc_cfg = config.agents.get("dev_coach", AgentConfig(name="dev_coach"))
+    guardian.register_agent(DevCoach(config=dc_cfg, audit=guardian.audit))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -308,6 +312,18 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--archivist", action="store_true",
+                        help="The Archivist — Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--archivist-tier", action="store_true",
+                        help="Show the Archivist's opinionated tech tier list")
+    parser.add_argument("--archivist-wisdom", action="store_true",
+                        help="Get a Fireship-style developer wisdom tip")
+    parser.add_argument("--archivist-system", action="store_true",
+                        help="Show system inventory (hardware/software)")
+    parser.add_argument("--archivist-stack", type=str, default=None,
+                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
+    parser.add_argument("--archivist-audit", type=str, default=None,
+                        help="Run web dev audit on a domain")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -317,6 +333,71 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # ------------------------------------------------------------------
+    # The Archivist — Developer Coach commands
+    # ------------------------------------------------------------------
+    if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
+        coach = guardian.get_agent("dev_coach")
+        if coach and isinstance(coach, DevCoach):
+            if args.archivist_tier:
+                tiers = coach.get_tier_list()
+                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
+                print("  " + "=" * 55)
+                for tier_name in ["S", "A", "B", "C", "D", "F"]:
+                    entries = tiers.get(tier_name, [])
+                    if entries:
+                        print(f"\n  [{tier_name}-TIER]")
+                        for e in entries:
+                            print(f"    {e['name']:<20} {e['notes']}")
+                print()
+            elif args.archivist_wisdom:
+                tip = coach.get_wisdom()
+                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
+            elif args.archivist_system:
+                inventory = coach.get_system_inventory()
+                print("\n  THE ARCHIVIST — System Inventory")
+                print("  " + "=" * 55)
+                for comp in inventory:
+                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
+                    for k, v in comp.get('specs', {}).items():
+                        print(f"    {k}: {v}")
+                print()
+            elif args.archivist_stack:
+                rec = coach.recommend_stack(args.archivist_stack)
+                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.archivist_stack}")
+                print("  " + "=" * 55)
+                for item in rec.get("stack", []):
+                    print(f"  {item['name']:<20} {item['reason']}")
+                print(f"\n  \"{rec.get('summary', '')}\"\n")
+            elif args.archivist_audit:
+                audit = coach.web_audit(args.archivist_audit)
+                print(f"\n  THE ARCHIVIST — Web Audit: {args.archivist_audit}")
+                print("  " + "=" * 55)
+                for check, info in audit.items():
+                    status = info.get("status", "needs_review")
+                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
+                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
+                print()
+            else:
+                report = guardian.run_agent("dev_coach")
+                print(f"\n  THE ARCHIVIST — Developer Coach Report")
+                print("  " + "=" * 55)
+                print(f"  Status: {report.status}")
+                print(f"  {report.summary}")
+                if report.recommendations:
+                    print("\n  Recommendations:")
+                    for r in report.recommendations:
+                        print(f"    - {r}")
+                if report.alerts:
+                    print("\n  Alerts:")
+                    for a in report.alerts:
+                        print(f"    [!] {a}")
+                print()
+        else:
+            print("DevCoach agent not available.")
+        guardian.shutdown()
+        return
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")

@@ -225,6 +225,34 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
+  dev_coach:
+    enabled: true
+    schedule_interval_minutes: 120
+    allowed_resources:
+      - tech_registry
+      - code_snippets
+      - projects
+      - learning_paths
+      - system_inventory
+      - dev_sessions
+      - recommendations
+    custom:
+      persona: "the_archivist"
+      personality: "fireship"            # Fireship (Jeff Delaney) inspired voice
+      advisory_role: "developer_yoda"    # Strategic dev advisor alongside Varys
+      tier_list_enabled: true            # Opinionated S-F tech tier ratings
+      code_this_not_that: true           # Best practice pattern vault
+      system_discovery: true             # Auto-detect hardware/software
+      web_audit_enabled: true            # Web dev best practices checker
+      productivity_tracking: true        # Dev session analytics
+      wisdom_on_run: true                # Show Fireship wisdom tip on each run
+      databases:
+        sqlite: true                     # Local ACID-compliant relational store
+        neo4j: false                     # Knowledge graph (enable when Neo4j is running)
+        dgraph: false                    # Distributed graph (enable when Dgraph is running)
+      coordinate_with_archivist: true    # Data sovereignty handoff
+      coordinate_with_web_architect: true # Website tech stack advisory
+
   device_agent:
     enabled: true
     schedule_interval_minutes: 15
