@@ -1,0 +1,28 @@
+name: Verify Deployed Image
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Docker Image"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  verify:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull and test published image
+        run: |
+          docker pull ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:latest
+          docker run --rm \
+            --health-cmd="curl -f http://localhost:5678/healthz || exit 1" \
+            --health-interval=5s \
+            --health-retries=3 \
+            -p 5678:5678 \
+            ${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:latest &
+
+          sleep 10
+          curl -f http://localhost:5678/healthz || exit 1
+          echo "Published image verified"
