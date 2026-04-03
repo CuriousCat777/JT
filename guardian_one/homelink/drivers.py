@@ -145,13 +145,13 @@ class KasaDriver:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class HueDriver:
-    """Controls Philips Hue lights via the Hue Bridge local REST API.
+    """Controls Philips Hue lights via the Hue Bridge local REST API (v1).
 
     Zero external dependencies — uses stdlib urllib to hit the bridge
-    directly over HTTPS/HTTP on the LAN.  No cloud, no phue library.
+    directly over HTTPS on the LAN.  No cloud, no phue library.
 
     Bridge at 192.168.1.147 (self-signed cert → verify=False).
-    API docs: https://developers.meethue.com/develop/hue-api-v2/
+    API docs: https://developers.meethue.com/develop/hue-api/
 
     Usage:
         driver = HueDriver(bridge_ip="192.168.1.147", api_key="abc123")
@@ -225,7 +225,8 @@ class HueDriver:
             return self._request("PUT", f"/groups/{group_id}/action", cmd)
         elif light_id is not None:
             return self._request("PUT", f"/lights/{light_id}/state", cmd)
-        return _fail("light_on", "No light_id or group_id specified")
+        # Default: group 0 = all lights
+        return self._request("PUT", "/groups/0/action", cmd)
 
     def turn_off(
         self,
@@ -237,7 +238,7 @@ class HueDriver:
             return self._request("PUT", f"/groups/{group_id}/action", cmd)
         elif light_id is not None:
             return self._request("PUT", f"/lights/{light_id}/state", cmd)
-        return _fail("light_off", "No light_id or group_id specified")
+        return self._request("PUT", "/groups/0/action", cmd)
 
     def set_brightness(
         self,
@@ -246,13 +247,14 @@ class HueDriver:
         group_id: int | None = None,
     ) -> dict[str, Any]:
         """Set brightness as a percentage (0-100) → Hue scale (1-254)."""
+        brightness_pct = max(0, min(100, brightness_pct))
         bri = max(1, int(brightness_pct / 100 * 254))
         cmd = {"on": True, "bri": bri}
         if group_id is not None:
             return self._request("PUT", f"/groups/{group_id}/action", cmd)
         elif light_id is not None:
             return self._request("PUT", f"/lights/{light_id}/state", cmd)
-        return _fail("light_dim", "No light_id or group_id specified")
+        return self._request("PUT", "/groups/0/action", cmd)
 
     def set_color(
         self,
@@ -289,7 +291,7 @@ class HueDriver:
             return self._request("PUT", f"/groups/{group_id}/action", cmd)
         elif light_id is not None:
             return self._request("PUT", f"/lights/{light_id}/state", cmd)
-        return _fail("light_color", "No light_id or group_id specified")
+        return self._request("PUT", "/groups/0/action", cmd)
 
     # ------------------------------------------------------------------
     # Discovery / status

@@ -8,8 +8,8 @@ Usage:
 
 from __future__ import annotations
 
+import ipaddress
 import json
-import queue
 import shutil
 import subprocess
 import threading
@@ -963,10 +963,15 @@ def create_app() -> Flask:
 
         subnet = request.args.get("subnet", "192.168.1.0/24")
 
-        # Validate subnet to prevent command injection
-        if not re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", subnet):
+        # Validate subnet — must be valid IPv4 CIDR
+        try:
+            network = ipaddress.ip_network(subnet, strict=False)
+            if network.version != 4:
+                raise ValueError("IPv6 is not supported")
+            subnet = str(network)
+        except ValueError:
             def _bad_subnet():
-                yield f"data: {json.dumps({'type': 'error', 'line': 'Invalid subnet format. Use CIDR notation like 192.168.1.0/24'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'line': 'Invalid subnet format. Use IPv4 CIDR notation like 192.168.1.0/24'})}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
             return Response(_bad_subnet(), mimetype="text/event-stream")
 
@@ -989,6 +994,7 @@ def create_app() -> Flask:
 
         def generate():
             nonlocal _scan_running
+            proc = None
             try:
                 g = _get_guardian()
                 g.audit.record(
@@ -1052,7 +1058,8 @@ def create_app() -> Flask:
                 )
 
             except subprocess.TimeoutExpired:
-                proc.kill()
+                if proc is not None:
+                    proc.kill()
                 yield f"data: {json.dumps({'type': 'error', 'line': 'Scan timed out after 120 seconds.'})}\n\n"
                 yield "data: {\"type\":\"done\"}\n\n"
             except Exception as exc:

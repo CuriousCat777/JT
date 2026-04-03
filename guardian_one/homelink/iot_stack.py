@@ -14,16 +14,21 @@ APIs directly. Import them via the respective UIs or API.
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 
 def _validate_subnet(subnet: str) -> str:
-    """Validate and return a safe CIDR subnet string."""
-    if not re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", subnet):
-        raise ValueError(f"Invalid subnet format: {subnet!r}")
-    return subnet
+    """Validate and return a safe IPv4 CIDR subnet string."""
+    import ipaddress as _ipaddress
+
+    try:
+        network = _ipaddress.ip_network(subnet, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"Invalid subnet format: {subnet!r}") from exc
+    if network.version != 4:
+        raise ValueError(f"Only IPv4 subnets are supported, got: {subnet!r}")
+    return str(network)
 
 
 # ---------------------------------------------------------------------------
