@@ -29,5 +29,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests with coverage
+        env:
+          GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
         run: |
-          pytest tests/ -v --tb=long --cov=guardian_one --cov-report=term-missing
+          pytest tests/ -v --tb=long --cov=guardian_one --cov-report=term-missing --cov-fail-under=65

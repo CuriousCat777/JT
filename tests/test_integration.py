@@ -1,24 +1,15 @@
 """Cross-agent integration tests — validate multi-component flows."""
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
-from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.config import AgentConfig, GuardianConfig, SecurityConfig
 from guardian_one.core.guardian import GuardianOne
 from guardian_one.core.mediator import Proposal
 from guardian_one.agents.chronos import CalendarEvent, Chronos
 from guardian_one.agents.archivist import Archivist
-from guardian_one.agents.cfo import (
-    Account,
-    AccountType,
-    Bill,
-    CFO,
-    Transaction,
-    TransactionCategory,
-)
+from guardian_one.agents.cfo import Bill, CFO
 
 
 @pytest.fixture

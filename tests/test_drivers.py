@@ -1,6 +1,6 @@
 """Tests for homelink/drivers.py — device drivers and factory."""
 
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
