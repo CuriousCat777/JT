@@ -3,6 +3,8 @@
 import json
 import os
 import pytest
+
+flask = pytest.importorskip("flask", reason="flask not installed")
 from guardian_one.web.app import create_app
 
 

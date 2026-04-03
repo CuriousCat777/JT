@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from guardian_one.core.ai_engine import (
     AIConfig,
     AIEngine,
@@ -97,6 +99,7 @@ def test_ollama_not_available_when_offline():
 
 
 def test_ollama_generate_returns_empty_on_error():
+    pytest.importorskip("httpx", reason="httpx not installed")
     backend = OllamaBackend(
         base_url="http://localhost:99999",
         model="llama3",

@@ -4,6 +4,8 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from guardian_one.core.audit import AuditLog
 from guardian_one.core.config import AgentConfig
 from guardian_one.agents.cfo import (
@@ -215,6 +217,7 @@ def test_validate():
 
 
 def test_excel():
+    pytest.importorskip("openpyxl", reason="openpyxl not installed")
     r = _router()
     result = r.handle("generate excel dashboard")
     assert result.intent == "excel"
