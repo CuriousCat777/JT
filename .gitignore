@@ -75,3 +75,6 @@ data/archivist_state.json
 data/cloudsync_config.json
 data/tech_registry.json
 data/telemetry.jsonl
+data/account_registry.json
+data/password_sync_cache.json
+data/cloudsync_log.jsonl
