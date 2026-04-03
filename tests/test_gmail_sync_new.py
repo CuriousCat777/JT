@@ -548,7 +548,7 @@ class TestGetAttachment:
         with patch("urllib.request.urlopen", return_value=mock_resp):
             result = gp.get_attachment("msg1", "att1")
 
-        assert raw_content == result[:len(raw_content)]
+        assert result == raw_content
 
     def test_returns_empty_bytes_on_error(self, tmp_path):
         gp = self._make_provider(tmp_path)

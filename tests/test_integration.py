@@ -127,7 +127,7 @@ class TestMediatorConflictResolution:
             resource="calendar",
             time_start=now.isoformat(),
             time_end=(now + timedelta(hours=1)).isoformat(),
-            details="Team standup",
+            details={"title": "Team standup"},
         ))
         guardian.mediator.submit_proposal(Proposal(
             agent="cfo",
@@ -135,7 +135,7 @@ class TestMediatorConflictResolution:
             resource="calendar",
             time_start=(now + timedelta(minutes=30)).isoformat(),
             time_end=(now + timedelta(hours=1, minutes=30)).isoformat(),
-            details="Monthly review",
+            details={"title": "Monthly review"},
         ))
 
         conflicts = guardian.mediator.check_conflicts()

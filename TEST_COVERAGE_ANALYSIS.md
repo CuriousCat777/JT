@@ -298,14 +298,14 @@ jobs:
       - uses: codecov/codecov-action@v4  # optional
 ```
 
-#### Missing: Test Tooling — MEDIUM Priority
+#### Test Tooling — MEDIUM Priority
 
 | Tool | Purpose | Status |
 |------|---------|--------|
-| `pytest-cov` | Coverage measurement and thresholds | **Missing** |
+| `pytest-cov` | Coverage measurement and thresholds | **Present** |
+| `pytest-timeout` | Kill hanging tests (integration tests, thread tests) | **Present** |
 | `pytest-mock` | Cleaner `mocker` fixture instead of `unittest.mock` | **Missing** |
-| `pytest-xdist` | Parallel test execution (`-n auto`) | **Missing** — 850+ tests would benefit |
-| `pytest-timeout` | Kill hanging tests (integration tests, thread tests) | **Missing** |
+| `pytest-xdist` | Parallel test execution (`-n auto`) | **Missing** — 1000+ tests would benefit |
 | `pytest-randomly` | Detect hidden test-order dependencies | **Missing** |
 | `hypothesis` | Property-based / fuzz testing for parsers and validators | **Missing** |
 

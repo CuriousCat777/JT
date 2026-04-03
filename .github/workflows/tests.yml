@@ -28,6 +28,15 @@ jobs:
           pip install cffi
           pip install -e ".[dev]"
 
+      - name: Verify key imports
+        run: |
+          python -c "from cryptography.fernet import Fernet; print('cryptography OK')"
+          python -c "import flask; print('flask OK')"
+          python -c "import httpx; print('httpx OK')"
+          python -c "import openpyxl; print('openpyxl OK')"
+          python -c "from guardian_one.core.audit import AuditLog; print('audit OK')"
+          python -c "from guardian_one.core.guardian import GuardianOne; print('guardian OK')"
+
       - name: Run tests with coverage
         env:
           GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
