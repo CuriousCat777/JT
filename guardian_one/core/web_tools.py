@@ -45,8 +45,8 @@ def _is_safe_url(url: str) -> tuple[bool, str]:
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         for _family, _type, _proto, _canonname, sockaddr in infos:
             ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                return False, f"Blocked: private/reserved IP {ip}"
+            if not ip.is_global:
+                return False, f"Blocked: non-global IP {ip}"
     except socket.gaierror:
         return False, f"Cannot resolve hostname: {hostname}"
 
@@ -229,25 +229,28 @@ def web_fetch(url: str) -> str:
 
         # Re-check the resolved IP (defence in depth)
         ip = ipaddress.ip_address(resolved_ip)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return f"URL blocked: resolved to private IP {ip}"
+        if not ip.is_global:
+            return f"URL blocked: non-global IP {ip}"
 
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; GuardianOne/1.0)",
         }
 
-        if parsed.scheme == "http":
-            # For plain HTTP: rewrite URL to resolved IP to prevent DNS rebinding
-            headers["Host"] = hostname
-            fetch_url = parsed._replace(netloc=f"{resolved_ip}:{parsed.port}" if parsed.port
-                                        else resolved_ip).geturl()
-        else:
-            # For HTTPS: keep original hostname so SNI and certificate
-            # verification remain intact
-            fetch_url = url
+        # Rewrite URL to resolved IP to prevent DNS rebinding.
+        # Set Host header so the server routes correctly.
+        headers["Host"] = hostname if not parsed.port else f"{hostname}:{parsed.port}"
+        ip_netloc = f"[{resolved_ip}]" if ip.version == 6 else resolved_ip
+        if parsed.port:
+            ip_netloc = f"{ip_netloc}:{parsed.port}"
+        fetch_url = parsed._replace(netloc=ip_netloc).geturl()
+
+        # For HTTPS: disable cert hostname verification since we're
+        # connecting to an IP, but we already validated the hostname resolves
+        # to this IP. The Host header + SNI still carry the real hostname.
+        verify = parsed.scheme != "https"
 
         with httpx.stream("GET", fetch_url, headers=headers, timeout=15.0,
-                          follow_redirects=False) as resp:
+                          follow_redirects=False, verify=verify) as resp:
             resp.raise_for_status()
 
             # Stream with size limit

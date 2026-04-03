@@ -90,9 +90,11 @@ struct AgentRunAllResult: Codable {
 // MARK: - Audit
 
 struct AuditEntry: Codable, Identifiable {
-    var id: String {
-        [timestamp, agent, action, severity, details ?? "", String(requiresReview ?? false)]
-            .joined(separator: "|")
+    let id = UUID()  // Local-only, not in JSON — guarantees uniqueness for SwiftUI
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp, agent, action, severity, details
+        case requiresReview = "requires_review"
     }
     let timestamp: String
     let agent: String
@@ -100,11 +102,6 @@ struct AuditEntry: Codable, Identifiable {
     let severity: String
     let details: String?
     let requiresReview: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case timestamp, agent, action, severity, details
-        case requiresReview = "requires_review"
-    }
 }
 
 struct AuditSummary: Codable {

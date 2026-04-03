@@ -4,7 +4,11 @@ import Foundation
 @Observable
 final class APIClient {
     var baseURL: String {
-        didSet { UserDefaults.standard.set(baseURL, forKey: "guardianBaseURL") }
+        didSet {
+            // Normalize: strip trailing slash to prevent //api/... paths
+            if baseURL.hasSuffix("/") { baseURL = String(baseURL.dropLast()) }
+            UserDefaults.standard.set(baseURL, forKey: "guardianBaseURL")
+        }
     }
 
     private let decoder: JSONDecoder = {

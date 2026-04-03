@@ -273,35 +273,23 @@ class AnthropicBackend:
                 # Execute each tool call and build tool_result messages
                 from guardian_one.core.web_tools import execute_tool
 
-                # Add assistant's response (with tool_use blocks) to messages
+                # Add assistant's response — serialize only known block types
                 assistant_content = []
                 for b in resp.content:
                     block_type = getattr(b, "type", None)
                     if block_type == "text":
-                        assistant_content.append({
-                            "type": "text",
-                            "text": getattr(b, "text", ""),
-                        })
+                        assistant_content.append({"type": "text", "text": getattr(b, "text", "")})
                     elif block_type == "tool_use":
-                        tool_use_id = getattr(b, "id", None)
-                        tool_name = getattr(b, "name", None)
-                        tool_input = getattr(b, "input", None)
-                        if tool_use_id is None or tool_name is None or tool_input is None:
-                            logger.warning("Skipping malformed tool_use block in Anthropic response")
-                            continue
-                        assistant_content.append({
-                            "type": "tool_use",
-                            "id": tool_use_id,
-                            "name": tool_name,
-                            "input": tool_input,
-                        })
+                        tid = getattr(b, "id", None)
+                        tname = getattr(b, "name", None)
+                        tinput = getattr(b, "input", None)
+                        if tid and tname and tinput is not None:
+                            assistant_content.append({"type": "tool_use", "id": tid, "name": tname, "input": tinput})
+                        else:
+                            logger.warning("Skipping malformed tool_use block")
                     else:
-                        logger.debug("Skipping unsupported Anthropic content block type: %r", block_type)
-
-                kwargs["messages"].append({
-                    "role": "assistant",
-                    "content": assistant_content,
-                })
+                        logger.debug("Skipping Anthropic block type: %r", block_type)
+                kwargs["messages"].append({"role": "assistant", "content": assistant_content})
 
                 tool_results = []
                 for tb in tool_use_blocks:

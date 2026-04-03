@@ -18,10 +18,14 @@ from guardian_one.agents.archivist import Archivist
 from guardian_one.agents.cfo import CFO
 
 
-def _make_guardian() -> GuardianOne:
+def _make_guardian(tmp_path: Path) -> GuardianOne:
+    log_dir = tmp_path / "logs"
+    data_dir = tmp_path / "data"
+    log_dir.mkdir()
+    data_dir.mkdir()
     config = GuardianConfig(
-        log_dir=tempfile.mkdtemp(),
-        data_dir=tempfile.mkdtemp(),
+        log_dir=str(log_dir),
+        data_dir=str(data_dir),
         agents={
             "chronos": AgentConfig(name="chronos", schedule_interval_minutes=15),
             "archivist": AgentConfig(name="archivist", schedule_interval_minutes=60),
@@ -36,13 +40,13 @@ def _make_guardian() -> GuardianOne:
 
 
 @pytest.fixture
-def guardian():
-    return _make_guardian()
+def guardian(tmp_path):
+    return _make_guardian(tmp_path)
 
 
 @pytest.fixture
 def daemon(guardian):
-    return GuardianDaemon(guardian, port=0)  # port 0 won't bind in tests
+    return GuardianDaemon(guardian, port=0)  # port 0: server not started in these tests
 
 
 # ------------------------------------------------------------------
