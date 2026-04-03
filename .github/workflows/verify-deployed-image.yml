@@ -15,15 +15,26 @@ jobs:
 
       - name: Pull and test published image
         run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:${{ github.event.workflow_run.head_sha }}"
+          set -euo pipefail
+
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          SHORT_SHA="${HEAD_SHA::7}"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/n8n-travel-intelligence:${SHORT_SHA}"
+          CONTAINER_NAME="verify-deployed-image-${SHORT_SHA}"
+
           docker pull "$IMAGE"
-          docker run --rm \
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+          trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
+
+          docker run -d --rm --name "$CONTAINER_NAME" \
             --health-cmd="curl -f http://localhost:5678/healthz || exit 1" \
             --health-interval=5s \
             --health-retries=3 \
             -p 5678:5678 \
-            "$IMAGE" &
+            "$IMAGE"
+
+          docker ps --filter "name=^${CONTAINER_NAME}$" --filter "status=running" --format '{{.Names}}' | grep -Fx "$CONTAINER_NAME"
 
           sleep 10
-          curl -f http://localhost:5678/healthz || exit 1
+          curl -f http://localhost:5678/healthz
           echo "Published image verified"

@@ -18,7 +18,7 @@ jobs:
             exit 0
           fi
 
-          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${MONITORING_URL}/healthz" 2>/dev/null || echo "000")
+          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "${MONITORING_URL}/healthz" 2>/dev/null || echo "000")
           echo "status=$HTTP_CODE" >> $GITHUB_OUTPUT
 
           if [ "$HTTP_CODE" = "200" ]; then

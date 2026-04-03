@@ -46,14 +46,15 @@ jobs:
           username: ${{ steps.vars.outputs.user }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ steps.vars.outputs.port }}
+          fingerprint: ${{ secrets.DEPLOY_SSH_FINGERPRINT }}
           script: |
-            cd ${{ steps.vars.outputs.path }}
+            cd "${{ steps.vars.outputs.path }}"
             # Save current revision for rollback
             git rev-parse HEAD > .pre-deploy-revision
             git pull origin main
             export IMAGE_TAG=${{ github.event.inputs.image_tag }}
-            docker compose -f ${{ steps.vars.outputs.compose_file }} pull
-            docker compose -f ${{ steps.vars.outputs.compose_file }} up -d
+            docker compose -f "${{ steps.vars.outputs.compose_file }}" pull
+            docker compose -f "${{ steps.vars.outputs.compose_file }}" up -d
             echo "Waiting for services to start..."
             sleep 15
 
@@ -64,22 +65,23 @@ jobs:
           username: ${{ steps.vars.outputs.user }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ steps.vars.outputs.port }}
+          fingerprint: ${{ secrets.DEPLOY_SSH_FINGERPRINT }}
           script: |
             for i in $(seq 1 12); do
               if curl -sf http://localhost:5678/healthz > /dev/null 2>&1; then
                 echo "Health check passed"
-                rm -f ${{ steps.vars.outputs.path }}/.pre-deploy-revision
+                rm -f "${{ steps.vars.outputs.path }}/.pre-deploy-revision"
                 exit 0
               fi
               echo "Attempt $i/12, waiting..."
               sleep 5
             done
             echo "Health check failed, initiating rollback..."
-            cd ${{ steps.vars.outputs.path }}
+            cd "${{ steps.vars.outputs.path }}"
             ROLLBACK_REV=$(cat .pre-deploy-revision 2>/dev/null || echo "HEAD~1")
-            docker compose -f ${{ steps.vars.outputs.compose_file }} down
+            docker compose -f "${{ steps.vars.outputs.compose_file }}" down
             git checkout "$ROLLBACK_REV"
-            docker compose -f ${{ steps.vars.outputs.compose_file }} up -d
+            docker compose -f "${{ steps.vars.outputs.compose_file }}" up -d
             rm -f .pre-deploy-revision
             exit 1
 

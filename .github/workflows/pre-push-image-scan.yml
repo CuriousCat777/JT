@@ -9,6 +9,7 @@ on:
 
 jobs:
   scan-before-push:
+    if: hashFiles('Dockerfile') != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

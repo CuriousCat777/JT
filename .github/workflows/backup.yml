@@ -16,8 +16,9 @@ jobs:
           username: ${{ secrets.PROD_DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.PROD_DEPLOY_PORT }}
+          fingerprint: ${{ secrets.DEPLOY_SSH_FINGERPRINT }}
           script: |
-            cd ${{ secrets.PROD_DEPLOY_PATH }}
+            cd "${{ secrets.PROD_DEPLOY_PATH }}"
 
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             BACKUP_DIR="backups/${TIMESTAMP}"
@@ -39,12 +40,12 @@ jobs:
             docker run --rm \
               -v "${N8N_DATA_VOLUME}:/data:ro" \
               -v "$(pwd)/${BACKUP_DIR}":/backup \
-              alpine tar czf /backup/n8n_data.tar.gz -C /data .
+              alpine:3.20 tar czf /backup/n8n_data.tar.gz -C /data .
 
             echo "Backup completed: ${BACKUP_DIR}"
 
-            # Cleanup backups older than 30 days
-            find backups/ -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null || true
+            # Cleanup backups older than 30 days (mindepth 1 to protect parent dir)
+            find backups/ -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null || true
             echo "Old backups cleaned up"
 
       - name: Notify on failure
