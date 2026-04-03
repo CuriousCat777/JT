@@ -1,11 +1,26 @@
-"""Archivist — Data Management Agent.
+"""Archivist — Chief of Staff for Libraries & File Organisation.
 
-Responsibilities:
-- Organise personal and professional files into a searchable structure
-- Maintain a master file of Jeremy's personal details for autofill
-- Map data from gadgets/apps (smartwatch, NordVPN, DeleteMe)
-- Data retention, backup and deletion policies
-- Privacy tool configuration (VPN, data-broker removal)
+Prime Directive:
+    Jeremy's digital life generates data across dozens of sources — medical records,
+    financial docs, smartwatch telemetry, legal papers, professional credentials.
+    The Archivist is the single authority that decides where every byte lives,
+    how long it stays, who can touch it, and when it gets destroyed.
+
+    Think of it like a library's head librarian crossed with a shredder operator:
+    everything gets catalogued, indexed, and retention-tagged on arrival.
+    Sensitive files get encrypted at rest. Expired files get flagged for deletion.
+    Nothing leaves without passing the content gate.
+
+Core Responsibilities:
+    1. FILE TAXONOMY    — Organise all files into a searchable, category-tagged index
+    2. MASTER PROFILE   — Maintain Jeremy's autofill data (single source of truth)
+    3. DATA SOURCES     — Map and sync from gadgets/apps (smartwatch, NordVPN, DeleteMe)
+    4. RETENTION ENGINE — Enforce time-based retention policies (delete-after-use → 7yr legal hold)
+    5. PRIVACY POSTURE  — Audit encryption gaps, VPN config, data-broker removal status
+    6. BACKUP CADENCE   — Schedule backups by category (financial=daily, legal=monthly)
+
+Credential Access:
+    All secrets via homelink/vault.py. No caching. No hardcoding. No exceptions.
 """
 
 from __future__ import annotations
@@ -67,7 +82,13 @@ class PrivacyTool:
 
 
 class Archivist(BaseAgent):
-    """Data management agent for Jeremy's digital life."""
+    """Chief of Staff for libraries and file organisation.
+
+    The Archivist owns every file, every data source, every retention clock.
+    Six jobs: catalogue it, index it, encrypt the sensitive stuff, sync the
+    sources, audit the privacy posture, schedule the backups. That's it.
+    No scope creep — if it's not about data sovereignty, it's not our problem.
+    """
 
     def __init__(self, config: AgentConfig, audit: AuditLog) -> None:
         super().__init__(config, audit)
