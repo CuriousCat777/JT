@@ -274,12 +274,33 @@ class AnthropicBackend:
                 from guardian_one.core.web_tools import execute_tool
 
                 # Add assistant's response (with tool_use blocks) to messages
+                assistant_content = []
+                for b in resp.content:
+                    block_type = getattr(b, "type", None)
+                    if block_type == "text":
+                        assistant_content.append({
+                            "type": "text",
+                            "text": getattr(b, "text", ""),
+                        })
+                    elif block_type == "tool_use":
+                        tool_use_id = getattr(b, "id", None)
+                        tool_name = getattr(b, "name", None)
+                        tool_input = getattr(b, "input", None)
+                        if tool_use_id is None or tool_name is None or tool_input is None:
+                            logger.warning("Skipping malformed tool_use block in Anthropic response")
+                            continue
+                        assistant_content.append({
+                            "type": "tool_use",
+                            "id": tool_use_id,
+                            "name": tool_name,
+                            "input": tool_input,
+                        })
+                    else:
+                        logger.debug("Skipping unsupported Anthropic content block type: %r", block_type)
+
                 kwargs["messages"].append({
                     "role": "assistant",
-                    "content": [
-                        {"type": b.type, **({"text": b.text} if b.type == "text" else {"id": b.id, "name": b.name, "input": b.input})}
-                        for b in resp.content
-                    ],
+                    "content": assistant_content,
                 })
 
                 tool_results = []
