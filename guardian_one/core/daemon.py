@@ -290,7 +290,7 @@ class GuardianDaemon:
         """Run the Flask health server in a daemon thread."""
         self._server_thread = threading.Thread(
             target=self._app.run,
-            kwargs={"host": "0.0.0.0", "port": self._port, "use_reloader": False},
+            kwargs={"host": "127.0.0.1", "port": self._port, "use_reloader": False},
             daemon=True,
         )
         self._server_thread.start()

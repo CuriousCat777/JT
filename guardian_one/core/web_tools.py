@@ -195,13 +195,15 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 
 _MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB max download
+_ALLOWED_PORTS = {80, 443, None}  # None = default port for scheme
 
 
 def web_fetch(url: str) -> str:
     """Fetch a web page and return its text content.
 
     Security: validates URL scheme + DNS resolution against private IPs,
-    resolves once to avoid TOCTOU/DNS-rebinding, limits response size.
+    resolves once to avoid TOCTOU/DNS-rebinding, limits response size,
+    restricts ports to 80/443.
     """
     safe, reason = _is_safe_url(url)
     if not safe:
@@ -211,10 +213,14 @@ def web_fetch(url: str) -> str:
         import httpx
         from bs4 import BeautifulSoup
 
-        # Resolve hostname once and connect to the resolved IP to prevent
-        # DNS rebinding between validation and fetch.
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
+
+        # Restrict ports to reduce SSRF surface
+        if parsed.port not in _ALLOWED_PORTS:
+            return f"URL blocked: non-standard port {parsed.port}"
+
+        # Resolve hostname once for DNS-rebinding protection
         infos = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80),
                                    socket.AF_UNSPEC, socket.SOCK_STREAM)
         if not infos:
@@ -228,15 +234,20 @@ def web_fetch(url: str) -> str:
 
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; GuardianOne/1.0)",
-            "Host": hostname,
         }
 
-        # Build URL with resolved IP to prevent DNS rebinding
-        fetch_url = parsed._replace(netloc=f"{resolved_ip}:{parsed.port}" if parsed.port
-                                    else resolved_ip).geturl()
+        if parsed.scheme == "http":
+            # For plain HTTP: rewrite URL to resolved IP to prevent DNS rebinding
+            headers["Host"] = hostname
+            fetch_url = parsed._replace(netloc=f"{resolved_ip}:{parsed.port}" if parsed.port
+                                        else resolved_ip).geturl()
+        else:
+            # For HTTPS: keep original hostname so SNI and certificate
+            # verification remain intact
+            fetch_url = url
 
         with httpx.stream("GET", fetch_url, headers=headers, timeout=15.0,
-                          follow_redirects=False, verify=False if resolved_ip != hostname else True) as resp:
+                          follow_redirects=False) as resp:
             resp.raise_for_status()
 
             # Stream with size limit

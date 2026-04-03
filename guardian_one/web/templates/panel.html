@@ -224,7 +224,7 @@ body {
   .sidebar {
     display: none;
     position: fixed;
-    top: 64px;
+    top: 104px; /* 48px topnav + 56px header */
     left: 0;
     bottom: 0;
     width: 280px;
@@ -236,7 +236,7 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    top: 64px;
+    top: 104px; /* 48px topnav + 56px header */
     background: rgba(0,0,0,0.3);
     z-index: 99;
   }
@@ -247,9 +247,9 @@ body {
   .header { padding: 0 16px; }
   /* PWA standalone: extra top padding for notch */
   @media (display-mode: standalone) {
-    .header { padding-top: env(safe-area-inset-top); height: calc(64px + env(safe-area-inset-top)); }
-    .sidebar { top: calc(64px + env(safe-area-inset-top)); }
-    .mobile-overlay { top: calc(64px + env(safe-area-inset-top)); }
+    .header { padding-top: env(safe-area-inset-top); height: calc(56px + env(safe-area-inset-top)); }
+    .sidebar { top: calc(104px + env(safe-area-inset-top)); }
+    .mobile-overlay { top: calc(104px + env(safe-area-inset-top)); }
   }
 }
 
