@@ -16,7 +16,7 @@ log_dir: "logs"
 ai_engine:
   primary_provider: ollama            # "ollama" or "anthropic"
   fallback_provider: anthropic        # Falls back if primary is unavailable
-  ollama_base_url: "http://localhost:11434"
+  ollama_base_url: "${OLLAMA_BASE_URL:-http://localhost:11434}"
   ollama_model: "llama3"              # Model pulled via: ollama pull llama3
   anthropic_model: "claude-sonnet-4-20250514"
   max_tokens: 2048

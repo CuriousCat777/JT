@@ -1,0 +1,63 @@
+services:
+  guardian:
+    build: .
+    container_name: jt-guardian
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      ollama:
+        condition: service_started
+      open-webui:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - guardian-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: guardian-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    networks:
+      - guardian-net
+    # Uncomment below for GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: guardian-webui
+    volumes:
+      - open-webui-data:/app/backend/data
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - guardian-net
+
+volumes:
+  ollama-data:
+  open-webui-data:
+
+networks:
+  guardian-net:
+    driver: bridge
