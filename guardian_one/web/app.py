@@ -50,6 +50,7 @@ def _build_agents(guardian: GuardianOne) -> None:
     from guardian_one.agents.gmail_agent import GmailAgent
     from guardian_one.agents.web_architect import WebArchitect
     from guardian_one.agents.device_agent import DeviceAgent
+    from guardian_one.varys.agent import VarysAgent
 
     config = guardian.config
     for name, cls, kwargs in [
@@ -60,6 +61,7 @@ def _build_agents(guardian: GuardianOne) -> None:
         ("gmail", GmailAgent, {"data_dir": config.data_dir}),
         ("web_architect", WebArchitect, {}),
         ("device_agent", DeviceAgent, {}),
+        ("varys", VarysAgent, {}),
     ]:
         cfg = config.agents.get(name, AgentConfig(name=name))
         guardian.register_agent(cls(config=cfg, audit=guardian.audit, **kwargs))
@@ -71,6 +73,21 @@ def create_app() -> Flask:
         template_folder=str(Path(__file__).parent / "templates"),
         static_folder=str(Path(__file__).parent / "static"),
     )
+
+    # ------------------------------------------------------------------
+    # VARYS Security Sentinel — API + Chat UI
+    # ------------------------------------------------------------------
+    from guardian_one.varys.api.routes import varys_bp, varys_pages_bp, set_agent
+    app.register_blueprint(varys_bp)
+    app.register_blueprint(varys_pages_bp)
+
+    @app.before_request
+    def _ensure_varys_agent():
+        """Wire VARYS agent into the API on first request."""
+        g = _get_guardian()
+        varys = g.get_agent("varys")
+        if varys:
+            set_agent(varys)
 
     # ------------------------------------------------------------------
     # Pages

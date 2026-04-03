@@ -92,6 +92,10 @@ def _build_agents(guardian: GuardianOne) -> None:
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
+    from guardian_one.varys.agent import VarysAgent
+    varys_cfg = config.agents.get("varys", AgentConfig(name="varys"))
+    guardian.register_agent(VarysAgent(config=varys_cfg, audit=guardian.audit))
+
 
 def _print_validation_report(cfo: CFO) -> None:
     """Print a formatted CFO validation report for presentation."""
