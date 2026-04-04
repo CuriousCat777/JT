@@ -444,13 +444,13 @@ class CFO(BaseAgent):
         return self._accounts.get(name)
 
     def net_worth(self) -> float:
-        return sum(a.balance for a in self._accounts.values())
+        return round(sum(a.balance for a in self._accounts.values()), 2)
 
     def balances_by_type(self) -> dict[str, float]:
         totals: dict[str, float] = {}
         for account in self._accounts.values():
             key = account.account_type.value
-            totals[key] = totals.get(key, 0) + account.balance
+            totals[key] = round(totals.get(key, 0) + account.balance, 2)
         return totals
 
     # ------------------------------------------------------------------
