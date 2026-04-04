@@ -24,18 +24,15 @@ Advisory Role:
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import random
 import shutil
 import subprocess
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-from guardian_one.core.audit import AuditLog, Severity
+from guardian_one.core.audit import AuditLog
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
 from guardian_one.core.db_schema import (
