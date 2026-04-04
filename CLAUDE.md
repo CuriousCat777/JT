@@ -263,7 +263,7 @@ Requires **Python 3.10+** (3.11+ recommended).
 
 ## CI/CD
 
-- **GitHub Actions**: `.github/workflows/compose-health-check.yml` — runs on push/PR to `main` when `docker-compose.yml` changes; validates n8n + Postgres health via docker compose.
+- **GitHub Actions**: `.github/workflows/compose-health-check.yml` — runs on pushes to `main` when `docker-compose.yml` changes, and on all PRs to `main`; validates n8n + Postgres health via docker compose.
 
 ## Development Notes
 
