@@ -173,26 +173,28 @@ def test_install_rails_already_installed(mock_ruby, mock_rails):
 @patch("guardian_one.integrations.rails_gin._run_cmd")
 @patch("guardian_one.integrations.rails_gin.check_rails")
 @patch("guardian_one.integrations.rails_gin.check_ruby")
-def test_install_rails_fresh(mock_ruby, mock_rails_before, mock_cmd):
+def test_install_rails_fresh(mock_ruby, mock_rails, mock_cmd):
     mock_ruby.return_value = FrameworkInfo(
         framework=FrameworkType.RAILS,
         status=ToolStatus.INSTALLED,
         version="ruby 3.3.0",
     )
-    mock_rails_before.return_value = FrameworkInfo(
-        framework=FrameworkType.RAILS,
-        status=ToolStatus.NOT_INSTALLED,
-    )
-    # gem install succeeds, then check_rails succeeds
-    mock_cmd.return_value = (0, "Successfully installed rails-7.1.3", "")
-    with patch("guardian_one.integrations.rails_gin.check_rails") as mock_rails_after:
-        mock_rails_after.return_value = FrameworkInfo(
+    # First call: not installed (triggers gem install), second call: installed (post-install check)
+    mock_rails.side_effect = [
+        FrameworkInfo(
+            framework=FrameworkType.RAILS,
+            status=ToolStatus.NOT_INSTALLED,
+        ),
+        FrameworkInfo(
             framework=FrameworkType.RAILS,
             status=ToolStatus.INSTALLED,
             version="Rails 7.1.3",
-        )
-        result = install_rails()
+        ),
+    ]
+    mock_cmd.return_value = (0, "Successfully installed rails-7.1.3", "")
+    result = install_rails()
     assert result["success"]
+    mock_cmd.assert_called()  # Verify gem install was invoked
 
 
 # ---------------------------------------------------------------
@@ -454,6 +456,40 @@ def test_start_gin_server_success(mock_popen):
         assert result["pid"] == 54321
         assert result["port"] == 9090
         assert "9090" in result["url"]
+
+
+# ---------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------
+
+def test_scaffold_rails_rejects_path_traversal():
+    result = scaffold_rails("../escape")
+    assert not result["success"]
+    assert "Invalid" in result["error"]
+
+
+def test_scaffold_rails_rejects_absolute_path():
+    result = scaffold_rails("/etc/evil")
+    assert not result["success"]
+    assert "Invalid" in result["error"]
+
+
+def test_scaffold_rails_rejects_empty_name():
+    result = scaffold_rails("")
+    assert not result["success"]
+    assert "empty" in result["error"]
+
+
+def test_scaffold_gin_rejects_path_traversal():
+    result = scaffold_gin("../escape")
+    assert not result["success"]
+    assert "Invalid" in result["error"]
+
+
+def test_scaffold_gin_rejects_bad_module_path():
+    result = scaffold_gin("myapp", module_path="my app; rm -rf /")
+    assert not result["success"]
+    assert "Invalid Go module" in result["error"]
 
 
 # ---------------------------------------------------------------

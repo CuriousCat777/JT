@@ -70,6 +70,40 @@ def test_manifest_handles_corrupt_json(audit, data_dir):
     assert lib.list_projects() == []
 
 
+def test_manifest_persists_pid_and_running(audit, data_dir):
+    lib = PowerToolsLibrary(audit=audit, data_dir=data_dir)
+    lib._projects["app"] = ManagedProject(
+        info=ProjectInfo(
+            name="app", framework=FrameworkType.RAILS, path="/tmp/app",
+            port=3000, pid=12345, running=True,
+        ),
+    )
+    lib._save_manifest()
+
+    # Reload — PID 12345 won't be alive, so running should be False
+    lib2 = PowerToolsLibrary(audit=audit, data_dir=data_dir)
+    proj = lib2._projects["app"]
+    assert proj.info.running is False
+    assert proj.info.pid is None  # Stale PID cleared
+
+
+def test_manifest_skips_invalid_framework(audit, data_dir):
+    manifest = Path(data_dir) / "power_tools_manifest.json"
+    manifest.write_text(json.dumps({
+        "projects": {
+            "good": {
+                "name": "good", "framework": "rails", "path": "/tmp/good",
+            },
+            "bad": {
+                "name": "bad", "framework": "nonexistent_framework", "path": "/tmp/bad",
+            },
+        }
+    }))
+    lib = PowerToolsLibrary(audit=audit, data_dir=data_dir)
+    assert "good" in lib._projects
+    assert "bad" not in lib._projects  # Skipped, not crashed
+
+
 # ---------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------

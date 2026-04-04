@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -226,6 +227,48 @@ def install_gin(project_dir: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+# Go module paths: lowercase letters, digits, dots, hyphens, underscores, slashes
+_GO_MODULE_RE = re.compile(r"^[a-zA-Z0-9._\-/]+$")
+
+
+def _validate_app_name(app_name: str) -> str | None:
+    """Validate app_name is a safe single directory component.
+
+    Returns an error message if invalid, None if valid.
+    """
+    if not app_name:
+        return "Application name cannot be empty"
+    if app_name in (".", ".."):
+        return f"Invalid application name: {app_name!r}"
+    separators = {os.sep, "/", "\\"}
+    if os.altsep:
+        separators.add(os.altsep)
+    if any(sep in app_name for sep in separators):
+        return f"Invalid application name (contains path separator): {app_name!r}"
+    if Path(app_name).is_absolute():
+        return f"Invalid application name (absolute path): {app_name!r}"
+    return None
+
+
+def _validate_module_path(module_path: str) -> str | None:
+    """Validate a Go module path contains only safe characters.
+
+    Returns an error message if invalid, None if valid.
+    """
+    if not module_path:
+        return "Module path cannot be empty"
+    if not _GO_MODULE_RE.match(module_path):
+        return (
+            f"Invalid Go module path: {module_path!r}. "
+            "Only letters, digits, dots, hyphens, underscores, and slashes are allowed."
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Project scaffolding
 # ---------------------------------------------------------------------------
 
@@ -245,6 +288,10 @@ def scaffold_rails(
 
     Returns result dict with project path and status.
     """
+    name_err = _validate_app_name(app_name)
+    if name_err:
+        return {"success": False, "error": name_err}
+
     rails_info = check_rails()
     if rails_info.status != ToolStatus.INSTALLED:
         return {
@@ -252,7 +299,7 @@ def scaffold_rails(
             "error": "Rails is not installed. Run install_rails() first.",
         }
 
-    base = Path(parent_dir) if parent_dir else Path.cwd()
+    base = (Path(parent_dir) if parent_dir else Path.cwd()).resolve()
     target = base / app_name
 
     if target.exists():
@@ -300,6 +347,15 @@ def scaffold_gin(
 
     Returns result dict with project path and status.
     """
+    name_err = _validate_app_name(app_name)
+    if name_err:
+        return {"success": False, "error": name_err}
+
+    mod = module_path or app_name
+    mod_err = _validate_module_path(mod)
+    if mod_err:
+        return {"success": False, "error": mod_err}
+
     go_info = check_go()
     if go_info.status != ToolStatus.INSTALLED:
         return {
@@ -307,7 +363,7 @@ def scaffold_gin(
             "error": "Go is not installed. Install Go first (https://go.dev/dl).",
         }
 
-    base = Path(parent_dir) if parent_dir else Path.cwd()
+    base = (Path(parent_dir) if parent_dir else Path.cwd()).resolve()
     target = base / app_name
 
     if target.exists():
@@ -317,7 +373,6 @@ def scaffold_gin(
         }
 
     target.mkdir(parents=True)
-    mod = module_path or app_name
 
     # Initialize Go module
     rc, out, err = _run_cmd(["go", "mod", "init", mod], timeout=30, cwd=str(target))
@@ -478,14 +533,14 @@ def power_tools_status() -> dict[str, Any]:
         "capabilities": {
             "rails": [
                 "scaffold new Rails apps (full-stack or API-only)",
-                "start/stop Rails dev servers",
+                "start Rails dev servers",
                 "database adapters: sqlite3, postgresql, mysql",
                 "integrates with Guardian One web properties",
             ],
             "gin": [
                 "scaffold new Gin apps with starter template",
                 "CORS middleware, health checks, route groups",
-                "start/stop Gin dev servers",
+                "start Gin dev servers",
                 "high-performance Go API backend",
                 "pairs with Rails frontend or standalone",
             ],
@@ -591,13 +646,40 @@ def _gin_cors_template(module: str) -> str:
     return '''package middleware
 
 import (
+\t"os"
+\t"strings"
+
 \t"github.com/gin-gonic/gin"
 )
 
+// allowedOrigin checks the request Origin against the ALLOWED_ORIGINS env var
+// (comma-separated list).  Returns the origin if allowed, empty string otherwise.
+// Set ALLOWED_ORIGINS="*" to allow all origins (development only).
+func allowedOrigin(origin string) string {
+\traw := os.Getenv("ALLOWED_ORIGINS")
+\tif raw == "" {
+\t\treturn ""
+\t}
+\tif raw == "*" {
+\t\treturn "*"
+\t}
+\tfor _, allowed := range strings.Split(raw, ",") {
+\t\tif strings.TrimSpace(allowed) == origin {
+\t\t\treturn origin
+\t\t}
+\t}
+\treturn ""
+}
+
 // CORS returns a middleware handler that sets CORS headers.
+// Configure allowed origins via the ALLOWED_ORIGINS environment variable.
 func CORS() gin.HandlerFunc {
 \treturn func(c *gin.Context) {
-\t\tc.Header("Access-Control-Allow-Origin", "*")
+\t\torigin := allowedOrigin(c.GetHeader("Origin"))
+\t\tif origin != "" {
+\t\t\tc.Header("Access-Control-Allow-Origin", origin)
+\t\t\tc.Header("Vary", "Origin")
+\t\t}
 \t\tc.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 \t\tc.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 

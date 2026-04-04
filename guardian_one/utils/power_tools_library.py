@@ -10,6 +10,7 @@ data sovereignty and audit trails for every framework operation.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,18 +73,45 @@ class PowerToolsLibrary:
     # Persistence
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_pid_alive(pid: int) -> bool:
+        """Check if a process with the given PID is still running."""
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
     def _load_manifest(self) -> None:
         """Load project manifest from disk."""
         if self._manifest_path.exists():
             try:
                 raw = json.loads(self._manifest_path.read_text())
                 for name, data in raw.get("projects", {}).items():
+                    try:
+                        framework = FrameworkType(data["framework"])
+                    except (ValueError, KeyError):
+                        continue  # skip entries with invalid framework values
+
+                    # Restore PID/running and validate against stale processes
+                    saved_pid = data.get("pid")
+                    saved_running = data.get("running", False)
+                    if saved_pid and saved_running:
+                        # Validate the PID is still alive
+                        saved_running = self._is_pid_alive(saved_pid)
+                        if not saved_running:
+                            saved_pid = None
+
                     info = ProjectInfo(
                         name=data["name"],
-                        framework=FrameworkType(data["framework"]),
+                        framework=framework,
                         path=data["path"],
                         created_at=data.get("created_at", ""),
                         port=data.get("port", 0),
+                        pid=saved_pid,
+                        running=saved_running,
                     )
                     self._projects[name] = ManagedProject(
                         info=info,
@@ -107,6 +135,8 @@ class PowerToolsLibrary:
                 "path": mp.info.path,
                 "created_at": mp.info.created_at,
                 "port": mp.info.port,
+                "pid": mp.info.pid,
+                "running": mp.info.running,
                 "managed_by": mp.managed_by,
                 "tags": mp.tags,
                 "last_action": mp.last_action,
