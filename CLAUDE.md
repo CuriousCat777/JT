@@ -86,6 +86,8 @@ logs/                               # Agent logs (gitignored except .gitkeep)
 tests/                              # Test suite
 docs/
 └── deliverables/
+    ├── 01_SHM_CONVERGE_2026.md     # SHM Converge 2026 deliverable
+    ├── 02_BUSINESS_MODEL.md        # Business model deliverable
     └── 03_GO_TO_MARKET.md          # Go-to-market strategy doc
 ```
 
