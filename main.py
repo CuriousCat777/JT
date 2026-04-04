@@ -120,9 +120,11 @@ def _build_agents(guardian: GuardianOne) -> None:
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
     tp_cfg = config.agents.get("teleprompter", AgentConfig(name="teleprompter"))
-    guardian.register_agent(Teleprompter(
-        config=tp_cfg, audit=guardian.audit, data_dir=config.data_dir,
-    ))
+    guardian.register_agent(Teleprompter(config=tp_cfg, audit=guardian.audit))
+
+    from guardian_one.varys.agent import VarysAgent
+    varys_cfg = config.agents.get("varys", AgentConfig(name="varys"))
+    guardian.register_agent(VarysAgent(config=varys_cfg, audit=guardian.audit))
 
 
 def _print_validation_report(cfo: CFO) -> None:

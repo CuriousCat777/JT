@@ -1,258 +1,162 @@
-# Guardian One — Claude Code Project Context
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What This Is
 
-Guardian One is a **multi-agent AI orchestration platform** for personal life management,
-built for Jeremy Paulo Salvino Tabernero. It coordinates autonomous agents that handle
-finance, scheduling, email, meals, websites, smart home devices, and data sovereignty —
-all with encryption, audit trails, and zero data exploitation.
+Guardian One is a **multi-agent AI orchestration platform** for personal life management, built for Jeremy Paulo Salvino Tabernero (Timezone: America/Chicago). It coordinates autonomous agents handling finance, scheduling, email, meals, websites, smart home, and document search — with encryption, audit trails, and zero data exploitation.
 
-## Owner
+The system also powers the **SMH JTMDAI clinical platform** — AI-assisted care transitions to reduce hospital readmissions, with a hospitalist-facing presentation for SHM Converge 2026.
 
-Jeremy Paulo Salvino Tabernero
-Timezone: America/Chicago
+## Build & Test Commands
 
-## CLAUDE.md Maintenance
+```bash
+# Run all agents once
+python main.py
 
-This file is maintained by the **Archivist** agent (`guardian_one/agents/archivist.py`).
-The Archivist is responsible for keeping this document in sync with the current state of
-the codebase whenever structural changes occur (new agents, modules, integrations, etc.).
+# Run tests (200+ in tests/, 3000+ in search/tests/)
+python -m pytest tests/ -v
+python -m pytest search/tests/ -v
+python -m pytest tests/test_web_architect.py -v         # Single test file
+python -m pytest tests/test_cfo_router.py::TestCFORouter::test_net_worth -v  # Single test
+
+# Start services
+python main.py --schedule              # Agent scheduler (interactive)
+python main.py --devpanel              # Flask dev panel on port 5100
+python main.py --devpanel --port 8080  # Custom port
+python main.py --cfo                   # CFO conversational REPL
+python main.py --sandbox               # Sandbox deploy + evaluator
+
+# Document search PoC (no Docker required)
+python search/server.py                # Whoosh-backed search on port 5200
+python search/self_improve.py          # Run test-fix-retest pipeline
+
+# Document search (production engines, requires Docker)
+cd search/ && docker compose up -d     # Start Typesense + Meilisearch
+pip install -r search/requirements.txt
+python search/seed_documents.py --both # Seed both engines
+
+# Website management
+python main.py --websites              # Show site status
+python main.py --website-build all     # Build all sites
+python main.py --website-deploy all    # Deploy all sites
+python main.py --website-sync          # Push dashboards to Notion
+```
 
 ## Architecture
 
 ```
 main.py                              # CLI entry point (25+ commands)
-mcp_server.py                       # Model Context Protocol server (Inspector support)
 guardian_one/
-├── agents/                          # Subordinate agents
-│   ├── chronos.py                   # Schedule & calendar management
+├── agents/                          # Autonomous agents (all extend BaseAgent)
+│   ├── chronos.py                   # Schedule & calendar
 │   ├── archivist.py                 # File & data sovereignty
-│   ├── cfo.py                       # Financial intelligence (Plaid, Empower, Rocket Money)
+│   ├── cfo.py                       # Financial intelligence (Plaid, Empower)
 │   ├── cfo_dashboard.py             # Excel financial dashboards
-│   ├── device_agent.py              # Smart home device management
-│   ├── doordash.py                  # Meal delivery coordination
-│   ├── gmail_agent.py               # Email & inbox monitoring
-│   ├── web_architect.py             # Website security & n8n deployment
-│   └── website_manager.py           # Per-site build/deploy pipelines
+│   ├── device_agent.py              # Smart home device control
+│   ├── doordash.py                  # Meal delivery
+│   ├── gmail_agent.py               # Email monitoring
+│   ├── web_architect.py             # Website security & n8n
+│   └── website_manager.py           # Per-site build/deploy
 ├── core/                            # System infrastructure
-│   ├── guardian.py                   # Central coordinator/orchestrator
-│   ├── base_agent.py                # Agent contract (BaseAgent ABC)
-│   ├── ai_engine.py                 # AI reasoning (Ollama primary + Anthropic fallback)
+│   ├── guardian.py                   # Central coordinator (registers all agents)
+│   ├── base_agent.py                # Agent ABC: initialize() / run() / report()
+│   ├── ai_engine.py                 # LLM layer: Ollama (primary) + Anthropic (fallback)
+│   ├── cfo_router.py                # NL command routing (regex, no LLM needed)
 │   ├── mediator.py                  # Cross-agent conflict resolution
-│   ├── scheduler.py                 # Agent scheduling & intervals
-│   ├── sandbox.py                   # Deployment testing & validation
-│   ├── evaluator.py                 # Performance metrics (5-point scale)
-│   ├── audit.py                     # Immutable audit logging with severity tags
-│   ├── security.py                  # Access control & authentication
-│   ├── security_remediation.py      # Security issue tracking & remediation
-│   ├── cfo_router.py                # Financial data routing
-│   └── config.py                    # Configuration management
+│   ├── scheduler.py                 # Agent scheduling with pause/resume
+│   ├── sandbox.py                   # Deployment testing
+│   ├── evaluator.py                 # 5-point performance scoring
+│   ├── audit.py                     # Immutable audit logging
+│   ├── security.py                  # Access control
+│   ├── security_remediation.py      # Auto-fix security findings
+│   └── config.py                    # YAML config loader
 ├── integrations/                    # External service connectors
+│   ├── ollama_sync.py               # Local LLM model management
 │   ├── notion_sync.py               # Write-only Notion workspace sync
 │   ├── notion_website_sync.py       # Per-site Notion dashboards
-│   ├── notion_remediation_sync.py   # Security remediation Notion sync
-│   ├── n8n_sync.py                  # n8n workflow automation
+│   ├── notion_remediation_sync.py   # Security remediation sync
 │   ├── financial_sync.py            # Plaid/Empower/Rocket Money
+│   ├── plaid_connect.py             # Plaid Link integration
 │   ├── calendar_sync.py             # Google Calendar
 │   ├── gmail_sync.py                # Gmail API
-│   ├── doordash_sync.py             # DoorDash API
-│   ├── ollama_sync.py               # Local Ollama model sync
-│   ├── plaid_connect.py             # Plaid bank account connection
-│   ├── privacy_tools.py             # VPN/privacy services
-│   └── ring_monitor.py              # Ring doorbell monitoring
-├── homelink/                        # H.O.M.E. L.I.N.K. service layer
+│   ├── ring_monitor.py              # Ring security camera
+│   └── n8n_sync.py                  # Workflow automation
+├── homelink/                        # H.O.M.E. L.I.N.K. smart home layer
 │   ├── gateway.py                   # API gateway (rate limit, TLS, circuit breaker)
 │   ├── vault.py                     # AES-256-GCM encrypted credential storage
 │   ├── registry.py                  # Integration catalog with threat models
 │   ├── monitor.py                   # System health monitoring
-│   ├── devices.py                   # Smart device management
-│   ├── drivers.py                   # Device driver interface
-│   ├── automations.py               # Automation rules engine
-│   ├── email_commands.py            # Email-based command interface
-│   └── lan_security.py              # LAN security & network isolation
-├── templates/                       # Agent scaffolding
-│   └── agent_template.py            # Template for creating new agents
-├── utils/                           # Shared utilities
-│   ├── encryption.py                # Encryption utilities
-│   └── notifications.py             # Notification channels (Email, SMS, iMessage, Push)
-└── web/                             # Web interface
-    ├── app.py                       # Flask web application
-    └── templates/
-        ├── panel.html               # Device control panel
-        └── homelink.html            # H.O.M.E. L.I.N.K. dashboard
-config/
-├── guardian_config.yaml             # Agent & system configuration
-├── .env.example                     # Environment variables template
-data/                                # Runtime data (cfo_ledger.json, etc.)
-logs/                                # Application logs
-scripts/
-├── inspect_mcp.sh                   # MCP server inspection
-└── guardian_daemon.ps1              # Windows PowerShell daemon
+│   ├── drivers.py                   # TP-Link Kasa, Philips Hue, Govee device drivers
+│   ├── automations.py               # Schedule-driven room-based device control
+│   ├── devices.py                   # Device registry and state
+│   ├── lan_security.py              # Network security scanning
+│   └── email_commands.py            # Email-triggered home commands
+├── web/                             # Flask dev panel
+│   ├── app.py                       # Web UI on port 5100
+│   ├── search_routes.py             # Document search API blueprint
+│   └── templates/                   # Jinja2 templates
+└── utils/
+    ├── encryption.py                # AES encryption helpers
+    └── notifications.py             # Multi-channel alert system
+search/                              # Document search subsystem
+├── docker-compose.yml               # Typesense 27.1 + Meilisearch 1.12
+├── server.py                        # Standalone Whoosh PoC server (port 5200)
+├── seed_documents.py                # 10 sample clinical/compliance docs
+├── self_improve.py                  # Test-fix-retest pipeline with logging
+├── tests/test_search_comprehensive.py  # 3,099 parameterized tests
+└── logs/                            # Pipeline improvement JSON + markdown logs
+config/guardian_config.yaml          # Agent & system configuration
+tests/                               # 200+ pytest cases (all use fake providers)
 docs/
-├── GUARDIAN_ONE_SYSTEM_PROMPT.md    # AI system prompt documentation
-├── deliverables/                    # Business planning documents
-│   ├── 01_SHM_CONVERGE_2026.md
-│   ├── 02_BUSINESS_MODEL.md
-│   └── 03_GO_TO_MARKET.md
-└── security/                        # Security & privacy policies
-    ├── INFORMATION_SECURITY_POLICY.md
-    └── PRIVACY_POLICY.md
-tests/                               # 203 pytest test cases (25 test files)
+├── GUARDIAN_ONE_SYSTEM_PROMPT.md
+├── deliverables/                    # SHM presentation, business model, GTM
+├── security/                        # HIPAA, privacy policies
+└── design/                          # Feature design specs
 ```
-
-## Agent Contract
-
-All agents extend `BaseAgent` (core/base_agent.py) which defines:
-
-**Required lifecycle methods:**
-1. `initialize()` — One-time setup (connect APIs, load state)
-2. `run()` — Periodic execution cycle, returns `AgentReport`
-3. `report()` — Structured report without side effects
-4. `shutdown()` — Clean up resources
-
-**Built-in AI reasoning:**
-- `think(prompt, context, temperature, max_tokens)` — Get AI reasoning
-- `think_quick(prompt, context)` — Quick one-shot reasoning (text only)
-- Falls back gracefully if no AI engine available
-
-**Agent system prompts** are defined per-agent in `AGENT_SYSTEM_PROMPTS` dict within base_agent.py.
-
-**Status tracking** via `AgentStatus` enum: IDLE, RUNNING, ERROR, DISABLED
-
-## AI Engine
-
-Configured in `guardian_config.yaml`:
-- **Primary**: Ollama (local data sovereignty, model: llama3)
-- **Fallback**: Anthropic (claude-sonnet-4-20250514)
-- Temperature: 0.3 (deterministic), max tokens: 2048
-- Memory: enabled, max 50 messages per agent
-
-## Managed Websites
-
-Two web properties managed via `WebsiteManager` + `WebArchitect`:
-
-| Domain | Type | Purpose |
-|--------|------|---------|
-| **drjeremytabernero.org** | Professional | Personal/professional site, CV, publications |
-| **jtmdai.com** | Business | JTMD AI — AI solutions, services, case studies |
-
-### Website CLI Commands
-```bash
-python main.py --websites              # Show all site status
-python main.py --website-build all     # Build all sites
-python main.py --website-build drjeremytabernero.org  # Build one site
-python main.py --website-deploy all    # Deploy all sites
-python main.py --website-sync          # Push dashboards to Notion
-```
-
-### Website Notion Integration
-Each site gets its own Notion dashboard page under a "Website Management" parent,
-showing build status, page inventory, security posture, and deploy history.
-All data passes through the content classification gate (no PHI/PII ever leaves).
 
 ## Key Design Principles
 
 1. **Data sovereignty** — User owns all data, encrypted at rest/transit
 2. **Write-only Notion** — Push operational data only, never read for decisions
-3. **Content gate** — PHI/PII patterns blocked before any external sync
-4. **Audit everything** — Immutable log of all agent actions
+3. **Content gate** — PHI/PII regex scanner blocks sensitive data before any external sync
+4. **Audit everything** — Immutable append-only log of all agent actions
 5. **On-demand credentials** — Tokens loaded from Vault per-request, never cached
-6. **Agent isolation** — Each agent has defined allowed_resources
-7. **Local-first AI** — Ollama preferred over cloud APIs for data sovereignty
+6. **Agent isolation** — Each agent has defined `allowed_resources` on its config
+7. **Ollama-first AI** — Local LLM (sovereign), Anthropic as cloud fallback only
 
-## Security Architecture
+## Agent Pattern
 
-- **Vault**: AES-256-GCM encrypted credential storage with per-credential scoping
-- **Gateway**: TLS enforcement, rate limiting, circuit breakers for all external calls
-- **Registry**: Every integration has a threat model (top 5 risks) and rollback procedure
-- **Content Classification**: Regex-based PHI/PII scanner blocks sensitive data from sync
-- **Audit Log**: Append-only, severity-tagged, immutable records
-- **LAN Security**: Network isolation and monitoring for smart home devices
-- **Security Remediation**: Tracked per-domain with Notion sync and auto-verify
+All agents extend `BaseAgent` (core/base_agent.py) and implement:
+- `initialize()` — setup, load config
+- `run()` — main execution
+- `report()` — return status dict
+
+Agents are registered in `guardian.py` via `_build_agents()` and accessed through the central `GuardianOne` coordinator.
+
+## Flask Integration
+
+The web dev panel (`guardian_one/web/app.py`) runs on port 5100. To add new routes, register a blueprint:
+```python
+from guardian_one.web.search_routes import search_bp
+app.register_blueprint(search_bp)
+```
+
+Search blueprint provides: `GET /search/typesense`, `GET /search/meilisearch`, `GET /search/ui/*`
 
 ## Configuration
 
-Primary config: `config/guardian_config.yaml`
-Environment template: `config/.env.example`
-Runtime env: `.env` (NOTION_TOKEN, API keys, Plaid, Twilio, etc.)
+- Primary config: `config/guardian_config.yaml`
+- Environment: `.env` (NOTION_TOKEN, API keys — never commit)
+- Config loaded via `load_config()` from `guardian_one/core/config.py`
 
-### Notification System
-- Channels: Email, SMS (Twilio), iMessage (macOS), Push
-- Quiet hours: 22:00–07:00 (CRITICAL bypasses)
-- Rate limit: 3 per 2-hour window
+## Managed Websites
 
-## Running Tests
+| Domain | Purpose |
+|--------|---------|
+| drjeremytabernero.org | Professional site, CV, publications |
+| jtmdai.com | JTMD AI — AI solutions, services |
 
-```bash
-pytest tests/ -v                              # All tests (203 passing)
-pytest tests/test_website_manager.py          # Website manager
-pytest tests/test_notion_website_sync.py      # Notion website sync
-pytest tests/test_web_architect.py            # WebArchitect
-pytest tests/test_homelink.py                 # H.O.M.E. L.I.N.K.
-pytest tests/test_devices.py                  # Device management
-pytest tests/test_security_remediation.py     # Security remediation
-pytest tests/test_ai_engine.py                # AI engine
-pytest tests/test_encryption.py               # Encryption utilities
-pytest tests/test_notifications.py            # Notification channels
-```
+## Cross-Device
 
-Tests use fake providers — no real API calls. Async tests via pytest-asyncio (mode: auto).
-
-## Common CLI Commands
-
-```bash
-python main.py                         # Run all agents once
-python main.py --schedule              # Start interactive agent scheduler
-python main.py --dashboard             # Generate CFO Excel dashboard
-python main.py --sync                  # Continuous financial sync
-python main.py --calendar-sync         # Sync Google Calendar
-python main.py --gmail                 # Gmail inbox status
-python main.py --cfo                   # Interactive financial assistant
-python main.py --websites              # Website management
-python main.py --homelink              # H.O.M.E. L.I.N.K. status
-python main.py --brief                 # Weekly security brief
-python main.py --sandbox               # Sandbox deployment
-python main.py --notify                # Daily notifications
-```
-
-## Dependencies
-
-Key packages (see `requirements.txt` and `pyproject.toml`):
-- **Core**: pyyaml, cryptography, python-dotenv, schedule, rich
-- **AI**: ollama, anthropic, httpx
-- **Web**: flask, mcp
-- **Smart home**: python-kasa, phue
-- **Dashboards**: openpyxl
-- **Testing**: pytest, pytest-asyncio
-
-## Development Notes
-
-- Python >=3.10, no Docker yet (on roadmap)
-- All agents extend `BaseAgent` (core/base_agent.py) with initialize/run/report/shutdown
-- Tests use fake providers (no real API calls)
-- Config loaded via `load_config()` from core/config.py
-- MCP server (`mcp_server.py`) exposes Guardian One tools for external AI integration
-- CLI entry point also installable as `guardian` via pyproject.toml
-- Multi-device: This CLAUDE.md carries full context across machines via git
-
-## Cross-Device Setup
-
-Clone on any machine and Claude Code will understand the project:
-```bash
-git clone <repo-url> ~/JT
-cd ~/JT
-# Claude Code reads this CLAUDE.md automatically
-```
-
-Both machines (current + ROG X 64GB) share context through this repo.
-Always pull latest before starting work on a new device.
-
-### ASUS ROG X (64GB) — Archivist Duties
-
-The Archivist agent secures, maintains, monitors, and guards the file system on the
-ASUS ROG machine. Responsibilities include:
-- **File system integrity** — Monitor for unauthorized changes, corruption, or drift
-- **Data sovereignty enforcement** — Ensure sensitive files remain encrypted at rest
-- **Backup verification** — Validate that critical data and config are recoverable
-- **CLAUDE.md stewardship** — Keep this file accurate as the codebase evolves
-- **Audit trail** — Log all file system operations through the immutable audit log
+This CLAUDE.md carries full context across machines via git. Always pull latest before starting work on a new device. Both machines (current + ROG X 64GB) share context through this repo.

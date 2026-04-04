@@ -1,0 +1,27 @@
+{% extends "search/_base.html" %}
+{% block title %}Document Search (Typesense){% endblock %}
+{% block badge_class %}badge-typesense{% endblock %}
+{% block badge_text %}Typesense{% endblock %}
+{% block search_script %}
+<script src="https://cdn.jsdelivr.net/npm/typesense-instantsearch-adapter@2/dist/typesense-instantsearch-adapter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4"></script>
+<script>
+  const typesenseAdapter = new TypesenseInstantSearchAdapter({
+    server: {
+      apiKey: "{{ typesense_api_key }}",
+      nodes: [{ host: "{{ typesense_host }}", port: "{{ typesense_port }}", protocol: "http" }],
+    },
+    additionalSearchParameters: {
+      query_by: "title,content,author,tags",
+      highlight_full_fields: "title,content",
+    },
+  });
+  window.__searchClient = typesenseAdapter.searchClient;
+  window.__indexName = "documents";
+  window.__sortItems = [
+    { label: "Relevance", value: "documents" },
+    { label: "Date (newest)", value: "documents/sort/date_modified:desc" },
+    { label: "Date (oldest)", value: "documents/sort/date_modified:asc" },
+  ];
+</script>
+{% endblock %}

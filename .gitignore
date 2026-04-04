@@ -66,8 +66,16 @@ credentials.json
 token.json
 *.backup.json
 
-# Claude workspace
-.claude/
+# Claude workspace — allow hooks and settings, ignore the rest
+.claude/*
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/settings.json
+
+# Search pipeline artifacts (generated, timestamped)
+search/logs/*.json
+search/logs/*.md
+!search/logs/.gitkeep
 
 # Data exports (may contain PII)
 data/*.xlsx
