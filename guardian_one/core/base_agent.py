@@ -10,10 +10,16 @@ import abc
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.config import AgentConfig
+from guardian_one.core.reasoning import (
+    ReActConfig,
+    ReActEngine,
+    ReActTrace,
+    build_pretext,
+)
 
 if TYPE_CHECKING:
     from guardian_one.core.ai_engine import AIEngine, AIResponse
@@ -205,6 +211,138 @@ class BaseAgent(abc.ABC):
         """
         response = self.think(prompt, context=context)
         return response.content if response.success else ""
+
+    # ------------------------------------------------------------------
+    # PRETEXT — structured prompt engineering
+    # ------------------------------------------------------------------
+
+    def think_pretext(
+        self,
+        *,
+        purpose: str,
+        task: str,
+        expectations: str = "Provide a concise, actionable response.",
+        examples: list[str] | None = None,
+        xtra_context: dict[str, Any] | str | None = None,
+        tone: str = "concise and actionable",
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AIResponse:
+        """AI reasoning using the PRETEXT framework.
+
+        Builds a structured prompt from the seven PRETEXT components
+        and sends it through the AI engine.
+
+        Args:
+            purpose: Why is this reasoning needed?
+            task: The specific task to perform.
+            expectations: What a good response looks like.
+            examples: Optional output examples.
+            xtra_context: Additional data or constraints.
+            tone: Communication style.
+            temperature: Override default temperature.
+            max_tokens: Override default response length.
+
+        Returns:
+            AIResponse with the AI's structured reasoning.
+        """
+        if self._ai is None:
+            from guardian_one.core.ai_engine import AIResponse
+            return AIResponse(
+                content="[AI not available — running in deterministic mode]",
+                provider="none",
+                model="none",
+            )
+
+        role = AGENT_SYSTEM_PROMPTS.get(self._name, DEFAULT_SYSTEM_PROMPT)
+
+        pretext = build_pretext(
+            purpose=purpose,
+            role=role,
+            expectations=expectations,
+            task=task,
+            examples=examples,
+            xtra_context=xtra_context,
+            tone=tone,
+        )
+
+        system_prompt, user_prompt = pretext.render()
+
+        response = self._ai.reason(
+            agent_name=self._name,
+            prompt=user_prompt,
+            system=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        self.log(
+            "ai_pretext_reasoning",
+            details={
+                "provider": response.provider,
+                "model": response.model,
+                "tokens": response.tokens_used,
+                "latency_ms": response.latency_ms,
+                "purpose": purpose[:100],
+                "task": task[:100],
+            },
+        )
+
+        return response
+
+    # ------------------------------------------------------------------
+    # ReAct — Reasoning + Acting loop
+    # ------------------------------------------------------------------
+
+    def think_react(
+        self,
+        task: str,
+        actions: dict[str, Callable[[str], str]] | None = None,
+        context: dict[str, Any] | None = None,
+        max_iterations: int = 5,
+    ) -> ReActTrace:
+        """AI reasoning using the ReAct framework.
+
+        Runs a Thought → Action → Observation loop until the AI reaches
+        a conclusion or exhausts the iteration limit.
+
+        Args:
+            task: The task/question to reason about.
+            actions: Dict mapping action names to callable handlers.
+                     Each handler takes a string input and returns a string.
+            context: Optional structured data to include.
+            max_iterations: Max Thought→Action→Observation cycles.
+
+        Returns:
+            ReActTrace with the full reasoning chain and conclusion.
+        """
+        system = AGENT_SYSTEM_PROMPTS.get(self._name, DEFAULT_SYSTEM_PROMPT)
+
+        config = ReActConfig(
+            max_iterations=max_iterations,
+            actions=actions or {},
+            system_prompt=system,
+        )
+
+        engine = ReActEngine(config=config)
+        trace = engine.run(
+            ai_reason_fn=self.think,
+            task=task,
+            context=context,
+        )
+
+        self.log(
+            "ai_react_reasoning",
+            details={
+                "iterations": trace.iteration_count,
+                "steps": len(trace.steps),
+                "completed": trace.completed,
+                "task": task[:100],
+                "conclusion_preview": trace.conclusion[:200] if trace.conclusion else "",
+            },
+        )
+
+        return trace
 
     @abc.abstractmethod
     def initialize(self) -> None:

@@ -1,17 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-# Only run on Claude Code web (remote) sessions
+# Only run in remote (web) environments
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-# Install main project dependencies (allow partial failures for packages with build issues)
-pip install -r "$CLAUDE_PROJECT_DIR/requirements.txt" || pip install --ignore-installed pyyaml cryptography python-dotenv schedule rich openpyxl flask pytest pytest-asyncio ollama anthropic httpx python-kasa whoosh
+PIP_FLAGS="--break-system-packages --quiet"
 
-# Install search subsystem dependencies
-pip install whoosh pyyaml 2>/dev/null || true
-pip install -r "$CLAUDE_PROJECT_DIR/search/requirements.txt" 2>/dev/null || true
+# Fix cffi/cryptography (system cryptography may have broken cffi binding)
+pip install cffi $PIP_FLAGS 2>/dev/null || true
+pip install cryptography --ignore-installed $PIP_FLAGS 2>/dev/null || true
 
-# Set PYTHONPATH so guardian_one package is importable
-echo "export PYTHONPATH=\"$CLAUDE_PROJECT_DIR\"" >> "$CLAUDE_ENV_FILE"
+# Install core dependencies (--ignore-installed avoids debian RECORD issues)
+pip install --ignore-installed pyyaml python-dotenv schedule rich openpyxl \
+  flask pytest pytest-asyncio ollama anthropic httpx mcp fpdf2 \
+  $PIP_FLAGS 2>/dev/null || true
+
+# Install the project in editable mode so imports resolve
+pip install -e "$CLAUDE_PROJECT_DIR" --no-deps $PIP_FLAGS 2>/dev/null || true
+
+# Ensure PYTHONPATH includes the project root (idempotent)
+env_line="export PYTHONPATH=\"$CLAUDE_PROJECT_DIR:\${PYTHONPATH:-}\""
+if ! grep -Fqx "$env_line" "$CLAUDE_ENV_FILE" 2>/dev/null; then
+  echo "$env_line" >> "$CLAUDE_ENV_FILE"
+fi

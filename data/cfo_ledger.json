@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-04-02T14:11:53.189703+00:00",
+  "saved_at": "2026-04-04T21:39:21.853995+00:00",
   "accounts": [
     {
       "name": "Essentia Health 457(b) Deferred Compensation",
@@ -60565,22 +60565,22 @@
   "net_worth_history": [
     {
       "date": "2026-03-07",
-      "net_worth": 95162.0105,
+      "net_worth": 95162.01,
       "by_type": {
-        "retirement": 157665.5805,
-        "checking": 67277.54000000001,
-        "savings": 574.9300000000001,
+        "retirement": 157665.58,
+        "checking": 67277.54,
+        "savings": 574.93,
         "credit_card": -8791.98,
         "loan": -121564.06
       }
     },
     {
       "date": "2026-03-16",
-      "net_worth": 95162.0105,
+      "net_worth": 95162.01,
       "by_type": {
-        "retirement": 157665.5805,
-        "checking": 67277.54000000001,
-        "savings": 574.9300000000001,
+        "retirement": 157665.58,
+        "checking": 67277.54,
+        "savings": 574.93,
         "credit_card": -8791.98,
         "loan": -121564.06
       }
@@ -60590,7 +60590,7 @@
       "net_worth": 135613.73,
       "by_type": {
         "retirement": 133712.84,
-        "checking": 4897.9400000000005,
+        "checking": 4897.94,
         "savings": 364.93,
         "credit_card": -3361.98
       }
@@ -60600,7 +60600,7 @@
       "net_worth": 135613.73,
       "by_type": {
         "retirement": 133712.84,
-        "checking": 4897.9400000000005,
+        "checking": 4897.94,
         "savings": 364.93,
         "credit_card": -3361.98
       }
@@ -60610,17 +60610,37 @@
       "net_worth": 135613.73,
       "by_type": {
         "retirement": 133712.84,
-        "checking": 4897.9400000000005,
+        "checking": 4897.94,
         "savings": 364.93,
         "credit_card": -3361.98
       }
     },
     {
       "date": "2026-04-02",
-      "net_worth": 135613.72999999998,
+      "net_worth": 135613.73,
       "by_type": {
         "retirement": 133712.84,
-        "checking": 4897.9400000000005,
+        "checking": 4897.94,
+        "savings": 364.93,
+        "credit_card": -3361.98
+      }
+    },
+    {
+      "date": "2026-04-03",
+      "net_worth": 135613.73,
+      "by_type": {
+        "retirement": 133712.84,
+        "checking": 4897.94,
+        "savings": 364.93,
+        "credit_card": -3361.98
+      }
+    },
+    {
+      "date": "2026-04-04",
+      "net_worth": 135613.73,
+      "by_type": {
+        "retirement": 133712.84,
+        "checking": 4897.94,
         "savings": 364.93,
         "credit_card": -3361.98
       }
