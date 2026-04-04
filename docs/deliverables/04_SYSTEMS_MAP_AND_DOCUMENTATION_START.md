@@ -154,5 +154,5 @@ The mapping effort is considered baseline-complete when:
 - 100% of deployed systems are listed with owner, auth, dependencies, and runbook.
 - Every external endpoint has data classification and risk notes.
 - Every critical system has a tested recovery/rollback procedure.
-- Documentation diff is updated in every infra-affecting PR.
+- The system map, system register, and related docs are updated in every infra-affecting PR.
 
