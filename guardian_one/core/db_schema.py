@@ -164,11 +164,10 @@ class DevSession:
 SQL_SCHEMA = """
 -- Archivist Dev Coach — Relational Schema
 -- ACID-compliant, foreign key enforced, indexed for performance
--- Compatible: SQLite 3.35+ / PostgreSQL 14+
-
-PRAGMA journal_mode=WAL;
-PRAGMA foreign_keys=ON;
-
+-- SQLite 3.35+ schema
+-- NOTE: SQLite connection PRAGMAs such as `journal_mode=WAL` and
+-- `foreign_keys=ON` must be applied during SQLite connection setup,
+-- not embedded in shared DDL.
 -- Core technology registry
 CREATE TABLE IF NOT EXISTS tech_entries (
     id              TEXT PRIMARY KEY,
