@@ -17,7 +17,7 @@ Provides REST endpoints for the iOS teleprompter app:
   GET  /api/tips               — Recent advisory tips
   GET  /api/health             — Health check
 
-Auth: JWT bearer token (validated against Guardian One vault).
+Auth: Static bearer token authentication using the configured API token.
 CORS: Restricted to localhost + the PWA origin.
 
 Run:
