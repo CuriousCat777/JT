@@ -162,9 +162,15 @@ def seed_typesense(host: str = "http://localhost:8108", api_key: str = "guardian
     """Create collection and index documents in Typesense."""
     import typesense
 
+    from urllib.parse import urlparse
+    parsed = urlparse(host if "://" in host else f"http://{host}")
+    ts_host = parsed.hostname or "localhost"
+    ts_port = str(parsed.port or 8108)
+    ts_protocol = parsed.scheme or "http"
+
     client = typesense.Client({
         "api_key": api_key,
-        "nodes": [{"host": "localhost", "port": "8108", "protocol": "http"}],
+        "nodes": [{"host": ts_host, "port": ts_port, "protocol": ts_protocol}],
         "connection_timeout_seconds": 10,
     })
 

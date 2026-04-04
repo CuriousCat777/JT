@@ -67,6 +67,11 @@ token.json
 !.claude/hooks/**
 !.claude/settings.json
 
+# Search pipeline artifacts (generated, timestamped)
+search/logs/*.json
+search/logs/*.md
+!search/logs/.gitkeep
+
 # Data exports (may contain PII)
 data/*.xlsx
 data/*.csv

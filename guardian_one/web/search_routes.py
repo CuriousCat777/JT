@@ -55,9 +55,11 @@ def search_typesense():
 
     filter_by = []
     if category:
-        filter_by.append(f"category:={category}")
+        safe_cat = category.replace("`", "").replace("\\", "")
+        filter_by.append(f"category:=`{safe_cat}`")
     if doc_type:
-        filter_by.append(f"doc_type:={doc_type}")
+        safe_dt = doc_type.replace("`", "").replace("\\", "")
+        filter_by.append(f"doc_type:=`{safe_dt}`")
 
     try:
         client = _get_typesense_client()

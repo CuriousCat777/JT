@@ -64,7 +64,7 @@
 
   <script>
     function docTypeIcon(t){return{PDF:"icon-pdf",DOCX:"icon-docx",PPTX:"icon-pptx",XLSX:"icon-xlsx"}[t]||"icon-web"}
-    function complianceBadge(s){var m={active:"badge-active",expired:"badge-expired",under_review:"badge-under-review","N/A":"badge-na"};return'<span class="badge '+(m[s]||"badge-na")+'">'+s.replace("_"," ")+"</span>"}
+    function complianceBadge(s){if(!s)s="N/A";var m={active:"badge-active",expired:"badge-expired",under_review:"badge-under-review","N/A":"badge-na"};return'<span class="badge '+(m[s]||"badge-na")+'">'+(s||"N/A").replace("_"," ")+"</span>"}
 
     var search=instantsearch({indexName:window.__indexName,searchClient:window.__searchClient});
     search.addWidgets([

@@ -55,7 +55,7 @@ SCHEMA = Schema(
     id=ID(stored=True, unique=True),
     title=TEXT(stored=True, field_boost=3.0),
     author=TEXT(stored=True, field_boost=1.5),
-    category=TEXT(stored=True),
+    category=KEYWORD(stored=True, lowercase=True),
     doc_type=KEYWORD(stored=True),
     tags=KEYWORD(stored=True, commas=True, scorable=True),
     compliance_status=KEYWORD(stored=True),
@@ -122,7 +122,7 @@ def search_index(q="", category="", doc_type="", compliance_status="",
         from whoosh import query as Q
         filters = []
         if category:
-            filters.append(Q.Term("category", category.lower()))
+            filters.append(Q.Term("category", category))
         if doc_type:
             filters.append(Q.Term("doc_type", doc_type))
         if compliance_status:
@@ -134,13 +134,13 @@ def search_index(q="", category="", doc_type="", compliance_status="",
 
         results = searcher.search(
             query,
-            limit=page * per_page,
+            limit=None,
             filter=filter_query,
         )
         results.fragmenter.maxchars = 200
         results.fragmenter.surround = 40
 
-        total = len(results)
+        total = results.estimated_length()
         start = (page - 1) * per_page
         end = min(start + per_page, total)
         page_hits = []
@@ -184,7 +184,8 @@ START_TIME = datetime.now(timezone.utc)
 
 @app.after_request
 def add_cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    allowed_origin = os.environ.get("CORS_ORIGIN", "http://localhost:5200")
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
     response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
@@ -350,7 +351,7 @@ function doSearch(){
   const params=new URLSearchParams();
   if(state.q)params.set("q",state.q);
   params.set("page",state.page);params.set("per_page",state.per_page);
-  Object.entries(state.filters).forEach(([k,vals])=>{if(vals.length===1)params.set(k,vals[0])});
+  Object.entries(state.filters).forEach(([k,vals])=>{if(vals.length>0)params.set(k,vals[0])});
   document.getElementById("results").innerHTML='<div class="skel"><div class="card"></div><div class="card"></div><div class="card"></div></div>';
   fetch(API+"?"+params.toString()).then(r=>r.json()).then(renderResults).catch(err=>{
     document.getElementById("results").innerHTML=`<div class="empty"><p>Search error</p><p>${err.message}</p></div>`;
@@ -373,7 +374,7 @@ function renderResults(data){
     const ic="i-"+(hit.doc_type||"web");
     const bc="b-"+(hit.compliance_status||"NA").replace("/","");
     h+=`<div class="card"><div class="card-h"><div class="icon ${ic}">${hit.doc_type||"?"}</div><div><div class="card-t">${esc(hit.title)}</div></div></div>`;
-    h+=`<div class="card-s">${hit.content_snippet||esc((hit.content||"").slice(0,200))}</div>`;
+    h+=`<div class="card-s">${hit.content_snippet?sanitize(hit.content_snippet):esc((hit.content||"").slice(0,200))}</div>`;
     h+=`<div class="card-m"><span>${esc(hit.author)}</span><span>${hit.date_modified}</span><span>${esc(hit.category)}</span>`;
     h+=`<span class="bdg ${bc}">${(hit.compliance_status||"N/A").replace(/_/g," ")}</span></div></div>`;
   });
@@ -390,6 +391,7 @@ function renderResults(data){
 
 function goPg(p){state.page=p;doSearch()}
 function esc(s){if(!s)return"";const d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sanitize(s){if(!s)return"";var t=esc(s);return t.replace(/&lt;b class=&quot;match [^&]*&quot;&gt;/g,"<b>").replace(/&lt;\/b&gt;/g,"</b>")}
 
 document.getElementById("q").addEventListener("input",e=>{
   clearTimeout(debounceTimer);
