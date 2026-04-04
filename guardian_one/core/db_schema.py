@@ -147,7 +147,7 @@ class SystemComponent:
 class DevSession:
     """A tracked development session for analytics."""
     id: str
-    project_id: str
+    project_id: str | None
     start_time: str
     end_time: str | None = None
     tech_used: list[str] = field(default_factory=list)
