@@ -236,21 +236,20 @@ def web_fetch(url: str) -> str:
             "User-Agent": "Mozilla/5.0 (compatible; GuardianOne/1.0)",
         }
 
-        # Rewrite URL to resolved IP to prevent DNS rebinding.
-        # Set Host header so the server routes correctly.
-        headers["Host"] = hostname if not parsed.port else f"{hostname}:{parsed.port}"
-        ip_netloc = f"[{resolved_ip}]" if ip.version == 6 else resolved_ip
-        if parsed.port:
-            ip_netloc = f"{ip_netloc}:{parsed.port}"
-        fetch_url = parsed._replace(netloc=ip_netloc).geturl()
-
-        # For HTTPS: disable cert hostname verification since we're
-        # connecting to an IP, but we already validated the hostname resolves
-        # to this IP. The Host header + SNI still carry the real hostname.
-        verify = parsed.scheme != "https"
+        if parsed.scheme == "http":
+            # Rewrite plain HTTP to resolved IP to prevent DNS rebinding.
+            headers["Host"] = hostname if not parsed.port else f"{hostname}:{parsed.port}"
+            ip_netloc = f"[{resolved_ip}]" if ip.version == 6 else resolved_ip
+            if parsed.port:
+                ip_netloc = f"{ip_netloc}:{parsed.port}"
+            fetch_url = parsed._replace(netloc=ip_netloc).geturl()
+        else:
+            # Keep original HTTPS hostname so TLS uses correct SNI and
+            # certificate verification remains enabled.
+            fetch_url = url
 
         with httpx.stream("GET", fetch_url, headers=headers, timeout=15.0,
-                          follow_redirects=False, verify=verify) as resp:
+                          follow_redirects=False, verify=True) as resp:
             resp.raise_for_status()
 
             # Stream with size limit
