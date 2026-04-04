@@ -33,7 +33,7 @@ This file is intended to become the canonical "where everything is" reference.
   - Chronos
   - Archivist
   - GmailAgent
-  - DoorDash
+  - DoorDashAgent
   - WebArchitect
   - WebsiteManager
   - DeviceAgent
