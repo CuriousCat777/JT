@@ -60,7 +60,7 @@ guardian_one/
 │   ├── registry.py                 # Integration catalog with threat models
 │   ├── monitor.py                  # System health monitoring
 │   ├── devices.py                  # IoT device inventory & lifecycle
-│   ├── drivers.py                  # Device drivers (Kasa, Hue, Govee, Flipper)
+│   ├── drivers.py                  # Device drivers (Kasa, Hue, Govee)
 │   ├── automations.py              # Scene engine & event triggers
 │   ├── lan_security.py             # LAN/VLAN security auditing
 │   └── email_commands.py           # Email-based device commands
