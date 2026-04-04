@@ -75,6 +75,12 @@ def create_app() -> Flask:
     )
 
     # ------------------------------------------------------------------
+    # Search — document search routes
+    # ------------------------------------------------------------------
+    from guardian_one.web.search_routes import search_bp
+    app.register_blueprint(search_bp)
+
+    # ------------------------------------------------------------------
     # VARYS Security Sentinel — API + Chat UI
     # ------------------------------------------------------------------
     from guardian_one.varys.api.routes import varys_bp, varys_pages_bp, set_agent

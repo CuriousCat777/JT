@@ -59,10 +59,10 @@ def get_alert(alert_id: str):
     err = _require_agent()
     if err:
         return err
-    alerts = _agent.get_alerts()
-    for a in alerts:
-        if a["id"] == alert_id:
-            return jsonify(a)
+    # Search all alerts (no pagination limit) to find by ID
+    for alert in _agent._alerts:
+        if alert.id == alert_id:
+            return jsonify(alert.to_dict())
     return jsonify({"error": "Alert not found"}), 404
 
 
