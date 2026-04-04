@@ -354,17 +354,17 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
-    parser.add_argument("--archivist", action="store_true",
-                        help="The Archivist — Developer Coach (tier list, wisdom, system inventory)")
-    parser.add_argument("--archivist-tier", action="store_true",
-                        help="Show the Archivist's opinionated tech tier list")
-    parser.add_argument("--archivist-wisdom", action="store_true",
+    parser.add_argument("--dev-coach", dest="archivist", action="store_true",
+                        help="Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--dev-coach-tier", dest="archivist_tier", action="store_true",
+                        help="Show the Developer Coach's opinionated tech tier list")
+    parser.add_argument("--dev-coach-wisdom", dest="archivist_wisdom", action="store_true",
                         help="Get a Fireship-style developer wisdom tip")
-    parser.add_argument("--archivist-system", action="store_true",
+    parser.add_argument("--dev-coach-system", dest="archivist_system", action="store_true",
                         help="Show system inventory (hardware/software)")
-    parser.add_argument("--archivist-stack", type=str, default=None,
+    parser.add_argument("--dev-coach-stack", dest="archivist_stack", type=str, default=None,
                         help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
-    parser.add_argument("--archivist-audit", type=str, default=None,
+    parser.add_argument("--dev-coach-audit", dest="archivist_audit", type=str, default=None,
                         help="Run web dev audit on a domain")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
