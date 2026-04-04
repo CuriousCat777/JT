@@ -28,6 +28,7 @@ from guardian_one.core.security import (
 from guardian_one.homelink.gateway import Gateway, ServiceConfig, RateLimitConfig
 from guardian_one.homelink.vault import Vault
 from guardian_one.homelink.registry import IntegrationRegistry
+from guardian_one.integrations.n8n_sync import GatewayN8nProvider
 from guardian_one.homelink.monitor import Monitor
 from guardian_one.utils.power_tools_library import PowerToolsLibrary
 

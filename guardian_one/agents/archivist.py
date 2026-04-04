@@ -130,6 +130,7 @@ class Archivist(BaseAgent):
         self._privacy_tools: dict[str, PrivacyTool] = {}
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
+        self._backups: dict[str, BackupRecord] = {}
         self._power_tools: Any | None = None  # PowerToolsLibrary, injected by Guardian
 
     def initialize(self) -> None:
@@ -580,11 +581,17 @@ class Archivist(BaseAgent):
                 "target_count": len(by_device[dev_id]),
             }
 
+        never_backed_up = [
+            r.name for r in self._backups.values()
+            if r.backup_status == BackupStatus.MISSING
+        ]
+
         return {
             "total": total,
             "by_status": by_status,
             "stale_count": len(stale),
             "stale_names": [r.name for r in stale],
+            "never_backed_up": never_backed_up,
             "devices_registered": len(self._devices),
             "by_device": sorted_devices,
         }
@@ -788,6 +795,13 @@ class Archivist(BaseAgent):
         recommendations.extend(privacy.get("recommendations", []))
         actions.append("Ran privacy audit.")
 
+        # Backup audit
+        backup_summary = self.backup_summary()
+        if backup_summary.get("never_backed_up"):
+            for name in backup_summary["never_backed_up"]:
+                alerts.append(f"{name} has NEVER been backed up.")
+        actions.append("Checked backup status.")
+
         # Power tools audit
         pt_count = 0
         if self._power_tools is not None:
@@ -795,11 +809,12 @@ class Archivist(BaseAgent):
             pt_count = len(pt_projects)
             actions.append(f"Power tools library: {pt_count} managed project(s).")
 
+        device_count = len(self._devices) if hasattr(self, "_devices") else 0
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
             agent_name=self.name,
             status=AgentStatus.IDLE.value,
-            summary=f"Tracking {len(self._file_index)} files, {len(self._data_sources)} data sources, {pt_count} power tool project(s).",
+            summary=f"Tracking {len(self._file_index)} files, {len(self._data_sources)} data sources, {device_count} devices, {pt_count} power tool project(s).",
             actions_taken=actions,
             recommendations=recommendations,
             alerts=alerts,
@@ -807,6 +822,7 @@ class Archivist(BaseAgent):
                 "files": len(self._file_index),
                 "sources": len(self._data_sources),
                 "privacy": privacy,
+                "backups": backup_summary,
                 "power_tools_projects": pt_count,
             },
         )

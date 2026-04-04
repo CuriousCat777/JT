@@ -83,6 +83,9 @@ def create_app(
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Max-Age"] = "3600"
+        # Preflight requests get a 204 with no body
+        if request.method == "OPTIONS" and response.status_code == 200:
+            response.status_code = 204
         return response
 
     # ------------------------------------------------------------------
@@ -91,6 +94,8 @@ def create_app(
     def require_auth(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            if request.method == "OPTIONS":
+                return "", 200
             auth = request.headers.get("Authorization", "")
             if not auth.startswith("Bearer "):
                 return jsonify({"error": "Missing authorization"}), 401
@@ -120,7 +125,7 @@ def create_app(
     # ------------------------------------------------------------------
     # Script generation (AI)
     # ------------------------------------------------------------------
-    @app.route("/api/generate-script", methods=["POST"])
+    @app.route("/api/generate-script", methods=["POST", "OPTIONS"])
     @require_auth
     def generate_script():
         err = _ensure_agent()

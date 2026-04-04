@@ -7,6 +7,7 @@ failover when nodes become unreachable.
 
 import json
 import logging
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -111,6 +112,8 @@ class NodeMonitor:
 
     def _ping_node(self, hostname: str) -> bool:
         """Check if a node is reachable via network ping."""
+        if not re.match(r"^[a-zA-Z0-9._-]+$", hostname):
+            return False
         try:
             result = subprocess.run(
                 ["ping", "-c", "1", "-W", "2", hostname],

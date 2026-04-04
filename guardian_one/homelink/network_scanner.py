@@ -97,6 +97,8 @@ class NetworkScanner:
         audit: AuditLog | None = None,
         known_macs: set[str] | None = None,
     ) -> None:
+        if not re.match(r"^[\d]{1,3}(\.[\d]{1,3}){3}/[\d]{1,2}$", subnet):
+            raise ValueError(f"Invalid subnet format: {subnet}")
         self._subnet = subnet
         self._audit = audit
         self._known_macs: set[str] = {m.lower() for m in (known_macs or set())}
