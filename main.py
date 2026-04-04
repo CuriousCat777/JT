@@ -452,13 +452,20 @@ def main() -> None:
 
     if getattr(args, 'vault_init', False) or getattr(args, 'vault_status', False) or getattr(args, 'vault_store', None):
         import os
+        from getpass import getpass
         from rich.console import Console
         from rich.table import Table
         from guardian_one.homelink.vault import Vault
         from dotenv import dotenv_values
 
         console = Console()
-        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "guardian2026")
+        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "")
+        if not passphrase:
+            if sys.stdin.isatty():
+                passphrase = getpass("  Enter vault master passphrase: ").strip()
+            if not passphrase:
+                console.print("\n  [red]✗[/red] GUARDIAN_MASTER_PASSPHRASE not set and no passphrase provided.")
+                return
         vault_path = Path(config.data_dir) / "vault.enc"
         vault = Vault(vault_path, passphrase=passphrase)
 
@@ -565,8 +572,14 @@ def main() -> None:
         from guardian_one.homelink.vault import Vault
 
         console = Console()
-        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "guardian2026")
+        passphrase = os.environ.get("GUARDIAN_MASTER_PASSPHRASE", "")
         vault_path = Path(config.data_dir) / "vault.enc"
+        if not passphrase:
+            console.print("  [yellow]GUARDIAN_MASTER_PASSPHRASE not set.[/yellow]")
+            passphrase = getpass("  Enter vault master passphrase: ").strip()
+            if not passphrase:
+                console.print("  [red]✗[/red] Vault master passphrase is required.")
+                return
         vault = Vault(vault_path, passphrase=passphrase)
 
         # All connections Guardian One needs, grouped by priority
@@ -636,7 +649,8 @@ def main() -> None:
 
                 hint = f" → {url}" if url else ""
                 try:
-                    value = input(f"  {key_name} ({description}){hint}\n    > ").strip()
+                    console.print(f"  {key_name} ({description}){hint}")
+                    value = getpass("    > ").strip()
                 except (EOFError, KeyboardInterrupt):
                     console.print("\n\n  Setup interrupted. Progress saved.")
                     break

@@ -305,7 +305,7 @@ class EpicIntelFeed:
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._conn = sqlite3.connect(str(self._db_path))
+            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
@@ -388,7 +388,7 @@ class EpicIntelFeed:
             for article in articles:
                 article.relevance_score = _score_relevance(article)
                 try:
-                    self.conn.execute(
+                    cursor = self.conn.execute(
                         "INSERT OR IGNORE INTO articles "
                         "(content_hash, title, url, summary, source, category, "
                         "published, fetched_at, relevance_score) "
@@ -398,7 +398,7 @@ class EpicIntelFeed:
                          article.published, article.fetched_at,
                          _score_relevance(article)),
                     )
-                    if self.conn.total_changes:
+                    if cursor.rowcount > 0:
                         stats["new_articles"] += 1
                 except sqlite3.IntegrityError:
                     pass  # Duplicate — already exists

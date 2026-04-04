@@ -1255,10 +1255,12 @@ class NotionSync:
             if ts:
                 text = f"{ts[:19]} — {text}"
             # Classify content before pushing
-            safe_text = classify_content(text)
-            if safe_text != text:
-                safe_text = f"[REDACTED — PHI/PII detected] {agent}: {action}"
-            blocks.append(self._paragraph(safe_text))
+            if classify_content(text, "operational"):
+                blocks.append(self._paragraph(text))
+            else:
+                blocks.append(self._paragraph(
+                    f"[REDACTED — PHI/PII detected] {agent}: {action}"
+                ))
 
         blocks.append(self._divider())
 
@@ -1266,15 +1268,22 @@ class NotionSync:
         if vault_health:
             blocks.append(self._heading("Vault Health", level=2))
             blocks.append(self._paragraph(
-                f"Total credentials: {vault_health.get('total_keys', 0)}"
+                f"Total credentials: {vault_health.get('total_credentials', 0)}"
             ))
-            if vault_health.get("expiring_soon"):
+            services = vault_health.get("services", [])
+            if services:
                 blocks.append(self._paragraph(
-                    f"Expiring soon: {', '.join(vault_health['expiring_soon'])}"
+                    f"Services: {', '.join(services)}"
                 ))
-            if vault_health.get("needs_rotation"):
+            expired = vault_health.get("expired", 0)
+            if expired:
                 blocks.append(self._paragraph(
-                    f"Needs rotation: {', '.join(vault_health['needs_rotation'])}"
+                    f"Expired: {expired}"
+                ))
+            due = vault_health.get("due_for_rotation", 0)
+            if due:
+                blocks.append(self._paragraph(
+                    f"Due for rotation: {due}"
                 ))
 
         blocks.append(self._divider())

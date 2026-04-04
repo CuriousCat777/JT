@@ -1866,26 +1866,27 @@ async function loadIntelFeed() {
       const relColor = relPct >= 50 ? 'var(--green)' : relPct > 0 ? 'var(--yellow)' : 'var(--text-muted)';
       const starIcon = a.starred ? '&#9733;' : '&#9734;';
       const starColor = a.starred ? 'var(--yellow)' : 'var(--text-muted)';
-      const catBadge = a.category ? `<span style="font-size:10px;padding:1px 6px;background:var(--accent-glow);border-radius:3px;color:var(--accent);">${a.category}</span>` : '';
+      const catBadge = a.category ? `<span style="font-size:10px;padding:1px 6px;background:var(--accent-glow);border-radius:3px;color:var(--accent);">${esc(a.category)}</span>` : '';
+      const safeUrl = (a.url && /^https?:\/\//.test(a.url)) ? escAttr(a.url) : '#';
 
       html += `<div style="padding:10px 0;border-bottom:1px solid var(--border-subtle);">
         <div style="display:flex;justify-content:space-between;align-items:start;">
           <div style="flex:1;">
-            <a href="${a.url}" target="_blank" style="color:var(--text-primary);font-weight:600;text-decoration:none;font-size:12px;">${a.title}</a>
+            <a href="${safeUrl}" target="_blank" rel="noopener" style="color:var(--text-primary);font-weight:600;text-decoration:none;font-size:12px;">${esc(a.title)}</a>
             <div style="margin-top:3px;font-size:11px;color:var(--text-muted);">
-              ${a.source} ${catBadge}
+              ${esc(a.source)} ${catBadge}
               <span style="color:${relColor};font-weight:600;margin-left:6px;">${relPct}% relevant</span>
             </div>
-            ${a.summary ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);line-height:1.5;">${a.summary.substring(0, 200)}${a.summary.length > 200 ? '...' : ''}</div>` : ''}
+            ${a.summary ? `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);line-height:1.5;">${esc(a.summary.substring(0, 200))}${a.summary.length > 200 ? '...' : ''}</div>` : ''}
           </div>
-          <span style="cursor:pointer;font-size:16px;color:${starColor};margin-left:8px;" onclick="starArticle(${a.id})">${starIcon}</span>
+          <span style="cursor:pointer;font-size:16px;color:${starColor};margin-left:8px;" onclick="starArticle(${parseInt(a.id) || 0})">${starIcon}</span>
         </div>
       </div>`;
     }
     html += '</div>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<div style="color:var(--red);">Feed error: ${e.message}</div>`;
+    el.innerHTML = `<div style="color:var(--red);">Feed error: ${esc(e.message)}</div>`;
   }
 }
 
@@ -1893,8 +1894,8 @@ async function refreshIntelFeed() {
   const el = document.getElementById('intelFeedContent');
   if (el) el.innerHTML = '<div style="color:var(--text-muted);">Fetching RSS feeds...</div>';
   try {
-    const result = await api('/api/epic/news/refresh', { method: 'POST' });
-    toast(`Feeds checked: ${result.feeds_checked}, New articles: ${result.new_articles}, Errors: ${result.errors}`);
+    const result = await apiPost('/api/epic/news/refresh');
+    toast(`Feeds checked: ${result.feeds_checked || 0}, New articles: ${result.new_articles || 0}, Errors: ${result.errors || 0}`);
     loadIntelFeed();
   } catch (e) {
     toast('Feed refresh failed: ' + e.message);
@@ -1903,7 +1904,7 @@ async function refreshIntelFeed() {
 }
 
 async function starArticle(id) {
-  await api(`/api/epic/news/${id}/star`, { method: 'POST' });
+  await apiPost(`/api/epic/news/${id}/star`);
   loadIntelFeed();
 }
 
@@ -1921,7 +1922,7 @@ async function runSqlQuery() {
     const data = await resp.json();
 
     if (data.error) {
-      el.innerHTML = `<div style="color:var(--red);font-size:11px;padding:8px;background:var(--red-dim);border-radius:4px;">${data.error}</div>`;
+      el.innerHTML = `<div style="color:var(--red);font-size:11px;padding:8px;background:var(--red-dim);border-radius:4px;">${esc(data.error)}</div>`;
       return;
     }
 
@@ -1934,7 +1935,7 @@ async function runSqlQuery() {
     html += '<div style="overflow-x:auto;max-height:300px;"><table style="width:100%;font-size:11px;border-collapse:collapse;">';
     html += '<thead><tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--bg-card);">';
     for (const col of data.columns) {
-      html += `<th style="padding:4px 8px;text-align:left;white-space:nowrap;">${col}</th>`;
+      html += `<th style="padding:4px 8px;text-align:left;white-space:nowrap;">${esc(col)}</th>`;
     }
     html += '</tr></thead><tbody>';
     for (const row of data.rows) {
@@ -1942,14 +1943,14 @@ async function runSqlQuery() {
       for (const col of data.columns) {
         let val = row[col] ?? '';
         if (typeof val === 'string' && val.length > 80) val = val.substring(0, 80) + '...';
-        html += `<td style="padding:4px 8px;white-space:nowrap;">${val}</td>`;
+        html += `<td style="padding:4px 8px;white-space:nowrap;">${esc(String(val))}</td>`;
       }
       html += '</tr>';
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<div style="color:var(--red);font-size:11px;">${e.message}</div>`;
+    el.innerHTML = `<div style="color:var(--red);font-size:11px;">${esc(e.message)}</div>`;
   }
 }
 

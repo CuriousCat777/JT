@@ -993,16 +993,11 @@ def create_app() -> Flask:
     # API — Epic Pantheon (physician builder integration status)
     # ------------------------------------------------------------------
 
-    _intel_feed = None
-
     def _get_intel_feed():
-        nonlocal _intel_feed
-        if _intel_feed is None:
-            from guardian_one.integrations.epic_intel_feed import EpicIntelFeed
-            g = _get_guardian()
-            db_path = Path(g.config.data_dir) / "epic_intel.db"
-            _intel_feed = EpicIntelFeed(db_path=db_path)
-        return _intel_feed
+        from guardian_one.integrations.epic_intel_feed import EpicIntelFeed
+        g = _get_guardian()
+        db_path = Path(g.config.data_dir) / "epic_intel.db"
+        return EpicIntelFeed(db_path=db_path)
 
     @app.route("/api/epic/news")
     def api_epic_news():
@@ -1011,10 +1006,13 @@ def create_app() -> Flask:
         category = request.args.get("category")
         source = request.args.get("source")
         search_q = request.args.get("q")
-        min_rel = float(request.args.get("min_relevance", 0))
         starred = request.args.get("starred") == "1"
-        limit = min(int(request.args.get("limit", 25)), 100)
-        offset = int(request.args.get("offset", 0))
+        try:
+            min_rel = float(request.args.get("min_relevance", 0))
+            limit = min(int(request.args.get("limit", 25)), 100)
+            offset = int(request.args.get("offset", 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid query parameters: min_relevance must be a number, limit and offset must be integers."}), 400
 
         if search_q:
             articles = feed.search(search_q, limit=limit)
