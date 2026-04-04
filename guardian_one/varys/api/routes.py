@@ -48,8 +48,8 @@ def list_alerts():
         return err
     severity = request.args.get("severity")
     status = request.args.get("status")
-    page = request.args.get("page", 1, type=int)
-    limit = request.args.get("limit", 20, type=int)
+    page = max(1, request.args.get("page", 1, type=int))
+    limit = max(1, min(100, request.args.get("limit", 20, type=int)))
     alerts = _agent.get_alerts(severity=severity, status=status, page=page, limit=limit)
     return jsonify({"alerts": alerts, "page": page, "limit": limit})
 
@@ -127,7 +127,7 @@ def list_rules():
     err = _require_agent()
     if err:
         return err
-    return jsonify({"rules": _agent._sigma.get_rules()})
+    return jsonify({"rules": _agent.get_rules()})
 
 
 # ── Chat ──────────────────────────────────────────────────────

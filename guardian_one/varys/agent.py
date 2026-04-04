@@ -105,12 +105,14 @@ class VarysAgent(BaseAgent):
         self._auth_collector = AuthLogCollector()
         self._events_processed = 0
         self._last_run: str = ""
+        self._last_risk: RiskScore | None = None
 
     def initialize(self) -> None:
         """Load detection rules and initialize subsystems."""
         self._set_status(AgentStatus.RUNNING)
         self._sigma.load_rules()
         self._anomaly.initialize()
+        self._set_status(AgentStatus.IDLE)
         self.log(
             "varys_initialized",
             details={
@@ -158,8 +160,9 @@ class VarysAgent(BaseAgent):
             if response_action:
                 actions.append(response_action)
 
-        # 5. Compute risk score
+        # 5. Compute risk score (cached for side-effect-free report())
         risk = self._risk.compute(self._alerts)
+        self._last_risk = risk
 
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
@@ -184,7 +187,9 @@ class VarysAgent(BaseAgent):
 
     def report(self) -> AgentReport:
         """Return current VARYS status without side effects."""
-        risk = self._risk.compute(self._alerts)
+        risk = self._last_risk or RiskScore(
+            overall=0, endpoint=0, network=0, identity=0, data=0, trend="stable"
+        )
         active_alerts = [a for a in self._alerts if a.status == AlertStatus.NEW]
         return AgentReport(
             agent_name=self.name,
@@ -203,6 +208,10 @@ class VarysAgent(BaseAgent):
                 "last_run": self._last_run,
             },
         )
+
+    def get_rules(self) -> list[dict[str, Any]]:
+        """Return all loaded Sigma detection rules."""
+        return self._sigma.get_rules()
 
     # ── Alert management ──────────────────────────────────────────
 
