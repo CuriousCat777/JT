@@ -216,7 +216,7 @@ def install_gin(project_dir: str) -> dict[str, Any]:
         }
 
     rc, out, err = _run_cmd(
-        ["go", "get", "-u", "github.com/gin-gonic/gin"],
+        ["go", "-C", str(project), "get", "-u", "github.com/gin-gonic/gin"],
         timeout=120,
         cwd=project_dir,
     )
