@@ -258,3 +258,96 @@ def test_proposals_with_partial_time_data():
     mediator.submit_proposal(Proposal(agent="archivist", action="b", resource="r2"))
     conflicts = mediator.check_conflicts()
     assert len(conflicts) == 0
+
+
+# ------------------------------------------------------------------
+# Budget exceeded conflicts
+# ------------------------------------------------------------------
+
+
+def _make_mediator_with_budget(budget: float) -> Mediator:
+    audit = AuditLog(log_dir=Path(tempfile.mkdtemp()))
+    return Mediator(audit=audit, budget_limit=budget)
+
+
+def test_budget_exceeded_cheaper_wins():
+    """When combined cost exceeds budget, the cheaper proposal wins."""
+    mediator = _make_mediator_with_budget(500.0)
+    mediator.submit_proposal(Proposal(
+        agent="cfo", action="payment", resource="accounts", cost=200.0,
+    ))
+    mediator.submit_proposal(Proposal(
+        agent="doordash", action="order", resource="food", cost=400.0,
+    ))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 1
+    assert budget_conflicts[0].resolution == Resolution.APPROVE_FIRST
+
+
+def test_budget_exceeded_second_cheaper():
+    """Second proposal is cheaper — approve second."""
+    mediator = _make_mediator_with_budget(500.0)
+    mediator.submit_proposal(Proposal(
+        agent="doordash", action="order", resource="food", cost=400.0,
+    ))
+    mediator.submit_proposal(Proposal(
+        agent="cfo", action="payment", resource="accounts", cost=200.0,
+    ))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 1
+    assert budget_conflicts[0].resolution == Resolution.APPROVE_SECOND
+
+
+def test_budget_exceeded_equal_cost_defers():
+    """Equal costs defer to owner."""
+    mediator = _make_mediator_with_budget(500.0)
+    mediator.submit_proposal(Proposal(
+        agent="cfo", action="payment", resource="accounts", cost=300.0,
+    ))
+    mediator.submit_proposal(Proposal(
+        agent="doordash", action="order", resource="food", cost=300.0,
+    ))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 1
+    assert budget_conflicts[0].resolution == Resolution.DEFER_TO_OWNER
+
+
+def test_no_budget_conflict_within_limit():
+    """Proposals under budget should not trigger a budget conflict."""
+    mediator = _make_mediator_with_budget(1000.0)
+    mediator.submit_proposal(Proposal(
+        agent="cfo", action="payment", resource="accounts", cost=200.0,
+    ))
+    mediator.submit_proposal(Proposal(
+        agent="doordash", action="order", resource="food", cost=300.0,
+    ))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 0
+
+
+def test_no_budget_conflict_without_limit():
+    """No budget limit set (default 0) — no budget conflicts triggered."""
+    mediator = _make_mediator()
+    mediator.submit_proposal(Proposal(
+        agent="cfo", action="payment", resource="r1", cost=9999.0,
+    ))
+    mediator.submit_proposal(Proposal(
+        agent="doordash", action="order", resource="r2", cost=9999.0,
+    ))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 0
+
+
+def test_no_budget_conflict_without_costs():
+    """Proposals without cost fields should not trigger budget conflicts."""
+    mediator = _make_mediator_with_budget(500.0)
+    mediator.submit_proposal(Proposal(agent="chronos", action="a", resource="r1"))
+    mediator.submit_proposal(Proposal(agent="archivist", action="b", resource="r2"))
+    conflicts = mediator.check_conflicts()
+    budget_conflicts = [c for c in conflicts if c.conflict_type == ConflictType.BUDGET_EXCEEDED]
+    assert len(budget_conflicts) == 0

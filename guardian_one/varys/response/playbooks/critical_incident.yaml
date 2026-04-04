@@ -1,0 +1,19 @@
+name: Critical Incident Response
+trigger: severity == critical
+steps:
+  - action: isolate_host
+    target: affected_host
+    auto: true
+  - action: revoke_tokens
+    target: affected_user
+    auto: false
+    requires_approval: true
+  - action: alert
+    channels:
+      - console
+      - email
+    auto: true
+  - action: generate_report
+    auto: true
+  - action: escalate_to_human
+    auto: true

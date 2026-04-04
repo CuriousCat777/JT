@@ -1,11 +1,11 @@
-# Guardian One — Claude Code Project Context
+# CLAUDE.md
 
 ## What This Is
 
 Guardian One is a **multi-agent AI orchestration platform** for personal life management,
 built for Jeremy Paulo Salvino Tabernero. It coordinates autonomous agents that handle
-finance, scheduling, email, meals, websites, and data sovereignty — all with encryption,
-audit trails, and zero data exploitation.
+finance, scheduling, email, meals, websites, IoT/smart-home devices, and data sovereignty
+— all with encryption, audit trails, and zero data exploitation.
 
 ## Owner
 
@@ -15,7 +15,8 @@ Timezone: America/Chicago
 ## Architecture
 
 ```
-main.py                         # CLI entry point (25+ commands)
+main.py                             # CLI entry point (35+ commands)
+mcp_server.py                       # MCP server (stdio/SSE) — exposes Guardian tools to Claude
 guardian_one/
 ├── agents/                     # Subordinate agents
 │   ├── chronos.py              # Schedule & calendar management
@@ -54,32 +55,74 @@ guardian_one/
 │   └── monitor.py              # System health monitoring
 └── utils/                      # Shared utilities
 config/
-├── guardian_config.yaml        # Agent & system configuration
-tests/                          # 200+ pytest test cases
+├── guardian_config.yaml            # Agent & system configuration
+├── .env.example                    # Environment variable template
+scripts/
+├── guardian_daemon.ps1             # Windows daemon scheduler (PowerShell)
+├── inspect_mcp.sh                  # MCP inspector launch helper
+data/
+├── cfo_ledger.json                 # Financial ledger (daily net-worth snapshots)
+logs/                               # Agent logs (gitignored except .gitkeep)
+tests/                              # Test suite
+docs/
+└── deliverables/
+    ├── 01_SHM_CONVERGE_2026.md     # SHM Converge 2026 deliverable
+    ├── 02_BUSINESS_MODEL.md        # Business model deliverable
+    ├── 01_SHM_CONVERGE_2026.md     # SHM Converge 2026 deliverable
+    ├── 02_BUSINESS_MODEL.md        # Business model deliverable
+    └── 03_GO_TO_MARKET.md          # Go-to-market strategy doc
 ```
 
-## Managed Websites
+## Key Design Principles
 
-Two active web properties managed via `WebsiteManager` + `WebArchitect`:
+1. **Data sovereignty** — User owns all data, encrypted at rest and in transit
+2. **Notion is not decision input** — Push operational data to Notion; allow operational reads only for idempotency/maintenance, never for agent decision-making
+3. **Content gate** — PHI/PII patterns blocked before any external sync
+4. **Audit everything** — Immutable log of all agent actions
+5. **On-demand credentials** — Tokens loaded from the encrypted Vault on demand and not persisted in plaintext or stored long-term on agent objects
+6. **Agent isolation** — Each agent has defined `allowed_resources`
+7. **Local-first AI** — Ollama (local) is the primary AI provider; Claude API is the cloud fallback
 
-| Domain | Type | Purpose |
-|--------|------|---------|
-| **drjeremytabernero.org** | Professional | Personal/professional site, CV, publications |
-| **jtmdai.com** | Business | JTMD AI — AI solutions, services, case studies |
+## Agent System
 
-### Website CLI Commands
+The orchestrated/registered agents extend `BaseAgent` (`core/base_agent.py`), which defines three lifecycle methods:
+- `initialize()` — Setup and resource loading
+- `run()` — Main execution logic
+- `report()` — Generate status report
+
+These agents are registered with `GuardianOne` (the coordinator) via `register_agent()` in `main.py`.
+Helper/support components that live under `guardian_one/agents/` may not inherit from `BaseAgent` and are not necessarily part of the coordinator-managed lifecycle.
+
+### Registered Agents
+
+| Agent | File | Purpose |
+|-------|------|---------|
+| Chronos | `agents/chronos.py` | Calendar, scheduling, routines |
+| Archivist | `agents/archivist.py` | File management, data sovereignty, privacy |
+| CFO | `agents/cfo.py` | Financial intelligence, net-worth tracking, bills |
+| DoorDash | `agents/doordash.py` | Meal delivery coordination |
+| Gmail | `agents/gmail_agent.py` | Inbox monitoring, Rocket Money CSV parsing |
+| WebArchitect | `agents/web_architect.py` | Website security, n8n workflows, deployments |
+| DeviceAgent | `agents/device_agent.py` | IoT/smart-home device management |
+
+## AI Engine
+
+The AI Engine (`core/ai_engine.py`) provides `ai.reason()` for LLM-powered reasoning:
+- **Primary**: Ollama (local, `llama3`) — true data sovereignty
+- **Fallback**: Anthropic Claude API — smarter but sends data externally
+- Supports per-agent conversation memory
+- Config in `guardian_config.yaml` under `ai_engine:`
+
+## MCP Server
+
+`mcp_server.py` exposes Guardian One capabilities via the Model Context Protocol:
 ```bash
-python main.py --websites              # Show all site status
-python main.py --website-build all     # Build all sites
-python main.py --website-build drjeremytabernero.org  # Build one site
-python main.py --website-deploy all    # Deploy all sites
-python main.py --website-sync          # Push dashboards to Notion
+python mcp_server.py                    # stdio transport (default)
+python mcp_server.py --transport sse    # SSE transport on port 8080
+npx @modelcontextprotocol/inspector python mcp_server.py  # Inspect tools
 ```
 
-### Website Notion Integration
-Each site gets its own Notion dashboard page under a "Website Management" parent,
-showing build status, page inventory, security posture, and deploy history.
-All data passes through the content classification gate (no PHI/PII ever leaves).
+## H.O.M.E. L.I.N.K. (Smart Home)
 
 ## The Archivist — Developer Coach
 
@@ -117,66 +160,134 @@ python main.py --archivist-audit jtmdai.com  # Web dev audit for a domain
 
 ## Key Design Principles
 
-1. **Data sovereignty** — User owns all data, encrypted at rest/transit
-2. **Write-only Notion** — Push operational data only, never read for decisions
-3. **Content gate** — PHI/PII patterns blocked before any external sync
-4. **Audit everything** — Immutable log of all agent actions
-5. **On-demand credentials** — Tokens loaded from Vault per-request, never cached
-6. **Agent isolation** — Each agent has defined allowed_resources
+## Managed Websites
 
-## Security Architecture
+Two active web properties managed via `WebsiteManager` + `WebArchitect`:
+
+| Domain | Type | Status | Purpose |
+|--------|------|--------|---------|
+| **drjeremytabernero.org** | Professional | Down (needs redeployment) | Personal/professional site, CV, publications |
+| **jtmdai.com** | Business | Live | JTMD AI — AI solutions, services, case studies |
+
+## Agent Pattern
 
 - **Vault**: AES-256-GCM encrypted credential storage with per-credential scoping
 - **Gateway**: TLS enforcement, rate limiting, circuit breakers for all external calls
 - **Registry**: Every integration has a threat model (top 5 risks) and rollback procedure
 - **Content Classification**: Regex-based PHI/PII scanner blocks sensitive data from sync
 - **Audit Log**: Append-only, severity-tagged, immutable records
+- **Connector Audit**: Attack surface review for all Claude/MCP connectors
+- **Security Remediation**: Tracked per-domain with Notion sync and automated verification
 
 ## Configuration
 
-Primary config: `config/guardian_config.yaml`
-Environment: `.env` (NOTION_TOKEN, API keys, etc.)
+- **Primary config**: `config/guardian_config.yaml`
+- **Environment**: `.env` (NOTION_TOKEN, API keys, etc.) — see `config/.env.example`
+- **Config loading**: `load_config()` from `core/config.py` returns typed config object
 
-## Running Tests
+## Flask Integration
 
 ```bash
-pytest tests/ -v                       # All tests (~200+)
-pytest tests/test_website_manager.py   # Website manager tests
-pytest tests/test_notion_website_sync.py  # Notion website sync tests
-pytest tests/test_web_architect.py     # WebArchitect tests
+pytest tests/ -v                          # All tests (720+ test functions across 26 files)
+pytest tests/test_agents.py               # All agent tests
+pytest tests/test_guardian.py             # Core guardian tests
+pytest tests/test_homelink.py             # H.O.M.E. L.I.N.K. tests
+pytest tests/test_devices.py              # Device management tests
+pytest tests/test_ai_engine.py            # AI engine tests
+pytest tests/test_cfo_router.py           # CFO router tests
+pytest tests/test_security_remediation.py # Security remediation tests
 ```
+
+Tests use fake providers (no real API calls). Async tests use `pytest-asyncio` with `asyncio_mode = "auto"`.
 
 ## Common CLI Commands
 
 ```bash
+# Core operations
 python main.py                         # Run all agents once
 python main.py --schedule              # Start agent scheduler
+python main.py --agent NAME            # Run a single agent
+python main.py --summary               # Print daily summary
+
+# Financial
 python main.py --dashboard             # Generate CFO Excel dashboard
+python main.py --validate              # CFO validation report (detailed)
 python main.py --sync                  # Continuous financial sync
+python main.py --connect               # Connect bank accounts via Plaid
+python main.py --cfo                   # Interactive CFO assistant (conversational)
+python main.py --csv PATH              # Parse Rocket Money CSV
+
+# Calendar & Email
+python main.py --calendar              # Today's schedule
+python main.py --calendar-week         # This week's schedule
 python main.py --calendar-sync         # Sync Google Calendar
+python main.py --calendar-auth         # Authorize Google Calendar (OAuth)
 python main.py --gmail                 # Gmail inbox status
-python main.py --websites              # Website management
-python main.py --homelink              # H.O.M.E. L.I.N.K. status
+
+# Websites
+python main.py --websites              # Show all site status
+python main.py --website-build DOMAIN  # Build a site (or 'all')
+python main.py --website-deploy DOMAIN # Deploy a site (or 'all')
+python main.py --website-sync          # Push website dashboards to Notion
+python main.py --notion-sync           # Full Notion workspace sync
+
+# Smart Home (H.O.M.E. L.I.N.K.)
+python main.py --devices               # Full device dashboard
+python main.py --device-audit          # Device security audit
+python main.py --rooms                 # Room layout with devices
+python main.py --scene movie           # Activate a scene (movie, work, away, goodnight)
+python main.py --home-event wake       # Fire event (wake, sleep, leave, arrive, sunrise, sunset)
+python main.py --flipper               # Flipper Zero device profiles
+python main.py --homelink              # H.O.M.E. L.I.N.K. service status
 python main.py --brief                 # Weekly security brief
-python main.py --sandbox               # Sandbox deployment
+
+# Security
+python main.py --security-review       # Security remediation review (all domains)
+python main.py --security-review DOMAIN # Review a single domain
+python main.py --security-sync         # Push remediation status to Notion
+python main.py --connector-audit       # Audit Claude connector attack surface
+
+# Notifications
+python main.py --notify                # Daily review + notifications (email/SMS)
+python main.py --notify-test           # Test notification delivery
+
+# Dev Panel
+python main.py --devpanel              # Start web dev panel (port 5100)
+python main.py --sandbox               # Deploy in sandbox for testing
 ```
+
+## Path-Specific Rules
+
+- `guardian_one/agents/` — Each file is a self-contained agent. Use sub-agents for parallel research when modifying multiple agents simultaneously.
+- `guardian_one/core/` — Critical infrastructure. Always read existing code before modifying. Run tests after any change.
+- `guardian_one/integrations/` — External API connectors. Never hardcode credentials. All calls must go through Gateway.
+- `guardian_one/homelink/` — Security-sensitive layer. Changes require extra care with encryption and access control.
+- `tests/` — Test files mirror the source structure. When modifying source, update corresponding tests.
+- `config/` — Configuration files. Validate YAML syntax after edits.
+
+## Sub-Agent Configuration
+
+When working on complex tasks, use sub-agents with isolation:
+- Use `isolation: "worktree"` for changes that might conflict with ongoing work
+- Delegate independent research tasks to parallel sub-agents
+- Use the Explore agent type for codebase discovery across unfamiliar modules
+- Keep agent teams focused: one agent per concern (e.g., one for tests, one for implementation)
 
 ## Development Notes
 
-- Python 3.11+, no Docker yet (on roadmap)
-- All agents extend `BaseAgent` (core/base_agent.py) with initialize/run/report
-- Tests use fake providers (no real API calls)
-- Config loaded via `load_config()` from core/config.py
+- All agents extend `BaseAgent` with `initialize`/`run`/`report`
+- Tests use fake providers — no real API calls in test suite
+- Config loaded via `load_config()` from `core/config.py`
+- New agents can be scaffolded from `guardian_one/templates/agent_template.py`
 - Multi-device: This CLAUDE.md carries full context across machines via git
+- Financial ledger snapshots stored in `data/cfo_ledger.json` (daily net-worth tracking)
+- Log backups: `guardian_one_log_backup_*.json` files in project root
 
-## Cross-Device Setup
+| Domain | Purpose |
+|--------|---------|
+| drjeremytabernero.org | Professional site, CV, publications |
+| jtmdai.com | JTMD AI — AI solutions, services |
 
-Clone on any machine and Claude Code will understand the project:
-```bash
-git clone <repo-url> ~/JT
-cd ~/JT
-# Claude Code reads this CLAUDE.md automatically
-```
+## Cross-Device
 
-Both machines (current + ROG X 64GB) share context through this repo.
-Always pull latest before starting work on a new device.
+This CLAUDE.md carries full context across machines via git. Always pull latest before starting work on a new device. Both machines (current + ROG X 64GB) share context through this repo.
