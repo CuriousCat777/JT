@@ -83,7 +83,7 @@ scripts/
 data/
 ├── cfo_ledger.json                 # Financial ledger (daily net-worth snapshots)
 logs/                               # Agent logs (gitignored except .gitkeep)
-tests/                              # 26 test files, 721 test functions
+tests/                              # Test suite
 docs/
 └── deliverables/
     └── 03_GO_TO_MARKET.md          # Go-to-market strategy doc
