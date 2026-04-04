@@ -311,16 +311,27 @@ class DevCoach(BaseAgent):
 
     def _detect_gpu(self) -> str | None:
         """Try to detect GPU via nvidia-smi."""
-        result = self._run_quiet("nvidia-smi --query-gpu=name --format=csv,noheader,nounits")
+        result = self._run_quiet(
+            "nvidia-smi --query-gpu=name --format=csv,noheader,nounits",
+            executable="nvidia-smi",
+        )
         if result:
             return result.strip().split("\n")[0]
         return None
 
     @staticmethod
-    def _run_quiet(cmd: str) -> str | None:
+    def _run_quiet(cmd: str, executable: str | None = None, timeout: float = 1.0) -> str | None:
         """Run a command quietly, return stdout or None."""
+        parts = cmd.split()
+        if not parts:
+            return None
+
+        tool = executable or parts[0]
+        if shutil.which(tool) is None:
+            return None
+
         try:
-            r = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=5)
+            r = subprocess.run(parts, capture_output=True, text=True, timeout=timeout)
             return r.stdout.strip() if r.returncode == 0 else None
         except (OSError, subprocess.TimeoutExpired):
             return None
