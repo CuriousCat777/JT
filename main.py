@@ -36,6 +36,11 @@ Usage:
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --sentinel             # IoT Sentinel dashboard (network + security)
+    python main.py --sentinel-scan        # Run one-time network scan
+    python main.py --sentinel-monitor     # Start continuous network monitoring
+    python main.py --network-audit        # LAN security audit (VLAN, DNS, credentials)
+    python main.py --vpn-status           # Tailscale VPN status
 """
 
 from __future__ import annotations
@@ -64,6 +69,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.teleprompter import Teleprompter
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -279,6 +285,8 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--n8n-sync", action="store_true", help="Push n8n workflow status to Notion dashboard")
+    parser.add_argument("--n8n-status", action="store_true", help="Show n8n connection and workflow status")
     parser.add_argument("--devices", action="store_true",
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
@@ -299,6 +307,20 @@ def main() -> None:
                         help="Audit Claude connector/MCP attack surface")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
+    parser.add_argument("--sentinel", action="store_true",
+                        help="IoT Sentinel dashboard (network security + device control)")
+    parser.add_argument("--sentinel-scan", action="store_true",
+                        help="Run a one-time network scan and report anomalies")
+    parser.add_argument("--sentinel-monitor", action="store_true",
+                        help="Start continuous network monitoring")
+    parser.add_argument("--sentinel-approve", type=int, default=None,
+                        help="Approve a pending sentinel recommendation by index")
+    parser.add_argument("--sentinel-deny", type=int, default=None,
+                        help="Deny a pending sentinel recommendation by index")
+    parser.add_argument("--network-audit", action="store_true",
+                        help="LAN security audit (VLAN, DNS blocking, credentials)")
+    parser.add_argument("--vpn-status", action="store_true",
+                        help="Tailscale VPN connection status")
     parser.add_argument("--cfo-clean", action="store_true",
                         help="Clean ledger: strip sandbox data, RM goals, zero-balance dupes")
     parser.add_argument("--cfo-clean-dry", action="store_true",
@@ -312,6 +334,16 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--teleprompter", action="store_true",
+                        help="Launch teleprompter API server + PWA")
+    parser.add_argument("--teleprompter-port", type=int, default=5200,
+                        help="Teleprompter server port (default: 5200)")
+    parser.add_argument("--teleprompter-token", type=str, default=None,
+                        help="API token for teleprompter (auto-generated if omitted)")
+    parser.add_argument("--teleprompter-scripts", action="store_true",
+                        help="List all teleprompter scripts")
+    parser.add_argument("--teleprompter-stats", action="store_true",
+                        help="Show teleprompter practice statistics")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -438,6 +470,56 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.teleprompter:
+        from guardian_one.web.teleprompter.server import run_teleprompter_server
+        run_teleprompter_server(
+            guardian=guardian,
+            port=args.teleprompter_port,
+            api_token=args.teleprompter_token,
+        )
+        guardian.shutdown()
+        return
+
+    if args.teleprompter_scripts:
+        tp = guardian.get_agent("teleprompter")
+        if tp and isinstance(tp, Teleprompter):
+            tp.initialize()
+            scripts = tp.list_scripts()
+            print(f"\n  Teleprompter Scripts ({len(scripts)})")
+            print("  " + "=" * 50)
+            for s in scripts:
+                ai_tag = " [AI]" if s.get("ai_generated") else ""
+                print(f"  [{s['category']:16s}] {s['title']}{ai_tag}")
+                if s.get("scenario"):
+                    print(f"                     {s['scenario'][:60]}")
+            print()
+        else:
+            print("  Teleprompter agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.teleprompter_stats:
+        tp = guardian.get_agent("teleprompter")
+        if tp and isinstance(tp, Teleprompter):
+            tp.initialize()
+            stats = tp.practice_stats()
+            print(f"\n  Teleprompter Practice Stats")
+            print("  " + "=" * 50)
+            print(f"  Total sessions:    {stats['total_sessions']}")
+            print(f"  Average rating:    {stats['average_rating']:.1f}/5")
+            print(f"  Best rating:       {stats['best_rating']}/5")
+            print(f"  Practice minutes:  {stats['total_practice_minutes']:.0f}")
+            print(f"  This week:         {stats['sessions_this_week']}")
+            if stats['categories_practiced']:
+                print(f"\n  Categories practiced:")
+                for cat, count in stats['categories_practiced'].items():
+                    print(f"    {cat}: {count} sessions")
+            print()
+        else:
+            print("  Teleprompter agent not available.")
         guardian.shutdown()
         return
 
@@ -618,6 +700,91 @@ def main() -> None:
                     print(f"    [!!] {alert}")
         else:
             print(dev_agent.dashboard_text())
+
+    elif (args.sentinel or args.sentinel_scan or args.sentinel_monitor
+          or args.sentinel_approve is not None or args.sentinel_deny is not None):
+        from guardian_one.agents.iot_sentinel import IoTSentinel
+
+        sentinel_cfg = config.agents.get(
+            "iot_sentinel", AgentConfig(name="iot_sentinel", enabled=True,
+                                        allowed_resources=["network", "devices", "mqtt", "security"]))
+        sentinel = IoTSentinel(config=sentinel_cfg, audit=guardian.audit)
+        sentinel.initialize()
+
+        if args.sentinel_scan:
+            report = sentinel.run()
+            print(sentinel.dashboard_text())
+            if report.recommendations:
+                print("  Recommendations:")
+                for rec in report.recommendations:
+                    print(f"    - {rec}")
+            if report.alerts:
+                print("\n  Alerts:")
+                for alert in report.alerts:
+                    print(f"    [!!] {alert}")
+
+        elif args.sentinel_monitor:
+            print("\n  Starting continuous network monitoring...")
+            print(f"  Subnet: {sentinel.scanner.subnet}")
+            print(f"  Interval: {sentinel.monitor.scan_interval}s")
+            print("  Press Ctrl+C to stop.\n")
+            sentinel.start_monitoring()
+            try:
+                import signal
+                signal.pause()
+            except (KeyboardInterrupt, AttributeError):
+                # AttributeError: signal.pause not available on Windows
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+            sentinel.stop_monitoring()
+            print("\n  Monitoring stopped.")
+            print(sentinel.monitor.summary_text())
+
+        elif args.sentinel_approve is not None:
+            if sentinel.approve_recommendation(args.sentinel_approve):
+                print(f"\n  Recommendation #{args.sentinel_approve} approved.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_approve}")
+                pending = sentinel.pending_approvals()
+                if pending:
+                    print("  Pending approvals:")
+                    for i, p in enumerate(pending):
+                        print(f"    [{i}] {p['action']}: {p['description']}")
+                else:
+                    print("  No pending approvals.")
+
+        elif args.sentinel_deny is not None:
+            if sentinel.deny_recommendation(args.sentinel_deny):
+                print(f"\n  Recommendation #{args.sentinel_deny} denied.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_deny}")
+
+        else:
+            # --sentinel: show dashboard
+            sentinel.run()  # Run a scan to populate data
+            print(sentinel.dashboard_text())
+
+    elif args.network_audit:
+        from guardian_one.homelink.lan_security import LanSecurityAuditor
+        from guardian_one.homelink.devices import DeviceRegistry
+
+        registry = DeviceRegistry()
+        registry.load_defaults()
+        auditor = LanSecurityAuditor(registry)
+        print(auditor.audit_text())
+
+    elif args.vpn_status:
+        from guardian_one.homelink.tailscale import TailscaleClient
+        client = TailscaleClient(audit=guardian.audit)
+        print(client.summary_text())
+        health = client.health_check()
+        if health["issues"]:
+            print("  Issues:")
+            for issue in health["issues"]:
+                print(f"    - {issue}")
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
@@ -1045,6 +1212,58 @@ def main() -> None:
             services=services_data,
             deliverables=deliverables,
         ))
+
+    elif args.n8n_sync:
+        if not guardian.notion_sync:
+            print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+        else:
+            print("\n  Syncing n8n workflow status to Notion...")
+            result = guardian.sync_n8n_to_notion()
+            if result:
+                status = "OK" if result.success else "FAILED"
+                print(f"  [{status}] {result.pages_created} pages created, "
+                      f"{result.pages_updated} updated, "
+                      f"{result.blocks_written} blocks written "
+                      f"({result.duration_ms:.0f}ms)")
+                if result.errors:
+                    for err in result.errors:
+                        print(f"    [ERROR] {err}")
+
+    elif args.n8n_status:
+        from guardian_one.integrations.n8n_sync import N8nWorkflow
+        print("\n  n8n Workflow Engine Status")
+        print("  " + "=" * 40)
+
+        connected = False
+        if guardian.n8n_provider.has_credentials:
+            connected = guardian.n8n_provider.authenticate()
+
+        print(f"  Connection: {'Connected' if connected else 'Disconnected'}")
+        print(f"  Gateway service: {'registered' if guardian.n8n_provider.has_credentials else 'not found'}")
+
+        if connected:
+            workflows = guardian.n8n_provider.list_workflows()
+            active = sum(1 for w in workflows if w.active)
+            print(f"  Workflows: {len(workflows)} total, {active} active")
+            for wf in workflows:
+                icon = "[ON] " if wf.active else "[OFF]"
+                print(f"    {icon} {wf.name} (id: {wf.id})")
+        else:
+            print("  Set N8N_BASE_URL and N8N_API_KEY in .env to connect.")
+
+        # Show local workflows from WebArchitect if available
+        wa = guardian.get_agent("web_architect")
+        if wa and hasattr(wa, "list_workflows"):
+            local_wfs = wa.list_workflows()
+            if local_wfs:
+                print(f"\n  Local workflows (WebArchitect): {len(local_wfs)}")
+                for wf_id, wf in local_wfs.items():
+                    print(f"    [{wf_id}] {wf.name}")
+
+        print(f"\n  Notion sync: {'available' if guardian.notion_sync else 'not configured'}")
+        if guardian.notion_sync:
+            print("  Run --n8n-sync to push workflow status to Notion.")
+        print()
 
     elif args.connector_audit:
         audit_report = guardian.registry.connector_audit()

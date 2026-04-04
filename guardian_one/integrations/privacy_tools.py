@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import abc
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
@@ -154,7 +155,12 @@ class NordVPNProvider(VPNProvider):
         try:
             cmd = ["nordvpn", "connect"]
             if country:
-                cmd.append(country)
+                # Sanitize: allow only letters and underscores (e.g. "United_States")
+                sanitized = re.sub(r"[^a-zA-Z_]", "", country).strip()
+                if not sanitized:
+                    self._last_error = "Invalid country name"
+                    return False
+                cmd.append(sanitized)
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=30,
             )

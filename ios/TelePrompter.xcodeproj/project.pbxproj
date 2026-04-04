@@ -1,0 +1,443 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1B2C3D4E5F60001000001AA /* TelePrompterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000001AA /* TelePrompterApp.swift */; };
+		A1B2C3D4E5F60001000002AA /* Script.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000002AA /* Script.swift */; };
+		A1B2C3D4E5F60001000003AA /* PracticeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000003AA /* PracticeSession.swift */; };
+		A1B2C3D4E5F60001000004AA /* AdvisoryTip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000004AA /* AdvisoryTip.swift */; };
+		A1B2C3D4E5F60001000005AA /* GuardianAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000005AA /* GuardianAPIService.swift */; };
+		A1B2C3D4E5F60001000006AA /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000006AA /* KeychainService.swift */; };
+		A1B2C3D4E5F60001000007AA /* LocalDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000007AA /* LocalDatabase.swift */; };
+		A1B2C3D4E5F60001000008AA /* ScriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000008AA /* ScriptStore.swift */; };
+		A1B2C3D4E5F60001000009AA /* PracticeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000009AA /* PracticeStore.swift */; };
+		A1B2C3D4E5F6000100000AAA /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000AAA /* ContentView.swift */; };
+		A1B2C3D4E5F6000100000BAA /* ScriptsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000BAA /* ScriptsView.swift */; };
+		A1B2C3D4E5F6000100000CAA /* TeleprompterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000CAA /* TeleprompterView.swift */; };
+		A1B2C3D4E5F6000100000DAA /* GenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000DAA /* GenerateView.swift */; };
+		A1B2C3D4E5F6000100000EAA /* PracticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000EAA /* PracticeView.swift */; };
+		A1B2C3D4E5F6000100000FAA /* AdvisoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000200000FAA /* AdvisoryView.swift */; };
+		A1B2C3D4E5F60001000010AA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002000010AA /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1B2C3D4E5F60003000001AA /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A1B2C3D4E5F60004000001AA /* TelePrompter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TelePrompter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60002000001AA /* TelePrompterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelePrompterApp.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000002AA /* Script.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Script.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000003AA /* PracticeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeSession.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000004AA /* AdvisoryTip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvisoryTip.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000005AA /* GuardianAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianAPIService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000006AA /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000007AA /* LocalDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDatabase.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000008AA /* ScriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000009AA /* PracticeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000AAA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000BAA /* ScriptsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptsView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000CAA /* TeleprompterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeleprompterView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000DAA /* GenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000EAA /* PracticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000200000FAA /* AdvisoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvisoryView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002000010AA /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1B2C3D4E5F60005000001AA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1B2C3D4E5F60006000001AA = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60006000002AA /* TelePrompter */,
+				A1B2C3D4E5F60006000009AA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000009AA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60004000001AA /* TelePrompter.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000002AA /* TelePrompter */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60002000001AA /* TelePrompterApp.swift */,
+				A1B2C3D4E5F60006000003AA /* Models */,
+				A1B2C3D4E5F60006000004AA /* Services */,
+				A1B2C3D4E5F60006000005AA /* Database */,
+				A1B2C3D4E5F60006000006AA /* ViewModels */,
+				A1B2C3D4E5F60006000007AA /* Views */,
+			);
+			path = TelePrompter;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000003AA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60002000002AA /* Script.swift */,
+				A1B2C3D4E5F60002000003AA /* PracticeSession.swift */,
+				A1B2C3D4E5F60002000004AA /* AdvisoryTip.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000004AA /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60002000005AA /* GuardianAPIService.swift */,
+				A1B2C3D4E5F60002000006AA /* KeychainService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000005AA /* Database */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60002000007AA /* LocalDatabase.swift */,
+			);
+			path = Database;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000006AA /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60002000008AA /* ScriptStore.swift */,
+				A1B2C3D4E5F60002000009AA /* PracticeStore.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60006000007AA /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6000200000AAA /* ContentView.swift */,
+				A1B2C3D4E5F6000200000BAA /* ScriptsView.swift */,
+				A1B2C3D4E5F6000200000CAA /* TeleprompterView.swift */,
+				A1B2C3D4E5F6000200000DAA /* GenerateView.swift */,
+				A1B2C3D4E5F6000200000EAA /* PracticeView.swift */,
+				A1B2C3D4E5F6000200000FAA /* AdvisoryView.swift */,
+				A1B2C3D4E5F60002000010AA /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1B2C3D4E5F60007000001AA /* TelePrompter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4E5F60008000003AA /* Build configuration list for PBXNativeTarget "TelePrompter" */;
+			buildPhases = (
+				A1B2C3D4E5F60009000001AA /* Sources */,
+				A1B2C3D4E5F60005000001AA /* Frameworks */,
+				A1B2C3D4E5F6000A000001AA /* Resources */,
+				A1B2C3D4E5F60003000001AA /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TelePrompter;
+			productName = TelePrompter;
+			productReference = A1B2C3D4E5F60004000001AA /* TelePrompter.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1B2C3D4E5F6000B000001AA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A1B2C3D4E5F60007000001AA = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A1B2C3D4E5F60008000001AA /* Build configuration list for PBXProject "TelePrompter" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1B2C3D4E5F60006000001AA;
+			productRefGroup = A1B2C3D4E5F60006000009AA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1B2C3D4E5F60007000001AA /* TelePrompter */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1B2C3D4E5F6000A000001AA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1B2C3D4E5F60009000001AA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60001000001AA /* TelePrompterApp.swift in Sources */,
+				A1B2C3D4E5F60001000002AA /* Script.swift in Sources */,
+				A1B2C3D4E5F60001000003AA /* PracticeSession.swift in Sources */,
+				A1B2C3D4E5F60001000004AA /* AdvisoryTip.swift in Sources */,
+				A1B2C3D4E5F60001000005AA /* GuardianAPIService.swift in Sources */,
+				A1B2C3D4E5F60001000006AA /* KeychainService.swift in Sources */,
+				A1B2C3D4E5F60001000007AA /* LocalDatabase.swift in Sources */,
+				A1B2C3D4E5F60001000008AA /* ScriptStore.swift in Sources */,
+				A1B2C3D4E5F60001000009AA /* PracticeStore.swift in Sources */,
+				A1B2C3D4E5F6000100000AAA /* ContentView.swift in Sources */,
+				A1B2C3D4E5F6000100000BAA /* ScriptsView.swift in Sources */,
+				A1B2C3D4E5F6000100000CAA /* TeleprompterView.swift in Sources */,
+				A1B2C3D4E5F6000100000DAA /* GenerateView.swift in Sources */,
+				A1B2C3D4E5F6000100000EAA /* PracticeView.swift in Sources */,
+				A1B2C3D4E5F6000100000FAA /* AdvisoryView.swift in Sources */,
+				A1B2C3D4E5F60001000010AA /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1B2C3D4E5F6000C000001AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F6000C000002AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1B2C3D4E5F6000C000003AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TelePrompter;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guardianone.teleprompter;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F6000C000004AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TelePrompter;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guardianone.teleprompter;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1B2C3D4E5F60008000001AA /* Build configuration list for PBXProject "TelePrompter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F6000C000001AA /* Debug */,
+				A1B2C3D4E5F6000C000002AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4E5F60008000003AA /* Build configuration list for PBXNativeTarget "TelePrompter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F6000C000003AA /* Debug */,
+				A1B2C3D4E5F6000C000004AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A1B2C3D4E5F6000B000001AA /* Project object */;
+}
