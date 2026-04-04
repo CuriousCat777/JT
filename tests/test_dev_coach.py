@@ -190,7 +190,10 @@ class TestProjects:
     def test_get_project(self):
         coach = _make_coach()
         project = coach.get_project("guardian_one")
-        assert project is not None or len(coach._projects) > 0
+        assert project is not None
+        assert project.id == "guardian_one"
+        assert project.name == "guardian_one"
+        assert project.status == ProjectStatus.ACTIVE
 
 
 # ------------------------------------------------------------------
