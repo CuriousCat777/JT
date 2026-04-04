@@ -95,7 +95,7 @@ docs/
 2. **Write-only Notion** — Push operational data only, never read for decisions
 3. **Content gate** — PHI/PII patterns blocked before any external sync
 4. **Audit everything** — Immutable log of all agent actions
-5. **On-demand credentials** — Tokens loaded from Vault per-request, never cached
+5. **On-demand credentials** — Tokens loaded from the encrypted Vault on demand and not persisted in plaintext or stored long-term on agent objects
 6. **Agent isolation** — Each agent has defined `allowed_resources`
 7. **Local-first AI** — Ollama (local) is the primary AI provider; Claude API is the cloud fallback
 
