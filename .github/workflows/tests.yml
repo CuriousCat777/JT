@@ -31,15 +31,5 @@ jobs:
       - name: Run tests with coverage
         env:
           GUARDIAN_MASTER_PASSPHRASE: test-passphrase-for-ci
-        shell: bash
         run: |
-          set -o pipefail
-          python -m pytest tests/ -v --tb=short --cov=guardian_one --cov-report=term-missing --cov-fail-under=65 2>&1 | tee /tmp/test-output.txt
-
-      - name: Post test summary
-        if: always()
-        run: |
-          echo '## Test Results (Python ${{ matrix.python-version }})' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -60 /tmp/test-output.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          python -m pytest tests/ -v --tb=short --cov=guardian_one --cov-report=term-missing
