@@ -1274,18 +1274,41 @@ class NotionSync:
             if services:
                 blocks.append(self._paragraph(
                     f"Services: {', '.join(services)}"
-                ))
-            expired = vault_health.get("expired", 0)
-            if expired:
+
+            total_credentials = vault_health.get(
+                "total_credentials",
+                vault_health.get("total_keys", 0),
+            )
+            blocks.append(self._paragraph(
+                f"Total credentials: {total_credentials}"
+            ))
+
+            services = vault_health.get("services", [])
+            if services:
                 blocks.append(self._paragraph(
-                    f"Expired: {expired}"
-                ))
-            due = vault_health.get("due_for_rotation", 0)
-            if due:
-                blocks.append(self._paragraph(
-                    f"Due for rotation: {due}"
+                    f"Services: {', '.join(services)}"
                 ))
 
+            expired = vault_health.get("expired", [])
+            if expired:
+                blocks.append(self._paragraph(
+                    f"Expired: {', '.join(expired)}"
+                ))
+
+            due_for_rotation = vault_health.get(
+                "due_for_rotation",
+                vault_health.get("needs_rotation", []),
+            )
+            if due_for_rotation:
+                blocks.append(self._paragraph(
+                    f"Due for rotation: {', '.join(due_for_rotation)}"
+                ))
+
+            expiring_soon = vault_health.get("expiring_soon", [])
+            if expiring_soon:
+                blocks.append(self._paragraph(
+                    f"Expiring soon: {', '.join(expiring_soon)}"
+                ))
         blocks.append(self._divider())
         blocks.append(self._paragraph(
             f"Backup completed at {now} by Guardian One"
