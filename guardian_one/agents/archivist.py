@@ -130,8 +130,7 @@ class Archivist(BaseAgent):
         self._privacy_tools: dict[str, PrivacyTool] = {}
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
-        self._backups: dict[str, BackupRecord] = {}
-        self._devices: dict[str, DeviceRecord] = {}
+        self._power_tools: Any | None = None  # PowerToolsLibrary, injected by Guardian
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
@@ -165,6 +164,22 @@ class Archivist(BaseAgent):
                 data_types=["broker_removal_status", "exposure_report"],
             ),
         }
+
+    def set_power_tools(self, library: Any) -> None:
+        """Inject the PowerToolsLibrary (called by GuardianOne after boot)."""
+        self._power_tools = library
+        self.log("power_tools_attached", details={"library": type(library).__name__})
+
+    @property
+    def power_tools(self) -> Any | None:
+        """Access the PowerToolsLibrary managed by this agent."""
+        return self._power_tools
+
+    def power_tools_status(self) -> dict[str, Any]:
+        """Return power tools status from the managed library."""
+        if self._power_tools is None:
+            return {"error": "Power tools library not attached"}
+        return self._power_tools.status(requester=self.name)
 
     def _setup_privacy_tools(self) -> None:
         self._privacy_tools = {
@@ -773,49 +788,18 @@ class Archivist(BaseAgent):
         recommendations.extend(privacy.get("recommendations", []))
         actions.append("Ran privacy audit.")
 
-        # Backup staleness check
-        stale = self.stale_backups()
-        if stale:
-            for record in stale:
-                if record.backup_status == BackupStatus.MISSING:
-                    alerts.append(
-                        f"Backup '{record.name}' has NEVER been backed up "
-                        f"(schedule: {record.schedule})."
-                    )
-                else:
-                    alerts.append(
-                        f"Backup '{record.name}' is STALE — last backup: "
-                        f"{record.last_backup} (schedule: {record.schedule})."
-                    )
-            recommendations.append(
-                f"Run backups for {len(stale)} stale/missing target(s): "
-                + ", ".join(r.name for r in stale) + "."
-            )
-        actions.append(
-            f"Checked {len(self._backups)} backup targets "
-            f"across {len(self._devices)} devices."
-        )
-
-        failed = [r for r in self._backups.values()
-                  if r.backup_status == BackupStatus.FAILED]
-        if failed:
-            for record in failed:
-                alerts.append(
-                    f"Backup '{record.name}' is in FAILED state — investigate."
-                )
-
-        backup_summary = self.backup_summary()
+        # Power tools audit
+        pt_count = 0
+        if self._power_tools is not None:
+            pt_projects = self._power_tools.list_projects()
+            pt_count = len(pt_projects)
+            actions.append(f"Power tools library: {pt_count} managed project(s).")
 
         self._set_status(AgentStatus.IDLE)
         return AgentReport(
             agent_name=self.name,
             status=AgentStatus.IDLE.value,
-            summary=(
-                f"Tracking {len(self._file_index)} files, "
-                f"{len(self._data_sources)} data sources, "
-                f"{len(self._backups)} backup targets "
-                f"across {len(self._devices)} devices."
-            ),
+            summary=f"Tracking {len(self._file_index)} files, {len(self._data_sources)} data sources, {pt_count} power tool project(s).",
             actions_taken=actions,
             recommendations=recommendations,
             alerts=alerts,
@@ -823,27 +807,21 @@ class Archivist(BaseAgent):
                 "files": len(self._file_index),
                 "sources": len(self._data_sources),
                 "privacy": privacy,
-                "backups": backup_summary,
+                "power_tools_projects": pt_count,
             },
         )
 
     def report(self) -> AgentReport:
+        pt_count = len(self._power_tools.list_projects()) if self._power_tools else 0
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
-            summary=(
-                f"Managing {len(self._file_index)} files, "
-                f"{len(self._data_sources)} sources, "
-                f"{len(self._privacy_tools)} privacy tools, "
-                f"{len(self._backups)} backup targets "
-                f"across {len(self._devices)} devices."
-            ),
+            summary=f"Managing {len(self._file_index)} files, {len(self._data_sources)} sources, {len(self._privacy_tools)} privacy tools, {pt_count} power tool project(s).",
             data={
                 "files": len(self._file_index),
                 "sources": list(self._data_sources.keys()),
                 "privacy_tools": list(self._privacy_tools.keys()),
                 "profile_fields": len(self._master_profile),
-                "devices": [d.device_id for d in self.list_devices()],
-                "backups": self.backup_summary(),
+                "power_tools_projects": pt_count,
             },
         )

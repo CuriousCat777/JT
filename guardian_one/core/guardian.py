@@ -29,8 +29,7 @@ from guardian_one.homelink.gateway import Gateway, ServiceConfig, RateLimitConfi
 from guardian_one.homelink.vault import Vault
 from guardian_one.homelink.registry import IntegrationRegistry
 from guardian_one.homelink.monitor import Monitor
-from guardian_one.integrations.notion_sync import NotionSync, SyncResult
-from guardian_one.integrations.n8n_sync import GatewayN8nProvider
+from guardian_one.utils.power_tools_library import PowerToolsLibrary
 
 
 class GuardianOne:
@@ -73,6 +72,11 @@ class GuardianOne:
             gateway=self.gateway,
             vault=self.vault,
             registry=self.registry,
+        )
+
+        # Power Tools Library — managed by Archivist, available to agents
+        self.power_tools = PowerToolsLibrary(
+            audit=self.audit, data_dir=self.config.data_dir,
         )
 
         # Register default access policies
@@ -227,6 +231,14 @@ class GuardianOne:
 
         # Inject AI engine into the agent
         agent.set_ai_engine(self.ai_engine)
+
+        # Inject Power Tools Library if the agent has access
+        if "power_tools" in agent.config.allowed_resources:
+            if hasattr(agent, "set_power_tools"):
+                agent.set_power_tools(self.power_tools)
+            else:
+                # Generic injection via attribute
+                agent._power_tools = self.power_tools
 
         self._agents[name] = agent
         self.audit.record(
