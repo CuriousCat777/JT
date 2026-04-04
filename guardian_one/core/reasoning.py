@@ -273,7 +273,11 @@ class ReActEngine:
 
             # Check for ACTION[name]: input pattern
             if stripped.upper().startswith("ACTION["):
-                bracket_end = stripped.index("]")
+                bracket_end = stripped.find("]")
+                if bracket_end == -1:
+                    # Malformed action line — treat as thought text
+                    thought_lines.append(stripped)
+                    continue
                 action_name = stripped[7:bracket_end].strip()
                 action_input = stripped[bracket_end + 1:].lstrip(": ").strip()
                 break
@@ -288,10 +292,12 @@ class ReActEngine:
 
     def _execute_action(self, action_name: str, action_input: str) -> str:
         """Execute a registered action and return the observation."""
-        if action_name == self.config.stop_phrase:
+        if action_name.casefold() == self.config.stop_phrase.casefold():
             return action_input
 
-        handler = self.config.actions.get(action_name)
+        # Case-insensitive action lookup
+        actions_lower = {k.casefold(): v for k, v in self.config.actions.items()}
+        handler = actions_lower.get(action_name.casefold())
         if handler is None:
             available = list(self.config.actions.keys()) + [self.config.stop_phrase]
             return f"[ERROR] Unknown action '{action_name}'. Available: {available}"

@@ -10,7 +10,7 @@ import abc
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.config import AgentConfig
@@ -288,7 +288,7 @@ class BaseAgent(abc.ABC):
     def think_react(
         self,
         task: str,
-        actions: dict[str, Any] | None = None,
+        actions: dict[str, Callable[[str], str]] | None = None,
         context: dict[str, Any] | None = None,
         max_iterations: int = 5,
     ) -> ReActTrace:

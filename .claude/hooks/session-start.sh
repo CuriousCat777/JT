@@ -20,5 +20,8 @@ pip install --ignore-installed pyyaml python-dotenv schedule rich openpyxl \
 # Install the project in editable mode so imports resolve
 pip install -e "$CLAUDE_PROJECT_DIR" --no-deps $PIP_FLAGS 2>/dev/null || true
 
-# Ensure PYTHONPATH includes the project root
-echo "export PYTHONPATH=\"$CLAUDE_PROJECT_DIR:\${PYTHONPATH:-}\"" >> "$CLAUDE_ENV_FILE"
+# Ensure PYTHONPATH includes the project root (idempotent)
+env_line="export PYTHONPATH=\"$CLAUDE_PROJECT_DIR:\${PYTHONPATH:-}\""
+if ! grep -Fqx "$env_line" "$CLAUDE_ENV_FILE" 2>/dev/null; then
+  echo "$env_line" >> "$CLAUDE_ENV_FILE"
+fi

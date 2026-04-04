@@ -383,8 +383,62 @@ class TestReActEngine:
         observations = [s for s in trace.steps if s.step_type == ReActStepType.OBSERVATION]
         assert any("ERROR" in o.content for o in observations)
 
+    def test_malformed_action_tag_no_crash(self):
+        """Malformed ACTION[ without closing ] should not raise ValueError."""
+        call_count = 0
 
-# ---------------------------------------------------------------
+        def fake_think(prompt, context=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return AIResponse(
+                    content="Thought: Let me try.\nACTION[lookup: foo",
+                    provider="mock",
+                    model="mock",
+                )
+            return AIResponse(
+                content="Thought: Done.\nACTION[FINISH]: recovered",
+                provider="mock",
+                model="mock",
+            )
+
+        engine = ReActEngine(ReActConfig(
+            max_iterations=5,
+            actions={"lookup": lambda x: f"result for {x}"},
+        ))
+
+        trace = engine.run(ai_reason_fn=fake_think, task="Test malformed action")
+        assert trace.completed is True
+        assert "recovered" in trace.conclusion
+
+    def test_case_insensitive_action_dispatch(self):
+        """ACTION[LOOKUP] should match a registered 'lookup' handler."""
+        call_count = 0
+
+        def fake_think(prompt, context=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return AIResponse(
+                    content="Thought: Need data.\nACTION[LOOKUP]: checking",
+                    provider="mock",
+                    model="mock",
+                )
+            return AIResponse(
+                content="Thought: Got it.\nACTION[FINISH]: balance is $500",
+                provider="mock",
+                model="mock",
+            )
+
+        engine = ReActEngine(ReActConfig(
+            max_iterations=5,
+            actions={"lookup": lambda x: f"Balance for {x}: $500"},
+        ))
+
+        trace = engine.run(ai_reason_fn=fake_think, task="Check balance")
+        assert trace.completed is True
+        observations = [s for s in trace.steps if s.step_type == ReActStepType.OBSERVATION]
+        assert any("$500" in o.content for o in observations)
 # ReAct — BaseAgent integration
 # ---------------------------------------------------------------
 
