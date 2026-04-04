@@ -1,15 +1,44 @@
 """Tests for the centralized PII content gate."""
 
+import os
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from guardian_one.core.content_gate import (
+    _DEPTH_EXCEEDED_SENTINEL,
     contains_pii,
     redact_dict,
     redact_text,
     scan_pii,
 )
 from guardian_one.core.audit import AuditLog
+
+
+# ---------------------------------------------------------------------------
+# Helper: set owner env vars for tests that need owner-pattern matching
+# ---------------------------------------------------------------------------
+
+_OWNER_ENV = {
+    "GUARDIAN_OWNER_NAMES": (
+        "Jeremy Paulo Salvino Tabernero|Jeremy Tabernero|"
+        "Jeremy Paulo Tabernero|J. Tabernero|"
+        "JEREMY TABERNERO|JEREMY PAULO TABERNERO|"
+        "jeremytabernero|jeremy_paulo21|JEREMY_PAULO21"
+    ),
+    "GUARDIAN_OWNER_EMAILS": (
+        "jeremytabernero@gmail.com|jeremy_paulo21@yahoo.com"
+    ),
+}
+
+
+def _reload_owner_patterns():
+    """Reload the content gate module so owner patterns pick up new env vars."""
+    import importlib
+    import guardian_one.core.content_gate as cg
+    importlib.reload(cg)
+    # Re-import functions from reloaded module
+    return cg.redact_text, cg.redact_dict, cg.contains_pii, cg.scan_pii
 
 
 # ---------------------------------------------------------------------------
@@ -64,32 +93,40 @@ class TestRedactText:
 
 
 # ---------------------------------------------------------------------------
-# redact_text — owner-specific patterns
+# redact_text — owner-specific patterns (loaded from env)
 # ---------------------------------------------------------------------------
 
 
 class TestOwnerRedaction:
     def test_owner_full_name_redacted(self):
-        text = "Dear JEREMY TABERNERO, your receipt is attached"
-        result = redact_text(text)
-        assert "JEREMY TABERNERO" not in result
-        assert "[OWNER-NAME-REDACTED]" in result
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            rt, *_ = _reload_owner_patterns()
+            text = "Dear JEREMY TABERNERO, your receipt is attached"
+            result = rt(text)
+            assert "JEREMY TABERNERO" not in result
+            assert "[OWNER-NAME-REDACTED]" in result
 
     def test_owner_email_redacted(self):
-        text = "Sent to jeremytabernero@gmail.com"
-        result = redact_text(text)
-        assert "jeremytabernero@gmail.com" not in result
-        assert "[OWNER-EMAIL-REDACTED]" in result
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            rt, *_ = _reload_owner_patterns()
+            text = "Sent to jeremytabernero@gmail.com"
+            result = rt(text)
+            assert "jeremytabernero@gmail.com" not in result
+            assert "[OWNER-EMAIL-REDACTED]" in result
 
     def test_owner_yahoo_email_redacted(self):
-        text = "This email was sent to JEREMY_PAULO21@YAHOO.COM"
-        result = redact_text(text)
-        assert "JEREMY_PAULO21@YAHOO.COM" not in result
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            rt, *_ = _reload_owner_patterns()
+            text = "This email was sent to JEREMY_PAULO21@YAHOO.COM"
+            result = rt(text)
+            assert "JEREMY_PAULO21@YAHOO.COM" not in result
 
     def test_owner_name_case_insensitive(self):
-        text = "Jeremy Tabernero signed up"
-        result = redact_text(text)
-        assert "Jeremy Tabernero" not in result
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            rt, *_ = _reload_owner_patterns()
+            text = "Jeremy Tabernero signed up"
+            result = rt(text)
+            assert "Jeremy Tabernero" not in result
 
     def test_owner_disabled(self):
         text = "jeremytabernero@gmail.com"
@@ -97,6 +134,15 @@ class TestOwnerRedaction:
         # Still caught by the general email pattern
         assert "jeremytabernero@gmail.com" not in result
         assert "[EMAIL-REDACTED]" in result
+
+    def test_no_owner_patterns_without_env(self):
+        """Without env vars, owner patterns are empty — no owner redaction."""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            rt, *_ = _reload_owner_patterns()
+            text = "Jeremy Tabernero"
+            result = rt(text)
+            # No owner patterns loaded, so the name passes through
+            assert result == text
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +170,43 @@ class TestRedactDict:
     def test_empty_dict(self):
         assert redact_dict({}) == {}
 
+    def test_depth_limit_fails_closed_dict(self):
+        """Nested dicts beyond depth limit are replaced with sentinel."""
+        # Build a structure 12 levels deep with PII at the bottom
+        data: dict = {"pii": "secret@evil.com"}
+        for _ in range(12):
+            data = {"nested": data}
+        result = redact_dict(data, include_owner=False)
+        # The over-depth nested dict should be replaced with sentinel
+        cursor = result
+        for _ in range(11):
+            cursor = cursor["nested"]
+        assert cursor["nested"] == _DEPTH_EXCEEDED_SENTINEL
+
+    def test_depth_limit_redacts_strings_at_boundary(self):
+        """Strings at the depth boundary are still redacted, not leaked."""
+        data: dict = {"email": "leak@example.com"}
+        for _ in range(11):
+            data = {"nested": data}
+        result = redact_dict(data, include_owner=False)
+        cursor = result
+        for _ in range(11):
+            cursor = cursor["nested"]
+        # The string at depth 11 should be redacted, not raw
+        assert "leak@example.com" not in cursor["email"]
+
+    def test_depth_limit_fails_closed_list(self):
+        """Nested lists beyond depth limit are replaced with sentinel."""
+        data: dict = {"items": [{"pii": "secret@evil.com"}]}
+        for _ in range(12):
+            data = {"nested": data}
+        result = redact_dict(data, include_owner=False)
+        cursor = result
+        for _ in range(11):
+            cursor = cursor["nested"]
+        # The list at over-depth should be replaced with sentinel
+        assert cursor["nested"] == _DEPTH_EXCEEDED_SENTINEL
+
 
 # ---------------------------------------------------------------------------
 # contains_pii
@@ -138,7 +221,9 @@ class TestContainsPii:
         assert contains_pii("SSN 123-45-6789", include_owner=False)
 
     def test_detects_owner_name(self):
-        assert contains_pii("Dear Jeremy Tabernero")
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            _, _, cp, _ = _reload_owner_patterns()
+            assert cp("Dear Jeremy Tabernero")
 
     def test_safe_text(self):
         assert not contains_pii("The weather is nice", include_owner=False)
@@ -164,8 +249,10 @@ class TestScanPii:
         assert scan_pii("hello world", include_owner=False) == []
 
     def test_owner_findings(self):
-        findings = scan_pii("Jeremy Tabernero")
-        assert any(f["type"] == "owner_name" for f in findings)
+        with mock.patch.dict(os.environ, _OWNER_ENV):
+            _, _, _, sp = _reload_owner_patterns()
+            findings = sp("Jeremy Tabernero")
+            assert any(f["type"] == "owner_name" for f in findings)
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +281,7 @@ class TestAuditPiiRedaction:
                 action="monitoring jeremytabernero@gmail.com",
             )
             entry = log.query(agent="gmail_agent")[0]
+            # The general email pattern catches this even without owner env
             assert "jeremytabernero@gmail.com" not in entry.action
 
     def test_audit_redacts_ssn_in_details(self):

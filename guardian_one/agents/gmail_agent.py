@@ -230,9 +230,14 @@ class GmailAgent(BaseAgent):
         # Sort categories by total amount
         sorted_cats = dict(sorted(categories.items(), key=lambda x: x[1], reverse=True))
 
-        # Redact account names and institution names that may contain PII
-        safe_accounts = {redact_text(k): v for k, v in accounts.items()}
-        safe_institutions = sorted(redact_text(inst) for inst in institutions)
+        # Redact account names and institution names that may contain PII.
+        # Multiple distinct accounts may redact to the same key, so
+        # aggregate their counts to avoid silently losing data.
+        safe_accounts: dict[str, int] = {}
+        for raw_name, count in accounts.items():
+            redacted_name = redact_text(raw_name)
+            safe_accounts[redacted_name] = safe_accounts.get(redacted_name, 0) + count
+        safe_institutions = sorted(set(redact_text(inst) for inst in institutions))
 
         return {
             "total_transactions": len(transactions),
