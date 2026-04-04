@@ -73,13 +73,28 @@ class DevCoach(BaseAgent):
         self._recommendations: list[dict[str, Any]] = []
         self._fireship_wisdom: list[str] = []
 
+    def _custom_flag_enabled(self, flag_name: str, default: bool = True) -> bool:
+        """Return a boolean feature flag from config.custom, falling back safely."""
+        custom = getattr(self.config, "custom", None)
+        if not isinstance(custom, dict):
+            return default
+        value = custom.get(flag_name, default)
+        return value if isinstance(value, bool) else default
+
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
-        self._seed_tech_registry()
+        tier_list_enabled = self._custom_flag_enabled("tier_list_enabled", default=True)
+        system_discovery_enabled = self._custom_flag_enabled("system_discovery", default=True)
+
+        if tier_list_enabled:
+            self._seed_tech_registry()
         self._seed_fireship_wisdom()
-        self._discover_system()
+        if system_discovery_enabled:
+            self._discover_system()
         self._seed_projects()
         self.log("initialized", details={
+            "tier_list_enabled": tier_list_enabled,
+            "system_discovery_enabled": system_discovery_enabled,
             "tech_entries": len(self._tech_registry),
             "wisdom_tips": len(self._fireship_wisdom),
             "system_components": len(self._system_components),
