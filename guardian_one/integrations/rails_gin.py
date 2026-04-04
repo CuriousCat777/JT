@@ -64,7 +64,7 @@ class ProjectInfo:
 # Dependency detection
 # ---------------------------------------------------------------------------
 
-def _run_cmd(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
+def _run_cmd(cmd: list[str], timeout: int = 30, cwd: str | None = None) -> tuple[int, str, str]:
     """Run a command and return (returncode, stdout, stderr)."""
     try:
         result = subprocess.run(
@@ -72,6 +72,7 @@ def _run_cmd(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
             capture_output=True,
             text=True,
             timeout=timeout,
+            cwd=cwd,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except FileNotFoundError:
@@ -216,6 +217,7 @@ def install_gin(project_dir: str) -> dict[str, Any]:
     rc, out, err = _run_cmd(
         ["go", "get", "-u", "github.com/gin-gonic/gin"],
         timeout=120,
+        cwd=project_dir,
     )
     if rc == 0:
         return {"success": True, "output": out or "gin installed"}
@@ -317,7 +319,7 @@ def scaffold_gin(
     mod = module_path or app_name
 
     # Initialize Go module
-    rc, out, err = _run_cmd(["go", "mod", "init", mod], timeout=30)
+    rc, out, err = _run_cmd(["go", "mod", "init", mod], timeout=30, cwd=str(target))
     if rc != 0:
         shutil.rmtree(target, ignore_errors=True)
         return {"success": False, "error": f"go mod init failed: {err}"}
@@ -344,7 +346,7 @@ def scaffold_gin(
         }
 
     # Tidy modules
-    _run_cmd(["go", "mod", "tidy"], timeout=60)
+    _run_cmd(["go", "mod", "tidy"], timeout=60, cwd=str(target))
 
     return {
         "success": True,
