@@ -101,12 +101,13 @@ docs/
 
 ## Agent System
 
-All agents extend `BaseAgent` (`core/base_agent.py`) which defines three lifecycle methods:
+The orchestrated/registered agents extend `BaseAgent` (`core/base_agent.py`), which defines three lifecycle methods:
 - `initialize()` — Setup and resource loading
 - `run()` — Main execution logic
 - `report()` — Generate status report
 
-Agents are registered with `GuardianOne` (the coordinator) via `register_agent()` in `main.py`.
+These agents are registered with `GuardianOne` (the coordinator) via `register_agent()` in `main.py`.
+Helper/support components that live under `guardian_one/agents/` may not inherit from `BaseAgent` and are not necessarily part of the coordinator-managed lifecycle.
 
 ### Registered Agents
 
