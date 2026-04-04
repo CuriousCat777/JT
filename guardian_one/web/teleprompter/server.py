@@ -318,7 +318,11 @@ def create_app(
         if err:
             return err
         script_id = request.args.get("script_id")
-        limit = int(request.args.get("limit", "50"))
+        limit_raw = request.args.get("limit", "50")
+        try:
+            limit = int(limit_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "limit must be a valid integer"}), 400
         return jsonify(agent.get_sessions(script_id=script_id, limit=limit))
 
     @app.route("/api/sessions/start", methods=["POST"])
