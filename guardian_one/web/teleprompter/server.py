@@ -120,11 +120,9 @@ def create_app(
     # ------------------------------------------------------------------
     # Script generation (AI)
     # ------------------------------------------------------------------
-    @app.route("/api/generate-script", methods=["POST", "OPTIONS"])
+    @app.route("/api/generate-script", methods=["POST"])
     @require_auth
     def generate_script():
-        if request.method == "OPTIONS":
-            return "", 204
         err = _ensure_agent()
         if err:
             return err
