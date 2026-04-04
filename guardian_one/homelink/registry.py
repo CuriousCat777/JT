@@ -286,7 +286,7 @@ NOTION_INTEGRATION = IntegrationRecord(
                        "3. Revoke integration at notion.so/my-integrations. "
                        "4. Review audit log for unauthorized sync operations.",
     owner_agent="notion_sync",
-    additional_agents=["notion_website_sync"],
+    additional_agents=["notion_website_sync", "notion_n8n_sync"],
 )
 
 CLOUDFLARE_INTEGRATION = IntegrationRecord(
@@ -1025,6 +1025,157 @@ WINDOWS_MCP_CONNECTOR = IntegrationRecord(
 )
 
 
+# ---------------------------------------------------------------------------
+# Sovereign IoT Local Control integrations
+# ---------------------------------------------------------------------------
+
+HOME_ASSISTANT_INTEGRATION = IntegrationRecord(
+    name="home_assistant",
+    description="Home Assistant — local IoT control plane, device state management, UI dashboards",
+    base_url="http://localhost:8123",
+    auth_method="api_key",
+    data_flow="IoT devices report state via MQTT → Home Assistant aggregates → "
+              "Node-RED and n8n consume events. All traffic stays on LAN.",
+    vault_keys=["HA_LONG_LIVED_TOKEN"],
+    threat_model=[
+        ThreatEntry("API token theft grants full device control", "critical",
+                    "Token stored in encrypted vault; long-lived tokens rotated every 90 days."),
+        ThreatEntry("Unauthorized device commands via exposed API", "high",
+                    "Home Assistant bound to LAN only; Tailscale VPN for remote access; no port forwarding."),
+        ThreatEntry("Malicious automation execution", "high",
+                    "All automations require human-in-the-loop for destructive actions; audit trail on all commands."),
+        ThreatEntry("Zigbee/Z-Wave device pairing without authorization", "medium",
+                    "Pairing mode disabled by default; must be explicitly enabled per session."),
+        ThreatEntry("Firmware update bricking devices", "medium",
+                    "Firmware updates require manual approval; config snapshots before any update."),
+    ],
+    failure_impact="IoT devices remain in last-known state. Manual control via physical switches. "
+                   "Automations pause until Home Assistant recovers.",
+    rollback_procedure="1. Restart homeassistant container. "
+                       "2. Restore config from backup snapshot. "
+                       "3. Revoke and rotate long-lived token. "
+                       "4. Review audit log for unauthorized commands.",
+    owner_agent="device_agent",
+    additional_agents=["homelink_iot"],
+)
+
+MOSQUITTO_MQTT_INTEGRATION = IntegrationRecord(
+    name="mosquitto_mqtt",
+    description="Eclipse Mosquitto — local MQTT message bus for IoT event-driven communication",
+    base_url="tcp://localhost:1883",
+    auth_method="basic",
+    data_flow="IoT devices publish state to MQTT topics → Home Assistant, Node-RED, and n8n "
+              "subscribe to relevant topics. All traffic is LAN-only.",
+    vault_keys=["MQTT_USERNAME", "MQTT_PASSWORD"],
+    threat_model=[
+        ThreatEntry("Anonymous MQTT access allows unauthorized publish/subscribe", "critical",
+                    "Disable allow_anonymous after initial setup; require username/password authentication."),
+        ThreatEntry("MQTT message injection triggers false automations", "high",
+                    "Topic ACLs restrict which clients can publish to which topics; audit all messages."),
+        ThreatEntry("Unencrypted MQTT traffic sniffed on LAN", "medium",
+                    "Enable TLS on port 8883 after initial setup; generate local CA certificates."),
+        ThreatEntry("Broker overload from misbehaving IoT device", "medium",
+                    "Rate limiting per client; circuit breaker on message floods."),
+        ThreatEntry("Retained messages persist stale or malicious state", "low",
+                    "Periodic cleanup of retained messages; topic expiry configured."),
+    ],
+    failure_impact="IoT event bus down; devices cannot report state. Home Assistant "
+                   "shows stale data. Automations paused until MQTT recovers.",
+    rollback_procedure="1. Restart mosquitto container. "
+                       "2. Check mosquitto.conf for correct auth settings. "
+                       "3. Clear retained messages if corrupted. "
+                       "4. Rotate MQTT credentials in vault.",
+    owner_agent="homelink_iot",
+)
+
+ZIGBEE2MQTT_INTEGRATION = IntegrationRecord(
+    name="zigbee2mqtt",
+    description="Zigbee2MQTT — Zigbee coordinator bridge to MQTT for local device control",
+    base_url="http://localhost:8080",
+    auth_method="api_key",
+    data_flow="Zigbee devices pair with USB coordinator → Zigbee2MQTT translates to MQTT → "
+              "Home Assistant discovers devices. All local, no cloud.",
+    vault_keys=[],
+    threat_model=[
+        ThreatEntry("USB coordinator disconnection breaks Zigbee mesh", "high",
+                    "Use persistent /dev/serial/by-id/ path; monitor container health."),
+        ThreatEntry("Rogue Zigbee device joins network", "medium",
+                    "Disable permit_join by default; whitelist known devices."),
+        ThreatEntry("Zigbee2MQTT frontend exposed without auth", "medium",
+                    "Bind frontend to localhost only; access via Tailscale VPN."),
+        ThreatEntry("Firmware update breaks device compatibility", "low",
+                    "Pin Zigbee2MQTT version; test updates in staging first."),
+        ThreatEntry("Zigbee mesh instability from interference", "low",
+                    "Use dedicated Zigbee channel (25); separate from Wi-Fi 2.4GHz."),
+    ],
+    failure_impact="Zigbee devices unresponsive; Z-Wave and Wi-Fi devices unaffected. "
+                   "Restart Zigbee2MQTT container to recover.",
+    rollback_procedure="1. Restart zigbee2mqtt container. "
+                       "2. Check USB coordinator connection. "
+                       "3. Restore configuration.yaml from backup. "
+                       "4. Re-pair affected devices if needed.",
+    owner_agent="homelink_iot",
+)
+
+NODERED_INTEGRATION = IntegrationRecord(
+    name="nodered",
+    description="Node-RED — deterministic flow-based automation engine for IoT events",
+    base_url="http://localhost:1880",
+    auth_method="basic",
+    data_flow="MQTT events → Node-RED flows → parsed, filtered, routed → "
+              "actions dispatched to Home Assistant or alerts published to MQTT.",
+    vault_keys=["NODERED_ADMIN_PASSWORD"],
+    threat_model=[
+        ThreatEntry("Unauthenticated flow editor allows arbitrary code execution", "critical",
+                    "Enable adminAuth in settings.js; bind to localhost; access via VPN only."),
+        ThreatEntry("Malicious function node executes system commands", "high",
+                    "Disable functionExternalModules; audit all function nodes; restrict to MQTT/HTTP."),
+        ThreatEntry("Flow export leaks credentials embedded in nodes", "medium",
+                    "Use environment variables for all secrets; never hardcode in flows."),
+        ThreatEntry("Infinite loop in flow causes resource exhaustion", "medium",
+                    "Set node timeout limits; monitor container CPU/memory."),
+        ThreatEntry("Node-RED down breaks all deterministic automations", "high",
+                    "Home Assistant retains basic automations independently; Node-RED adds advanced logic."),
+    ],
+    failure_impact="Advanced automations paused; basic Home Assistant automations continue. "
+                   "MQTT messages queue until Node-RED recovers.",
+    rollback_procedure="1. Restart nodered container. "
+                       "2. Restore flows.json from backup. "
+                       "3. Rotate admin credentials. "
+                       "4. Review function nodes for unauthorized code.",
+    owner_agent="homelink_iot",
+)
+
+TAILSCALE_INTEGRATION = IntegrationRecord(
+    name="tailscale_vpn",
+    description="Tailscale — zero-config WireGuard VPN for secure remote access to IoT stack",
+    base_url="https://controlplane.tailscale.com",
+    auth_method="api_key",
+    data_flow="Tailscale creates encrypted WireGuard tunnel from remote device to LAN host. "
+              "No port forwarding needed; all IoT dashboards accessible securely.",
+    vault_keys=["TS_AUTHKEY"],
+    threat_model=[
+        ThreatEntry("Auth key compromise grants VPN access to home network", "critical",
+                    "Use ephemeral auth keys; rotate after initial setup; restrict key to single device."),
+        ThreatEntry("VPN tunnel exposes all LAN services", "high",
+                    "Use Tailscale ACLs to restrict which services are reachable per device."),
+        ThreatEntry("Tailscale control plane outage blocks new connections", "medium",
+                    "Existing tunnels persist; only new device auth requires control plane."),
+        ThreatEntry("DNS leak reveals home network topology", "low",
+                    "Use MagicDNS for internal resolution; block external DNS queries from VPN."),
+        ThreatEntry("Compromised mobile device accesses home network via VPN", "high",
+                    "Require device auth; enable key expiry; use Tailscale lock for device approval."),
+    ],
+    failure_impact="Remote access unavailable; all local IoT control continues normally. "
+                   "VPN is convenience layer, not a dependency.",
+    rollback_procedure="1. Remove compromised device from Tailscale admin console. "
+                       "2. Rotate auth key in vault. "
+                       "3. Restart tailscale container. "
+                       "4. Review Tailscale audit log for unauthorized access.",
+    owner_agent="homelink_iot",
+)
+
+
 class IntegrationRegistry:
     """Catalog of all registered external service integrations."""
 
@@ -1087,6 +1238,11 @@ class IntegrationRegistry:
             SMART_TV_INTEGRATION,
             NETWORK_INFRA_INTEGRATION,
             RING_ALARM_INTEGRATION,
+            HOME_ASSISTANT_INTEGRATION,
+            MOSQUITTO_MQTT_INTEGRATION,
+            ZIGBEE2MQTT_INTEGRATION,
+            NODERED_INTEGRATION,
+            TAILSCALE_INTEGRATION,
             DESKTOP_COMMANDER_CONNECTOR,
             FILESYSTEM_MCP_CONNECTOR,
             AWS_MCP_CONNECTOR,

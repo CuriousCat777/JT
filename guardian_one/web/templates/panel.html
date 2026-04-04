@@ -508,6 +508,9 @@ tr:hover td { background: var(--bg-primary); }
       <div class="nav-item" data-panel="registry">
         <span class="nav-icon">&#9783;</span> Registry
       </div>
+      <div class="nav-item" data-panel="network">
+        <span class="nav-icon">&#9096;</span> Network Scan
+      </div>
     </div>
     <div class="nav-section">
       <div class="nav-label">System</div>
@@ -824,6 +827,38 @@ tr:hover td { background: var(--bg-primary); }
         <button class="btn" onclick="loadSummary()">Refresh</button>
       </div>
       <div id="summaryView"></div>
+    </div>
+
+    <!-- Network Scan Panel -->
+    <div id="panel-network" class="panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="color: var(--text-primary);">Network Scan</h3>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <input type="text" id="scanSubnet" value="192.168.1.0/24"
+            style="padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px;
+                   font-family: var(--font-mono); font-size: 12px; width: 180px;
+                   background: var(--bg-card); color: var(--text-primary);">
+          <button class="btn" id="btnRunScan" onclick="startNetworkScan()">Run nmap Scan</button>
+        </div>
+      </div>
+      <div id="scanStatus" style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted);"></div>
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <div style="background: #1a1a2e; border-radius: 12px; position: relative;">
+          <div style="padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460;
+                      display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #a8b2d1; font-family: var(--font-mono); font-size: 11px; font-weight: 600;">
+              TERMINAL — nmap output
+            </span>
+            <span id="scanIndicator" style="display: none; color: #00ff41; font-size: 11px;
+                  font-family: var(--font-mono); animation: pulse 1s infinite;">SCANNING...</span>
+          </div>
+          <div id="scanOutput" style="padding: 16px; margin: 0; font-family: var(--font-mono);
+               font-size: 12px; line-height: 1.7; color: #e0e0e0; background: #1a1a2e;
+               max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+               min-height: 200px;"><span style="color:#555">Waiting for scan...</span></div>
+        </div>
+      </div>
+      <div id="scanResults" style="margin-top: 16px;"></div>
     </div>
 
   </main>
@@ -1313,6 +1348,159 @@ async function loadSummary() {
 }
 
 // ---------------------------------------------------------------------------
+// Network Scan (SSE live streaming)
+// ---------------------------------------------------------------------------
+let _scanEventSource = null;
+
+function startNetworkScan() {
+  const subnet = document.getElementById('scanSubnet').value.trim();
+  const output = document.getElementById('scanOutput');
+  const indicator = document.getElementById('scanIndicator');
+  const btn = document.getElementById('btnRunScan');
+  const results = document.getElementById('scanResults');
+  const status = document.getElementById('scanStatus');
+
+  // Reset UI
+  output.innerHTML = '';
+  results.innerHTML = '';
+  indicator.style.display = 'inline';
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  status.textContent = `Scanning ${subnet} — this may take 30-60 seconds...`;
+
+  // Close any previous stream
+  if (_scanEventSource) { _scanEventSource.close(); }
+
+  _scanEventSource = new EventSource(`/api/homelink/network-scan/stream?subnet=${encodeURIComponent(subnet)}`);
+
+  _scanEventSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+
+    if (data.type === 'output') {
+      const line = document.createElement('div');
+      // Colorize nmap output
+      let text = data.line;
+      if (text.includes('Nmap scan report')) {
+        line.style.color = '#00ff41';
+        line.style.fontWeight = '600';
+      } else if (text.includes('Host is up')) {
+        line.style.color = '#4fc3f7';
+      } else if (text.includes('MAC Address')) {
+        line.style.color = '#ffb74d';
+      } else if (text.startsWith('Starting Nmap') || text.startsWith('Nmap done')) {
+        line.style.color = '#ce93d8';
+        line.style.fontWeight = '600';
+      } else {
+        line.style.color = '#a0a0a0';
+      }
+      line.textContent = text;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+
+    } else if (data.type === 'status') {
+      const line = document.createElement('div');
+      line.style.color = '#80cbc4';
+      line.style.fontWeight = '500';
+      line.textContent = `>> ${data.line}`;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+      status.textContent = data.line;
+
+    } else if (data.type === 'error') {
+      const line = document.createElement('div');
+      line.style.color = '#ef5350';
+      line.style.fontWeight = '600';
+      line.textContent = `ERROR: ${data.line}`;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+      toast(data.line, 'error');
+
+    } else if (data.type === 'results') {
+      const devices = data.devices || [];
+      if (devices.length > 0) {
+        // Build table via DOM APIs to avoid XSS from attacker-controlled hostnames/vendors
+        const card = document.createElement('div');
+        card.className = 'card';
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = `Discovered Devices (${devices.length})`;
+        card.appendChild(title);
+
+        const table = document.createElement('table');
+        table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
+        const headerRow = document.createElement('tr');
+        headerRow.style.cssText = 'border-bottom:2px solid var(--border);text-align:left;';
+        ['IP Address','Hostname','MAC Address','Vendor','Status'].forEach(text => {
+          const th = document.createElement('th');
+          th.style.padding = '8px';
+          th.textContent = text;
+          headerRow.appendChild(th);
+        });
+        table.appendChild(headerRow);
+
+        devices.forEach(d => {
+          const row = document.createElement('tr');
+          row.style.borderBottom = '1px solid var(--border-subtle)';
+          const ipCell = document.createElement('td');
+          ipCell.style.cssText = 'padding:8px;font-family:var(--font-mono);font-weight:600;';
+          ipCell.textContent = d.ip || '';
+          row.appendChild(ipCell);
+          const hostCell = document.createElement('td');
+          hostCell.style.padding = '8px';
+          hostCell.textContent = d.hostname || '\u2014';
+          row.appendChild(hostCell);
+          const macCell = document.createElement('td');
+          macCell.style.cssText = 'padding:8px;font-family:var(--font-mono);font-size:11px;';
+          macCell.textContent = d.mac || '\u2014';
+          row.appendChild(macCell);
+          const vendorCell = document.createElement('td');
+          vendorCell.style.padding = '8px';
+          vendorCell.textContent = d.vendor || '\u2014';
+          row.appendChild(vendorCell);
+          const statusCell = document.createElement('td');
+          statusCell.style.padding = '8px';
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge badge-running';
+          badge.textContent = d.status || 'up';
+          statusCell.appendChild(badge);
+          row.appendChild(statusCell);
+          table.appendChild(row);
+        });
+        card.appendChild(table);
+        results.innerHTML = '';
+        results.appendChild(card);
+      }
+
+    } else if (data.type === 'done') {
+      indicator.style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = 'Run nmap Scan';
+      _scanEventSource.close();
+      _scanEventSource = null;
+    }
+  };
+
+  _scanEventSource.onerror = function() {
+    indicator.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = 'Run nmap Scan';
+    status.textContent = 'Connection lost.';
+    if (_scanEventSource) { _scanEventSource.close(); _scanEventSource = null; }
+  };
+}
+
+async function loadNetwork() {
+  // Check if a scan is already running
+  const data = await api('/api/homelink/network-scan/status');
+  if (data.running) {
+    document.getElementById('scanStatus').textContent = 'A scan is currently in progress...';
+    document.getElementById('btnRunScan').disabled = true;
+    document.getElementById('btnRunScan').textContent = 'Scanning...';
+    document.getElementById('scanIndicator').style.display = 'inline';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Loader map & init
 // ---------------------------------------------------------------------------
 const loaders = {
@@ -1324,6 +1512,7 @@ const loaders = {
   services: loadServices,
   vault: loadVault,
   registry: loadRegistry,
+  network: loadNetwork,
   audit: loadAudit,
   config: loadConfig,
   summary: loadSummary,

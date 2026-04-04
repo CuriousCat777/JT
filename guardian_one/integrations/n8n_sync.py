@@ -278,6 +278,158 @@ class N8nAPIProvider(N8nProvider):
 # Website workflow templates (pre-built n8n node configurations)
 # ---------------------------------------------------------------------------
 
+class GatewayN8nProvider(N8nProvider):
+    """n8n provider that routes all API calls through the Guardian Gateway.
+
+    This ensures TLS enforcement, rate limiting, circuit breaking, and
+    audit logging for all n8n API interactions — instead of raw urllib.
+
+    The Gateway must have a service named 'n8n_workflows' registered
+    (done automatically by GuardianOne._setup_gateway_services).
+    """
+
+    SERVICE_NAME = "n8n_workflows"
+
+    def __init__(self, gateway: Any, agent: str = "web_architect") -> None:
+        self._gateway = gateway
+        self._agent = agent
+        self._authenticated = False
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._authenticated
+
+    @property
+    def has_credentials(self) -> bool:
+        svc = self._gateway.get_service(self.SERVICE_NAME)
+        return svc is not None
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Route request through the Gateway."""
+        api_key = os.getenv("N8N_API_KEY", "")
+        headers = {
+            "X-N8N-API-KEY": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        result = self._gateway.request(
+            service=self.SERVICE_NAME,
+            method=method,
+            path=path,
+            headers=headers,
+            body=body,
+            agent=self._agent,
+        )
+        if result.get("success"):
+            return result.get("data")
+        return {"error": True, "detail": result.get("error", "Gateway error")}
+
+    def authenticate(self) -> bool:
+        if not self.has_credentials:
+            self._authenticated = False
+            return False
+        result = self._request("GET", "/api/v1/workflows?limit=1")
+        if result is not None and not result.get("error"):
+            self._authenticated = True
+            return True
+        self._authenticated = False
+        return False
+
+    def list_workflows(self) -> list[N8nWorkflow]:
+        result = self._request("GET", "/api/v1/workflows")
+        if result is None or result.get("error"):
+            return []
+        workflows = []
+        for item in result.get("data", []):
+            workflows.append(N8nWorkflow(
+                id=str(item.get("id", "")),
+                name=item.get("name", ""),
+                active=item.get("active", False),
+                tags=[t.get("name", "") for t in item.get("tags", [])],
+                created_at=item.get("createdAt", ""),
+                updated_at=item.get("updatedAt", ""),
+                raw=item,
+            ))
+        return workflows
+
+    def get_workflow(self, workflow_id: str) -> N8nWorkflow | None:
+        result = self._request("GET", f"/api/v1/workflows/{workflow_id}")
+        if result is None or result.get("error"):
+            return None
+        return N8nWorkflow(
+            id=str(result.get("id", workflow_id)),
+            name=result.get("name", ""),
+            active=result.get("active", False),
+            nodes=result.get("nodes", []),
+            tags=[t.get("name", "") for t in result.get("tags", [])],
+            created_at=result.get("createdAt", ""),
+            updated_at=result.get("updatedAt", ""),
+            raw=result,
+        )
+
+    def create_workflow(self, name: str, nodes: list[dict[str, Any]]) -> N8nWorkflow | None:
+        body = {"name": name, "nodes": nodes, "connections": {}}
+        result = self._request("POST", "/api/v1/workflows", body)
+        if result is None or result.get("error"):
+            return None
+        return N8nWorkflow(
+            id=str(result.get("id", "")),
+            name=result.get("name", name),
+            active=result.get("active", False),
+            nodes=result.get("nodes", nodes),
+            raw=result,
+        )
+
+    def activate_workflow(self, workflow_id: str) -> bool:
+        result = self._request("PATCH", f"/api/v1/workflows/{workflow_id}", {"active": True})
+        return result is not None and not result.get("error")
+
+    def deactivate_workflow(self, workflow_id: str) -> bool:
+        result = self._request("PATCH", f"/api/v1/workflows/{workflow_id}", {"active": False})
+        return result is not None and not result.get("error")
+
+    def execute_workflow(self, workflow_id: str, data: dict[str, Any] | None = None) -> N8nExecution | None:
+        body = {}
+        if data:
+            body["data"] = data
+        result = self._request("POST", f"/api/v1/workflows/{workflow_id}/run", body)
+        if result is None or result.get("error"):
+            return None
+        return N8nExecution(
+            id=str(result.get("id", "")),
+            workflow_id=workflow_id,
+            status=result.get("status", "running"),
+            started_at=result.get("startedAt", ""),
+            finished_at=result.get("stoppedAt", ""),
+            mode=result.get("mode", "manual"),
+            raw=result,
+        )
+
+    def get_execution(self, execution_id: str) -> N8nExecution | None:
+        result = self._request("GET", f"/api/v1/executions/{execution_id}")
+        if result is None or result.get("error"):
+            return None
+        return N8nExecution(
+            id=str(result.get("id", execution_id)),
+            workflow_id=str(result.get("workflowId", "")),
+            status=result.get("status", "unknown"),
+            started_at=result.get("startedAt", ""),
+            finished_at=result.get("stoppedAt", ""),
+            mode=result.get("mode", "manual"),
+            raw=result,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Website workflow templates (pre-built n8n node configurations)
+# ---------------------------------------------------------------------------
+
+
 def website_build_workflow_nodes(domain: str) -> list[dict[str, Any]]:
     """Generate n8n workflow nodes for building a static website."""
     return [
