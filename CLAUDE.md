@@ -56,7 +56,7 @@ guardian_one/
 │   └── privacy_tools.py            # VPN/privacy services
 ├── homelink/                       # H.O.M.E. L.I.N.K. smart-home service layer
 │   ├── gateway.py                  # API gateway (rate limit, TLS, circuit breaker)
-│   ├── vault.py                    # Encrypted credential storage (AES-256-GCM)
+│   ├── vault.py                    # Fernet/PBKDF2-encrypted credential storage
 │   ├── registry.py                 # Integration catalog with threat models
 │   ├── monitor.py                  # System health monitoring
 │   ├── devices.py                  # IoT device inventory & lifecycle
