@@ -247,23 +247,22 @@ python main.py --devpanel              # Start web dev panel (port 5100)
 python main.py --sandbox               # Deploy in sandbox for testing
 ```
 
-## Dependencies
+## Path-Specific Rules
 
-Core (`pyproject.toml`):
-- `pyyaml`, `cryptography`, `python-dotenv`, `schedule`, `rich`
+- `guardian_one/agents/` — Each file is a self-contained agent. Use sub-agents for parallel research when modifying multiple agents simultaneously.
+- `guardian_one/core/` — Critical infrastructure. Always read existing code before modifying. Run tests after any change.
+- `guardian_one/integrations/` — External API connectors. Never hardcode credentials. All calls must go through Gateway.
+- `guardian_one/homelink/` — Security-sensitive layer. Changes require extra care with encryption and access control.
+- `tests/` — Test files mirror the source structure. When modifying source, update corresponding tests.
+- `config/` — Configuration files. Validate YAML syntax after edits.
 
-Full (`requirements.txt` adds):
-- `openpyxl` (Excel dashboards), `flask` (dev panel)
-- `ollama`, `anthropic`, `httpx` (AI engine)
-- `mcp` (MCP server)
-- `python-kasa`, `phue` (smart home drivers)
-- `pytest`, `pytest-asyncio` (dev)
+## Sub-Agent Configuration
 
-Requires **Python 3.10+** (3.11+ recommended).
-
-## CI/CD
-
-- **GitHub Actions**: `.github/workflows/compose-health-check.yml` — runs on pushes to `main` when `docker-compose.yml` changes, and on all PRs to `main`; validates n8n + Postgres health via docker compose.
+When working on complex tasks, use sub-agents with isolation:
+- Use `isolation: "worktree"` for changes that might conflict with ongoing work
+- Delegate independent research tasks to parallel sub-agents
+- Use the Explore agent type for codebase discovery across unfamiliar modules
+- Keep agent teams focused: one agent per concern (e.g., one for tests, one for implementation)
 
 ## Development Notes
 
