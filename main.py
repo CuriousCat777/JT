@@ -69,6 +69,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.teleprompter import Teleprompter
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -96,6 +97,11 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    tp_cfg = config.agents.get("teleprompter", AgentConfig(name="teleprompter"))
+    guardian.register_agent(Teleprompter(
+        config=tp_cfg, audit=guardian.audit, data_dir=config.data_dir,
+    ))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -329,6 +335,16 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--teleprompter", action="store_true",
+                        help="Launch teleprompter API server + PWA")
+    parser.add_argument("--teleprompter-port", type=int, default=5200,
+                        help="Teleprompter server port (default: 5200)")
+    parser.add_argument("--teleprompter-token", type=str, default=None,
+                        help="API token for teleprompter (auto-generated if omitted)")
+    parser.add_argument("--teleprompter-scripts", action="store_true",
+                        help="List all teleprompter scripts")
+    parser.add_argument("--teleprompter-stats", action="store_true",
+                        help="Show teleprompter practice statistics")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -455,6 +471,56 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.teleprompter:
+        from guardian_one.web.teleprompter.server import run_teleprompter_server
+        run_teleprompter_server(
+            guardian=guardian,
+            port=args.teleprompter_port,
+            api_token=args.teleprompter_token,
+        )
+        guardian.shutdown()
+        return
+
+    if args.teleprompter_scripts:
+        tp = guardian.get_agent("teleprompter")
+        if tp and isinstance(tp, Teleprompter):
+            tp.initialize()
+            scripts = tp.list_scripts()
+            print(f"\n  Teleprompter Scripts ({len(scripts)})")
+            print("  " + "=" * 50)
+            for s in scripts:
+                ai_tag = " [AI]" if s.get("ai_generated") else ""
+                print(f"  [{s['category']:16s}] {s['title']}{ai_tag}")
+                if s.get("scenario"):
+                    print(f"                     {s['scenario'][:60]}")
+            print()
+        else:
+            print("  Teleprompter agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.teleprompter_stats:
+        tp = guardian.get_agent("teleprompter")
+        if tp and isinstance(tp, Teleprompter):
+            tp.initialize()
+            stats = tp.practice_stats()
+            print(f"\n  Teleprompter Practice Stats")
+            print("  " + "=" * 50)
+            print(f"  Total sessions:    {stats['total_sessions']}")
+            print(f"  Average rating:    {stats['average_rating']:.1f}/5")
+            print(f"  Best rating:       {stats['best_rating']}/5")
+            print(f"  Practice minutes:  {stats['total_practice_minutes']:.0f}")
+            print(f"  This week:         {stats['sessions_this_week']}")
+            if stats['categories_practiced']:
+                print(f"\n  Categories practiced:")
+                for cat, count in stats['categories_practiced'].items():
+                    print(f"    {cat}: {count} sessions")
+            print()
+        else:
+            print("  Teleprompter agent not available.")
         guardian.shutdown()
         return
 
