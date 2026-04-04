@@ -213,6 +213,13 @@ class VarysAgent(BaseAgent):
         """Return all loaded Sigma detection rules."""
         return self._sigma.get_rules()
 
+    def get_alert_by_id(self, alert_id: str) -> SecurityAlert | None:
+        """Look up a single alert by ID."""
+        for alert in self._alerts:
+            if alert.id == alert_id:
+                return alert
+        return None
+
     # ── Alert management ──────────────────────────────────────────
 
     def get_alerts(
@@ -305,7 +312,9 @@ class VarysAgent(BaseAgent):
     def _execute_response(self, alert: SecurityAlert) -> str | None:
         """Execute automated response based on severity. Returns action taken."""
         if alert.severity == AlertSeverity.CRITICAL:
-            self._containment.isolate_host(alert.affected_host)
+            isolated = False
+            if alert.affected_host:
+                isolated = self._containment.isolate_host(alert.affected_host)
             self._alerter.send_alert(alert, channels=["console", "email"])
             self.log(
                 "auto_response_critical",
@@ -313,7 +322,9 @@ class VarysAgent(BaseAgent):
                 details=alert.to_dict(),
                 requires_review=True,
             )
-            return f"CRITICAL: Isolated {alert.affected_host}, sent alerts"
+            if isolated:
+                return f"CRITICAL: Isolated {alert.affected_host}, sent alerts"
+            return f"CRITICAL: Alert sent (no host to isolate)"
         elif alert.severity == AlertSeverity.HIGH:
             self._alerter.send_alert(alert, channels=["console"])
             self.log(

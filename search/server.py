@@ -351,6 +351,7 @@ function doSearch(){
   const params=new URLSearchParams();
   if(state.q)params.set("q",state.q);
   params.set("page",state.page);params.set("per_page",state.per_page);
+  if(state.sort&&state.sort!=="relevance")params.set("sort",state.sort);
   Object.entries(state.filters).forEach(([k,vals])=>{if(vals.length>0)params.set(k,vals[0])});
   document.getElementById("results").innerHTML='<div class="skel"><div class="card"></div><div class="card"></div><div class="card"></div></div>';
   fetch(API+"?"+params.toString()).then(r=>r.json()).then(renderResults).catch(err=>{
@@ -503,7 +504,7 @@ def cleanup():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Guardian One Search PoC Server")
     parser.add_argument("--port", type=int, default=5200, help="Port (default: 5200)")
-    parser.add_argument("--host", default="0.0.0.0", help="Host (default: 0.0.0.0)")
+    parser.add_argument("--host", default="127.0.0.1", help="Host (default: 127.0.0.1)")
     args = parser.parse_args()
 
     build_index()

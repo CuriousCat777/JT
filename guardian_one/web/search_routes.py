@@ -19,12 +19,15 @@ TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
 TYPESENSE_PORT = os.getenv("TYPESENSE_PORT", "8108")
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "guardian-search-key")
 # Search-only key for browser clients (scoped, no write/admin access)
-TYPESENSE_SEARCH_KEY = os.getenv("TYPESENSE_SEARCH_KEY", TYPESENSE_API_KEY)
+# SECURITY: In production, set TYPESENSE_SEARCH_KEY to a scoped key.
+# If unset, browser clients will NOT receive any key (empty string).
+TYPESENSE_SEARCH_KEY = os.getenv("TYPESENSE_SEARCH_KEY", "")
 
 MEILI_HOST = os.getenv("MEILI_HOST", "http://localhost:7700")
 MEILI_API_KEY = os.getenv("MEILI_API_KEY", "guardian-meili-key")
-# Search-only key for browser clients (never expose master key to browser)
-MEILI_SEARCH_KEY = os.getenv("MEILI_SEARCH_KEY", MEILI_API_KEY)
+# SECURITY: In production, set MEILI_SEARCH_KEY to a search-only key.
+# If unset, browser clients will NOT receive any key (empty string).
+MEILI_SEARCH_KEY = os.getenv("MEILI_SEARCH_KEY", "")
 
 
 def _get_typesense_client():
@@ -117,9 +120,11 @@ def search_meilisearch():
 
     filters = []
     if category:
-        filters.append(f'category = "{category}"')
+        safe_cat = category.replace("\\", "\\\\").replace('"', '\\"')
+        filters.append(f'category = "{safe_cat}"')
     if doc_type:
-        filters.append(f'doc_type = "{doc_type}"')
+        safe_dt = doc_type.replace("\\", "\\\\").replace('"', '\\"')
+        filters.append(f'doc_type = "{safe_dt}"')
 
     try:
         client = _get_meili_client()
