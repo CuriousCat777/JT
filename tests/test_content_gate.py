@@ -9,7 +9,7 @@ from guardian_one.core.content_gate import (
     redact_text,
     scan_pii,
 )
-from guardian_one.core.audit import AuditLog, Severity
+from guardian_one.core.audit import AuditLog
 
 
 # ---------------------------------------------------------------------------
