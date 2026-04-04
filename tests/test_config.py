@@ -92,15 +92,15 @@ class TestLoadConfig:
 
     def test_env_var_overrides_data_dir(self, sample_yaml_config):
         """GUARDIAN_DATA_DIR env var takes precedence over YAML."""
-        with patch.dict(os.environ, {"GUARDIAN_DATA_DIR": "/custom/data"}):
+        with patch.dict(os.environ, {"GUARDIAN_DATA_DIR": "custom_data"}):
             cfg = load_config(sample_yaml_config)
-            assert cfg.data_dir == "/custom/data"
+            assert cfg.data_dir == "custom_data"
 
     def test_env_var_overrides_log_dir(self, sample_yaml_config):
         """GUARDIAN_LOG_DIR env var takes precedence over YAML."""
-        with patch.dict(os.environ, {"GUARDIAN_LOG_DIR": "/custom/logs"}):
+        with patch.dict(os.environ, {"GUARDIAN_LOG_DIR": "custom_logs"}):
             cfg = load_config(sample_yaml_config)
-            assert cfg.log_dir == "/custom/logs"
+            assert cfg.log_dir == "custom_logs"
 
     def test_empty_yaml_file_returns_defaults(self, tmp_path):
         """An empty YAML file should still produce valid defaults."""

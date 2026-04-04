@@ -91,51 +91,61 @@ class TestHueDriver:
         assert driver._bridge_ip == "192.168.1.10"
         assert driver._api_key == "abc123"
 
-    def test_turn_on_no_target_fails(self):
-        """Must specify light_id or group_id."""
+    def test_base_url_property(self):
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        assert driver._base_url == "https://192.168.1.10/api/abc123"
+
+    def test_no_api_key_fails(self):
+        """Driver without api_key returns failure from _request."""
         driver = HueDriver(bridge_ip="192.168.1.10")
-        with patch("guardian_one.homelink.drivers.HueDriver._get_bridge"):
-            result = driver.turn_on()
-            assert result["success"] is False
-            assert "No light_id or group_id" in result["error"]
+        result = driver._request("GET", "/lights")
+        assert result["success"] is False
+        assert "No Hue API key" in result["error"]
 
     def test_turn_on_with_light_id(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        result = driver.turn_on(light_id=1, brightness=200)
-        assert result["success"] is True
-        assert result["target"] == "light:1"
-        mock_bridge.set_light.assert_called_once()
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            result = driver.turn_on(light_id=1, brightness=200)
+            assert result["success"] is True
+            mock_req.assert_called_once_with(
+                "PUT", "/lights/1/state", {"on": True, "bri": 200},
+            )
 
     def test_turn_on_with_group_id(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        result = driver.turn_on(group_id=3, brightness=128)
-        assert result["success"] is True
-        assert result["target"] == "group:3"
-        mock_bridge.set_group.assert_called_once()
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            result = driver.turn_on(group_id=3, brightness=128)
+            assert result["success"] is True
+            mock_req.assert_called_once_with(
+                "PUT", "/groups/3/action", {"on": True, "bri": 128},
+            )
+
+    def test_turn_on_default_all_lights(self):
+        """When no light_id or group_id, defaults to group 0 (all lights)."""
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            driver.turn_on()
+            mock_req.assert_called_once_with(
+                "PUT", "/groups/0/action", {"on": True, "bri": 254},
+            )
 
     def test_turn_off_with_light_id(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        result = driver.turn_off(light_id=2)
-        assert result["success"] is True
-        mock_bridge.set_light.assert_called_once_with(2, {"on": False})
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            result = driver.turn_off(light_id=2)
+            assert result["success"] is True
+            mock_req.assert_called_once_with(
+                "PUT", "/lights/2/state", {"on": False},
+            )
 
     def test_brightness_scaling(self):
-        """0-100% → 1-254 Hue scale."""
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-
-        driver.set_brightness(50, light_id=1)
-        call_args = mock_bridge.set_light.call_args[0]
-        cmd = call_args[1]
-        assert cmd["on"] is True
-        assert 125 <= cmd["bri"] <= 128  # 50% of 254 ≈ 127
+        """0-100% -> 1-254 Hue scale. 50% -> ~127."""
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            driver.set_brightness(50, light_id=1)
+            call_body = mock_req.call_args[0][2]
+            assert call_body["on"] is True
+            assert 125 <= call_body["bri"] <= 129
 
     @pytest.mark.parametrize("brightness_pct,expected_min,expected_max", [
         (0, 1, 1),       # clamps to min=1
@@ -143,12 +153,11 @@ class TestHueDriver:
         (50, 125, 129),   # ~127
     ])
     def test_brightness_scaling_parametrized(self, brightness_pct, expected_min, expected_max):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        driver.set_brightness(brightness_pct, light_id=1)
-        cmd = mock_bridge.set_light.call_args[0][1]
-        assert expected_min <= cmd["bri"] <= expected_max
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            driver.set_brightness(brightness_pct, light_id=1)
+            call_body = mock_req.call_args[0][2]
+            assert expected_min <= call_body["bri"] <= expected_max
 
     @pytest.mark.parametrize("color_name,expected_key", [
         ("warm", "ct"),
@@ -158,50 +167,41 @@ class TestHueDriver:
         ("blue", "hue"),
     ])
     def test_set_color_presets(self, color_name, expected_key):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        result = driver.set_color(light_id=1, color_name=color_name)
-        assert result["success"] is True
-        cmd = mock_bridge.set_light.call_args[0][1]
-        assert expected_key in cmd
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            result = driver.set_color(light_id=1, color_name=color_name)
+            assert result["success"] is True
+            call_body = mock_req.call_args[0][2]
+            assert expected_key in call_body
 
     def test_set_color_no_color_specified(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
         result = driver.set_color(light_id=1)
         assert result["success"] is False
         assert "No color specified" in result["error"]
 
     def test_set_color_with_hue_value(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        result = driver.set_color(light_id=1, hue=10000, sat=200)
-        assert result["success"] is True
-        cmd = mock_bridge.set_light.call_args[0][1]
-        assert cmd["hue"] == 10000
-        assert cmd["sat"] == 200
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("put")) as mock_req:
+            result = driver.set_color(light_id=1, hue=10000, sat=200)
+            assert result["success"] is True
+            call_body = mock_req.call_args[0][2]
+            assert call_body["hue"] == 10000
+            assert call_body["sat"] == 200
 
-    def test_import_error_returns_fail(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        with patch("guardian_one.homelink.drivers.HueDriver._get_bridge",
-                    side_effect=ImportError("phue not installed")):
-            result = driver.turn_on(light_id=1)
-            assert result["success"] is False
+    def test_get_lights(self):
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("get", data={})) as mock_req:
+            result = driver.get_lights()
+            assert result["success"] is True
+            mock_req.assert_called_once_with("GET", "/lights")
 
-    def test_get_lights_and_groups(self):
-        driver = HueDriver(bridge_ip="192.168.1.10")
-        mock_bridge = MagicMock()
-        driver._bridge = mock_bridge
-        mock_bridge.get_light_objects.return_value = {}
-        result = driver.get_lights()
-        assert result["success"] is True
-
-        mock_bridge.get_group.return_value = {}
-        result = driver.get_groups()
-        assert result["success"] is True
+    def test_get_groups(self):
+        driver = HueDriver(bridge_ip="192.168.1.10", api_key="abc123")
+        with patch.object(driver, "_request", return_value=_ok("get", data={})) as mock_req:
+            result = driver.get_groups()
+            assert result["success"] is True
+            mock_req.assert_called_once_with("GET", "/groups")
 
 
 # --- Govee LAN Driver ---

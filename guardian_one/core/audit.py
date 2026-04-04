@@ -4,6 +4,12 @@ The in-memory entry list is capped at ``max_memory_entries`` (default 10 000).
 The JSONL file on disk is append-only and keeps the full history.  When the
 log file exceeds ``max_file_bytes`` (default 10 MB) it is rotated:
     audit.jsonl → audit.jsonl.1 (then audit.jsonl.2, etc.)
+
+PII Protection:
+    All audit entries pass through the content gate before being written to
+    disk.  String values in the ``details`` dict and the ``action`` field are
+    automatically redacted so that PII (emails, names, SSNs, account numbers,
+    etc.) never reaches the JSONL log in plaintext.
 """
 
 from __future__ import annotations
@@ -17,6 +23,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+from guardian_one.core.content_gate import redact_dict, redact_text
 
 
 class Severity(Enum):
@@ -86,12 +94,16 @@ class AuditLog:
         details: dict[str, Any] | None = None,
         requires_review: bool = False,
     ) -> AuditEntry:
+        # Redact PII from action string and details before persisting
+        safe_action = redact_text(action)
+        safe_details = redact_dict(details) if details else {}
+
         entry = AuditEntry(
             timestamp=datetime.now(timezone.utc).isoformat(),
             agent=agent,
-            action=action,
+            action=safe_action,
             severity=severity.value,
-            details=details or {},
+            details=safe_details,
             requires_review=requires_review,
         )
         with self._lock:

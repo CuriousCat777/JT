@@ -8,14 +8,17 @@ Usage:
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import shutil
+import subprocess
 import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne
@@ -943,6 +946,147 @@ def create_app() -> Flask:
         if _ring_monitor is None:
             return jsonify({"events": [], "note": "Ring monitor not started"})
         return jsonify({"events": _ring_monitor.manteca_events()})
+
+    # ------------------------------------------------------------------
+    # API — Live Network Scan (SSE streaming)
+    # ------------------------------------------------------------------
+
+    _scan_lock = threading.Lock()
+    _scan_running = False
+
+    @app.route("/api/homelink/network-scan/stream")
+    def api_network_scan_stream():
+        """SSE endpoint: run nmap and stream output line-by-line."""
+        nonlocal _scan_running
+        import re
+        import time as _time
+
+        subnet = request.args.get("subnet", "192.168.1.0/24")
+
+        # Validate subnet — must be valid IPv4 CIDR within RFC1918, /20 or smaller
+        _rfc1918 = (
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        )
+        _min_prefix = 20
+        try:
+            network = ipaddress.ip_network(subnet, strict=False)
+            if network.version != 4:
+                raise ValueError("IPv6 is not supported")
+            if network.prefixlen < _min_prefix:
+                raise ValueError(f"Subnet too large; minimum prefix is /{_min_prefix}")
+            if not any(network.subnet_of(priv) for priv in _rfc1918):
+                raise ValueError("Subnet must be within RFC1918 private ranges")
+            subnet = str(network)
+        except ValueError:
+            def _bad_subnet():
+                yield f"data: {json.dumps({'type': 'error', 'line': f'Invalid subnet. Use a private IPv4 CIDR (/{_min_prefix} or smaller), e.g. 192.168.1.0/24'})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            return Response(_bad_subnet(), mimetype="text/event-stream")
+
+        # Prevent concurrent scans (thread-safe)
+        with _scan_lock:
+            if _scan_running:
+                def _busy():
+                    yield "data: {\"type\":\"error\",\"line\":\"A scan is already running. Please wait.\"}\n\n"
+                    yield "data: {\"type\":\"done\"}\n\n"
+                return Response(_busy(), mimetype="text/event-stream")
+            _scan_running = True
+
+        if not shutil.which("nmap"):
+            with _scan_lock:
+                _scan_running = False
+            def _no_nmap():
+                yield "data: {\"type\":\"error\",\"line\":\"nmap not found on PATH. Install with: sudo apt install nmap\"}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            return Response(_no_nmap(), mimetype="text/event-stream")
+
+        def generate():
+            nonlocal _scan_running
+            proc = None
+            try:
+                g = _get_guardian()
+                g.audit.record(
+                    agent="homelink_iot",
+                    action="live_network_scan_started",
+                    severity=Severity.INFO,
+                    details={"subnet": subnet, "source": "devpanel"},
+                )
+
+                yield f"data: {json.dumps({'type': 'status', 'line': f'Starting nmap scan on {subnet}...'})}\n\n"
+
+                proc = subprocess.Popen(
+                    ["nmap", "-sn", "-oX", "-", subnet],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+
+                xml_buffer = []
+                deadline = _time.monotonic() + 120
+                for line in proc.stdout:
+                    if _time.monotonic() > deadline:
+                        proc.kill()
+                        yield f"data: {json.dumps({'type': 'error', 'line': 'Scan timed out after 120 seconds.'})}\n\n"
+                        yield "data: {\"type\":\"done\"}\n\n"
+                        return
+                    stripped = line.rstrip("\n")
+                    xml_buffer.append(line)
+                    yield f"data: {json.dumps({'type': 'output', 'line': stripped})}\n\n"
+
+                proc.wait(timeout=10)
+
+                # Parse results using correct DiscoveredDevice field names
+                xml_output = "".join(xml_buffer)
+                devices = []
+                try:
+                    from guardian_one.homelink.iot_controller import IoTController
+                    parsed = IoTController._parse_nmap_xml(xml_output)
+                    devices = [
+                        {"ip": d.ip_address, "mac": d.mac_address,
+                         "hostname": d.hostname, "vendor": d.vendor,
+                         "status": "up"}
+                        for d in parsed
+                    ]
+                except AttributeError as e:
+                    yield f"data: {json.dumps({'type': 'status', 'line': f'Error parsing scan results: {e}'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'status', 'line': f'Unexpected error parsing results: {e}'})}\n\n"
+
+                yield f"data: {json.dumps({'type': 'status', 'line': f'Scan complete. {len(devices)} device(s) found.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'results', 'devices': devices})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+
+                g.audit.record(
+                    agent="homelink_iot",
+                    action="live_network_scan_completed",
+                    severity=Severity.INFO,
+                    details={"subnet": subnet, "devices_found": len(devices)},
+                )
+
+            except subprocess.TimeoutExpired:
+                if proc is not None:
+                    proc.kill()
+                yield f"data: {json.dumps({'type': 'error', 'line': 'Scan timed out after 120 seconds.'})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'line': f'Scan failed: {str(exc)}'})}\n\n"
+                yield "data: {\"type\":\"done\"}\n\n"
+            finally:
+                with _scan_lock:
+                    _scan_running = False
+
+        return Response(generate(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache",
+                                 "X-Accel-Buffering": "no"})
+
+    @app.route("/api/homelink/network-scan/status")
+    def api_network_scan_status():
+        with _scan_lock:
+            running = _scan_running
+        return jsonify({"running": running})
 
     # ------------------------------------------------------------------
     # API — Config (read-only view)
