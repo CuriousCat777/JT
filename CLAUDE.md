@@ -150,12 +150,12 @@ Varys watches the network. The Archivist watches the code.
 
 ### CLI Commands
 ```bash
-python main.py --archivist              # Full Archivist report
-python main.py --archivist-tier         # Tech tier list (S through F)
-python main.py --archivist-wisdom       # Random developer wisdom tip
-python main.py --archivist-system       # System hardware/software inventory
-python main.py --archivist-stack saas   # Stack recommendation (saas|api|static_site|ai_app|mobile)
-python main.py --archivist-audit jtmdai.com  # Web dev audit for a domain
+python main.py --dev-coach              # Full Archivist report
+python main.py --dev-coach-tier         # Tech tier list (S through F)
+python main.py --dev-coach-wisdom       # Random developer wisdom tip
+python main.py --dev-coach-system       # System hardware/software inventory
+python main.py --dev-coach-stack saas   # Stack recommendation (saas|api|static_site|ai_app|mobile)
+python main.py --dev-coach-audit jtmdai.com  # Web dev audit for a domain
 ```
 
 ## Key Design Principles
