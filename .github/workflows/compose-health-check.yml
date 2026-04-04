@@ -1,0 +1,41 @@
+name: Compose Health Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start services with docker compose up
+        run: docker compose up -d --pull always
+        timeout-minutes: 5
+
+      - name: Wait for postgres
+        run: |
+          docker compose exec -T postgres pg_isready -U n8n -h postgres
+
+      - name: Wait for n8n health endpoint
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:5678/healthz 2>/dev/null; then
+              echo "n8n is healthy"
+              exit 0
+            fi
+            echo "Attempt $i/30, waiting for n8n..."
+            sleep 2
+          done
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

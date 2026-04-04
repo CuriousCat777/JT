@@ -1,0 +1,11 @@
+services:
+  archivist:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - archivist-data:/app/archivist_agent/data
+    restart: unless-stopped
+
+volumes:
+  archivist-data:
