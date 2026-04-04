@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TelePrompter — Design Preview</title>
+<style>
+/* === RESET & LAYOUT === */
+:root {
+  --bg: #0a0a0a; --surface: #1c1c1e; --surface2: #2c2c2e; --surface3: #3a3a3c;
+  --accent: #0a84ff; --accent-dim: #0a84ff22; --green: #30d158; --orange: #ff9f0a;
+  --red: #ff453a; --yellow: #ffd60a; --purple: #bf5af2;
+  --text: #f5f5f7; --text-secondary: #98989d; --text-dim: #636366;
+  --radius: 12px; --radius-sm: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  background: #111; color: var(--text); padding: 20px;
+}
+h1 { text-align: center; font-size: 28px; margin: 20px 0 8px; }
+.subtitle { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 30px; }
+
+/* Phone frame */
+.phone-grid { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center; padding: 20px; }
+.phone-frame {
+  width: 375px; height: 812px; background: var(--bg); border-radius: 44px;
+  border: 3px solid #333; overflow: hidden; position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.phone-label {
+  text-align: center; margin-top: 12px; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+}
+.phone-content { height: 100%; overflow-y: auto; position: relative; }
+
+/* Notch */
+.notch {
+  width: 150px; height: 28px; background: #000; border-radius: 0 0 20px 20px;
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 50;
+}
+.status-bar {
+  height: 44px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; font-size: 12px; font-weight: 600; color: var(--text);
+}
+.status-bar-left { width: 60px; }
+.status-bar-right { width: 60px; text-align: right; font-size: 11px; }
+
+/* Shared styles */
+.nav { display:flex; position:absolute; bottom:0; left:0; right:0; background:rgba(28,28,30,0.95); border-top:0.5px solid rgba(255,255,255,0.1); padding:6px 0 20px; }
+.nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; color:var(--text-dim); font-size:10px; padding:4px; }
+.nav-btn.active { color:var(--accent); }
+.nav-btn svg { width:22px; height:22px; }
+.view-header { padding:4px 20px; font-size:32px; font-weight:800; letter-spacing:-0.5px; }
+.view-sub { padding:0 20px 12px; font-size:13px; color:var(--text-secondary); }
+
+/* Cards */
+.card { background:var(--surface); border-radius:var(--radius); margin:6px 16px; padding:14px 16px; }
+.card-row { display:flex; align-items:flex-start; gap:12px; }
+.card-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.card-body { flex:1; min-width:0; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:2px; }
+.card-meta { font-size:12px; color:var(--text-secondary); display:flex; gap:8px; }
+.card-badges { display:flex; gap:4px; margin-bottom:4px; }
+.badge { display:inline-block; padding:1px 7px; border-radius:5px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
+.badge-blue { background:var(--accent-dim); color:var(--accent); }
+.badge-green { background:#30d15822; color:var(--green); }
+.card-chevron { color:var(--text-dim); font-size:14px; align-self:center; }
+
+/* Search & filters */
+.search-bar { margin:0 16px 8px; position:relative; }
+.search-input { width:100%; padding:10px 16px 10px 36px; background:var(--surface); border:none; border-radius:10px; color:var(--text); font-size:15px; outline:none; }
+.search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; }
+.filter-row { display:flex; gap:6px; padding:0 16px 12px; overflow-x:auto; scrollbar-width:none; }
+.filter-pill { flex-shrink:0; padding:6px 14px; border-radius:20px; background:var(--surface); border:none; color:var(--text-secondary); font-size:13px; font-weight:500; }
+.filter-pill.active { background:var(--accent); color:white; }
+
+/* Stats */
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px; margin-bottom:16px; }
+.stat-card { background:var(--surface); border-radius:var(--radius); padding:14px; text-align:center; }
+.stat-value { font-size:26px; font-weight:800; }
+.stat-value.blue { color:var(--accent); }
+.stat-value.orange { color:var(--orange); }
+.stat-value.green { color:var(--green); }
+.stat-value.purple { color:var(--purple); }
+.stat-label { font-size:11px; color:var(--text-dim); margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
+
+/* Session items */
+.session-item { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--surface); border-radius:var(--radius); margin:4px 16px; }
+.session-title { font-weight:600; font-size:14px; }
+.session-date { font-size:11px; color:var(--text-dim); }
+.session-rating { font-size:16px; color:var(--orange); }
+.section-title { font-size:14px; font-weight:700; color:var(--text); padding:4px 20px 8px; }
+
+/* Advisory */
+.advisory-bubble { background:var(--surface); border-left:3px solid var(--accent); border-radius:0 var(--radius) var(--radius) 0; margin:6px 16px; padding:12px 14px; font-size:14px; line-height:1.5; color:var(--text-secondary); }
+.advisory-label { font-size:11px; color:var(--accent); margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; }
+
+/* Form */
+.form-group { margin:6px 16px; }
+.form-label { display:block; font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:6px; padding-left:4px; }
+.form-input,.form-textarea { width:100%; padding:11px 14px; background:var(--surface); border:1px solid var(--surface2); border-radius:var(--radius-sm); color:var(--text); font-size:15px; font-family:inherit; outline:none; }
+.form-textarea { min-height:80px; resize:none; }
+.btn { display:block; width:calc(100% - 32px); margin:12px auto; padding:13px; background:var(--accent); color:white; border:none; border-radius:var(--radius); font-size:16px; font-weight:600; }
+
+/* Prompter */
+.prompter-topbar { display:flex; align-items:center; justify-content:space-between; padding:52px 16px 8px; background:rgba(0,0,0,0.85); }
+.prompter-topbar-btn { background:none; border:none; color:var(--accent); font-size:15px; font-weight:500; padding:6px 8px; }
+.prompter-topbar-title { font-size:13px; font-weight:600; color:var(--text-secondary); flex:1; text-align:center; }
+.prompter-topbar-right { display:flex; gap:4px; }
+.topbar-icon-btn { background:none; border:none; color:var(--text-secondary); font-size:16px; padding:6px; }
+.prompter-info { display:flex; justify-content:space-between; padding:4px 16px; background:rgba(0,0,0,0.7); font-size:11px; color:var(--text-dim); }
+.prompter-info-item { display:flex; align-items:center; gap:4px; }
+.prompter-info-value { color:var(--text-secondary); font-weight:600; }
+.progress-track { height:2px; background:var(--surface2); }
+.progress-fill { height:100%; background:var(--accent); width:35%; }
+.prompter-focus-line { position:absolute; left:0; right:0; top:40%; height:2px; background:var(--accent); opacity:0.3; z-index:5; }
+.prompter-scroll {
+  padding:60px 24px 80px; font-size:28px; line-height:1.7; font-weight:400;
+  letter-spacing:0.2px; color:var(--text); height:440px; overflow:hidden; position:relative;
+}
+.section-hdr { color:var(--green); font-weight:800; font-size:0.75em; margin-top:1em; margin-bottom:0.3em; text-transform:uppercase; letter-spacing:2px; border-bottom:1px solid var(--green); padding-bottom:4px; display:inline-block; }
+.pause-mkr { display:flex; align-items:center; justify-content:center; gap:12px; color:var(--orange); font-weight:700; font-size:0.6em; padding:16px 0; letter-spacing:3px; text-transform:uppercase; }
+.highlight { color:var(--accent); font-weight:600; background:var(--accent-dim); padding:0 4px; border-radius:4px; }
+.stage-dir { color:var(--yellow); font-style:italic; font-size:0.7em; opacity:0.8; }
+
+.prompter-controls { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.9); }
+.controls-main { display:flex; align-items:center; justify-content:center; gap:16px; padding:10px 20px; }
+.ctrl-btn { background:rgba(255,255,255,0.08); border:none; color:var(--text); width:44px; height:44px; border-radius:22px; font-size:16px; display:flex; align-items:center; justify-content:center; }
+.play-btn { width:60px; height:60px; border-radius:30px; background:var(--accent); font-size:22px; }
+.controls-speed { display:flex; align-items:center; gap:10px; padding:0 20px 20px; }
+.speed-label { font-size:11px; color:var(--text-dim); min-width:40px; text-align:right; }
+.speed-slider { flex:1; -webkit-appearance:none; height:3px; border-radius:2px; background:rgba(255,255,255,0.15); outline:none; }
+.speed-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:white; }
+.speed-value { font-size:13px; color:var(--text); font-weight:600; min-width:56px; }
+
+/* FAB */
+.fab { position:absolute; bottom:96px; right:16px; background:var(--accent); color:white; border:none; border-radius:24px; padding:10px 18px; font-size:14px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+</style>
+</head>
+<body>
+
+<h1>TelePrompter</h1>
+<p class="subtitle">Guardian One Telehospitalist Communication App &mdash; UI Design Preview</p>
+
+<div class="phone-grid">
+
+  <!-- =============== SCREEN 1: Scripts List =============== -->
+  <div>
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-content">
+        <div class="status-bar">
+          <div class="status-bar-left">9:41</div>
+          <div class="status-bar-right">100%</div>
+        </div>
+
+        <div class="view-header">Scripts</div>
+
+        <div class="search-bar">
+          <span class="search-icon">&#128269;</span>
+          <input class="search-input" placeholder="Search scripts..." readonly>
+        </div>
+
+        <div class="filter-row">
+          <button class="filter-pill active">All</button>
+          <button class="filter-pill">Admission</button>
+          <button class="filter-pill">Discharge</button>
+          <button class="filter-pill">Handoff</button>
+          <button class="filter-pill">Bad News</button>
+          <button class="filter-pill">Consult</button>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="card-icon" style="background:var(--surface2)">&#127973;</div>
+            <div class="card-body">
+              <div class="card-badges"><span class="badge badge-blue">ADMISSION</span></div>
+              <div class="card-title">Admission &mdash; Initial Telehealth Encounter</div>
+              <div class="card-meta"><span>287 words</span><span>2 min</span></div>
+            </div>
+            <span class="card-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="card-icon" style="background:var(--surface2)">&#128260;</div>
+            <div class="card-body">
+              <div class="card-badges"><span class="badge badge-blue">HANDOFF</span></div>
+              <div class="card-title">SBAR Handoff Communication</div>
+              <div class="card-meta"><span>156 words</span><span>1 min</span></div>
+            </div>
+            <span class="card-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="card-icon" style="background:var(--accent-dim)">&#128172;</div>
+            <div class="card-body">
+              <div class="card-badges"><span class="badge badge-blue">DIFFICULT NEWS</span></div>
+              <div class="card-title">Delivering Difficult News (SPIKES)</div>
+              <div class="card-meta"><span>312 words</span><span>2 min</span></div>
+            </div>
+            <span class="card-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div class="card-icon" style="background:var(--surface2)">&#127968;</div>
+            <div class="card-body">
+              <div class="card-badges"><span class="badge badge-blue">DISCHARGE</span><span class="badge badge-green">AI</span></div>
+              <div class="card-title">Discharge Instructions</div>
+              <div class="card-meta"><span>245 words</span><span>2 min</span></div>
+            </div>
+            <span class="card-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <button class="fab">+ New Script</button>
+
+        <nav class="nav">
+          <button class="nav-btn active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Scripts</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Practice</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>Advisory</button>
+        </nav>
+      </div>
+    </div>
+    <div class="phone-label">Scripts Library</div>
+  </div>
+
+  <!-- =============== SCREEN 2: Teleprompter =============== -->
+  <div>
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-content" style="background:#0a0a0a;">
+        <div class="prompter-topbar">
+          <button class="prompter-topbar-btn">Done</button>
+          <div class="prompter-topbar-title">Admission &mdash; Initial Telehealth</div>
+          <div class="prompter-topbar-right">
+            <button class="topbar-icon-btn">&#x27F7;</button>
+            <button class="topbar-icon-btn">A-</button>
+            <button class="topbar-icon-btn">A+</button>
+            <button class="topbar-icon-btn">&#9881;</button>
+          </div>
+        </div>
+
+        <div class="prompter-info">
+          <div class="prompter-info-item"><span class="prompter-info-label">Elapsed</span><span class="prompter-info-value">1:24</span></div>
+          <div class="prompter-info-item"><span class="prompter-info-value">160</span><span class="prompter-info-label">WPM</span></div>
+          <div class="prompter-info-item"><span class="prompter-info-value">287</span><span class="prompter-info-label">words</span></div>
+          <div class="prompter-info-item"><span class="prompter-info-label">ETA</span><span class="prompter-info-value">0:28</span></div>
+        </div>
+
+        <div class="progress-track"><div class="progress-fill"></div></div>
+
+        <div style="position:relative;">
+          <div class="prompter-focus-line"></div>
+          <div class="prompter-scroll">
+            <p>Good <span class="highlight">[morning/afternoon/evening]</span>, I'm Dr. Tabernero. I'll be your hospitalist taking care of you today.</p>
+            <p>I know being in the hospital can be stressful, and I want you to know that even though we're connecting by video, I'm fully here for you.</p>
+            <p>Before we begin, can you confirm your full name and date of birth for me?</p>
+            <div class="pause-mkr">&mdash;&mdash; PAUSE &mdash;&mdash;</div>
+            <p>Thank you. I've reviewed your chart and I'd like to go over a few things with you.</p>
+          </div>
+        </div>
+
+        <div class="prompter-controls">
+          <div class="controls-main">
+            <button class="ctrl-btn">&#9198;</button>
+            <button class="ctrl-btn">&#9194;</button>
+            <button class="ctrl-btn play-btn" style="background:var(--orange);">&#9208;</button>
+            <button class="ctrl-btn">&#9193;</button>
+          </div>
+          <div class="controls-speed">
+            <span class="speed-label">Speed</span>
+            <input type="range" class="speed-slider" min="60" max="300" value="160">
+            <span class="speed-value">160 WPM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">Teleprompter (Playing)</div>
+  </div>
+
+  <!-- =============== SCREEN 3: Practice Stats =============== -->
+  <div>
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-content">
+        <div class="status-bar">
+          <div class="status-bar-left">9:41</div>
+          <div class="status-bar-right">100%</div>
+        </div>
+
+        <div class="view-header">Practice</div>
+        <div class="view-sub">Track your communication skills over time</div>
+
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value blue">24</div><div class="stat-label">Sessions</div></div>
+          <div class="stat-card"><div class="stat-value orange">4.2</div><div class="stat-label">Avg Rating</div></div>
+          <div class="stat-card"><div class="stat-value green">86</div><div class="stat-label">Minutes</div></div>
+          <div class="stat-card"><div class="stat-value purple">3</div><div class="stat-label">This Week</div></div>
+        </div>
+
+        <div class="section-title">Session History</div>
+
+        <div class="session-item">
+          <div><div class="session-title">Admission &mdash; Initial Telehealth</div><div class="session-date">Today &middot; 3m</div></div>
+          <div class="session-rating">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+        </div>
+        <div class="session-item">
+          <div><div class="session-title">Delivering Difficult News (SPIKES)</div><div class="session-date">Yesterday &middot; 5m</div></div>
+          <div class="session-rating">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        </div>
+        <div class="session-item">
+          <div><div class="session-title">SBAR Handoff Communication</div><div class="session-date">Mar 31 &middot; 2m</div></div>
+          <div class="session-rating">&#9733;&#9733;&#9733;&#9734;&#9734;</div>
+        </div>
+        <div class="session-item">
+          <div><div class="session-title">Discharge Instructions</div><div class="session-date">Mar 30 &middot; 4m</div></div>
+          <div class="session-rating">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Scripts</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
+          <button class="nav-btn active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Practice</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>Advisory</button>
+        </nav>
+      </div>
+    </div>
+    <div class="phone-label">Practice Dashboard</div>
+  </div>
+
+  <!-- =============== SCREEN 4: Generate =============== -->
+  <div>
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-content">
+        <div class="status-bar">
+          <div class="status-bar-left">9:41</div>
+          <div class="status-bar-right">100%</div>
+        </div>
+
+        <div class="view-header">Generate</div>
+        <div class="view-sub">AI-powered script creation for clinical scenarios</div>
+
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <div class="form-input" style="color:var(--text);">Admission</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chief Complaint</label>
+          <input class="form-input" value="Chest pain, rule out ACS" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Patient Age</label>
+          <input class="form-input" value="72" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Setting / Context</label>
+          <input class="form-input" value="ICU step-down, night shift" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scenario Description</label>
+          <textarea class="form-textarea" readonly style="min-height:100px;">72-year-old male presenting with substernal chest pain radiating to left arm, troponin pending, on aspirin and heparin drip. Family at bedside requesting updates.</textarea>
+        </div>
+        <button class="btn">Generate Script</button>
+
+        <nav class="nav">
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Scripts</button>
+          <button class="nav-btn active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Practice</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>Advisory</button>
+        </nav>
+      </div>
+    </div>
+    <div class="phone-label">AI Script Generator</div>
+  </div>
+
+  <!-- =============== SCREEN 5: Advisory =============== -->
+  <div>
+    <div class="phone-frame">
+      <div class="notch"></div>
+      <div class="phone-content">
+        <div class="status-bar">
+          <div class="status-bar-left">9:41</div>
+          <div class="status-bar-right">100%</div>
+        </div>
+
+        <div class="view-header">Advisory</div>
+        <div class="view-sub">AI coaching for patient communication</div>
+
+        <div class="form-group">
+          <label class="form-label">Describe a scenario</label>
+          <textarea class="form-textarea" readonly>Patient is anxious about new cancer diagnosis, family wants aggressive care but patient expressed DNR wishes</textarea>
+        </div>
+        <button class="btn">Get Advice</button>
+
+        <div class="section-title" style="margin-top:8px;">Recent Coaching</div>
+
+        <div class="advisory-bubble">
+          <div class="advisory-label">Empathy &amp; Autonomy</div>
+          Use the NURSE framework: <strong>Name</strong> the emotion ("I can see this is overwhelming"), <strong>Understand</strong> their perspective, <strong>Respect</strong> their values, <strong>Support</strong> them, and <strong>Explore</strong> what matters most. When family and patient disagree on goals, facilitate a family meeting using the "I wish...I worry...I wonder" framework.
+        </div>
+
+        <div class="advisory-bubble">
+          <div class="advisory-label">Telehealth Presence</div>
+          Position your camera at eye level. Lean slightly forward. Use the patient's name at least 3 times. Pause after delivering information &mdash; silence is powerful on video. Avoid looking at notes; use the teleprompter for key talking points.
+        </div>
+
+        <div class="advisory-bubble">
+          <div class="advisory-label">Cultural Sensitivity</div>
+          Ask: "Is there anything about your background, culture, or beliefs that would help me take better care of you?" Avoid assumptions. Use professional interpreters for language barriers &mdash; never family members for medical translation.
+        </div>
+
+        <nav class="nav">
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Scripts</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Generate</button>
+          <button class="nav-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Practice</button>
+          <button class="nav-btn active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>Advisory</button>
+        </nav>
+      </div>
+    </div>
+    <div class="phone-label">AI Advisory Coach</div>
+  </div>
+
+</div>
+
+<p style="text-align:center; color:var(--text-dim); margin-top:30px; font-size:13px;">
+  Guardian One &mdash; TelePrompter v1.0 &bull; SQLite + Flask + PWA &bull; 237 tests passing
+</p>
+
+</body>
+</html>

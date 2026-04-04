@@ -155,8 +155,8 @@ class NordVPNProvider(VPNProvider):
         try:
             cmd = ["nordvpn", "connect"]
             if country:
-                # Sanitize: allow only alphanumeric, spaces, underscores, hyphens
-                sanitized = re.sub(r"[^a-zA-Z0-9 _-]", "", country).strip()
+                # Sanitize: allow only letters and underscores (e.g. "United_States")
+                sanitized = re.sub(r"[^a-zA-Z_]", "", country).strip()
                 if not sanitized:
                     self._last_error = "Invalid country name"
                     return False

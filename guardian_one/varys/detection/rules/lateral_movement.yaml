@@ -1,0 +1,18 @@
+title: Lateral Movement via Remote Execution
+id: varys-002
+description: Detects remote execution tools commonly used for lateral movement
+level: high
+tags:
+  - attack.lateral_movement
+  - attack.t1021
+logsource:
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - "psexec"
+      - "wmic /node"
+      - "winrm"
+      - "ssh -o StrictHostKeyChecking=no"
+      - "sshpass"
+  condition: selection

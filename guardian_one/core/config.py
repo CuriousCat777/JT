@@ -73,12 +73,34 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
             custom=agent_raw.get("custom", {}),
         )
 
+    data_dir = _validate_path(
+        os.getenv("GUARDIAN_DATA_DIR", raw.get("data_dir", "data")),
+        fallback="data",
+    )
+    log_dir = _validate_path(
+        os.getenv("GUARDIAN_LOG_DIR", raw.get("log_dir", "logs")),
+        fallback="logs",
+    )
+
     return GuardianConfig(
         owner=raw.get("owner", "Jeremy Paulo Salvino Tabernero"),
         security=security,
         agents=agents,
-        data_dir=os.getenv("GUARDIAN_DATA_DIR", raw.get("data_dir", "data")),
-        log_dir=os.getenv("GUARDIAN_LOG_DIR", raw.get("log_dir", "logs")),
+        data_dir=data_dir,
+        log_dir=log_dir,
         daily_summary_hour=raw.get("daily_summary_hour", 7),
         timezone=raw.get("timezone", "America/Chicago"),
     )
+
+
+def _validate_path(value: str, fallback: str) -> str:
+    """Reject path traversal attempts (e.g. ../../etc) in directory paths."""
+    resolved = Path(value).resolve()
+    # Block paths that escape the project tree (contain '..' segments)
+    if ".." in Path(value).parts:
+        return fallback
+    # Block absolute paths pointing outside the working directory
+    cwd = Path.cwd().resolve()
+    if resolved != cwd and not str(resolved).startswith(str(cwd) + os.sep):
+        return fallback
+    return value

@@ -28,6 +28,7 @@ from guardian_one.core.security import (
 from guardian_one.homelink.gateway import Gateway, ServiceConfig, RateLimitConfig
 from guardian_one.homelink.vault import Vault
 from guardian_one.homelink.registry import IntegrationRegistry
+from guardian_one.integrations.n8n_sync import GatewayN8nProvider
 from guardian_one.homelink.monitor import Monitor
 from guardian_one.utils.power_tools_library import PowerToolsLibrary
 
@@ -88,6 +89,22 @@ class GuardianOne:
         # Auto-load Notion token from .env into Vault if present and not yet stored
         self._seed_vault_from_env()
 
+        # Notion sync — first-class service (write-only workspace push)
+        root_page_id = os.environ.get("NOTION_ROOT_PAGE_ID", "")
+        self.notion_sync: NotionSync | None = None
+        if root_page_id:
+            self.notion_sync = NotionSync(
+                gateway=self.gateway,
+                vault=self.vault,
+                audit=self.audit,
+                root_page_id=root_page_id,
+            )
+
+        # n8n provider — routes through Gateway for TLS/rate-limit/audit
+        self.n8n_provider = GatewayN8nProvider(
+            gateway=self.gateway, agent="web_architect",
+        )
+
         # Log AI engine status at boot
         ai_status = self.ai_engine.status()
         self.audit.record(
@@ -100,6 +117,8 @@ class GuardianOne:
                 "ai_engine": ai_status["active_provider"] or "offline",
                 "ai_ollama": ai_status["ollama"]["available"],
                 "ai_anthropic": ai_status["anthropic"]["available"],
+                "notion_configured": self.notion_sync is not None,
+                "n8n_registered": self.n8n_provider.has_credentials,
             },
         )
 
@@ -391,6 +410,101 @@ class GuardianOne:
             context=context,
         )
         return response.content
+
+    # ------------------------------------------------------------------
+    # Notion + n8n integration
+    # ------------------------------------------------------------------
+
+    def sync_to_notion(
+        self,
+        roadmap_phases: list[dict[str, Any]] | None = None,
+        deliverables: list[dict[str, Any]] | None = None,
+        decisions: list[dict[str, Any]] | None = None,
+    ) -> SyncResult | None:
+        """Run a full Notion workspace sync using live agent/service data.
+
+        Returns None if Notion is not configured.
+        """
+        if not self.notion_sync:
+            return None
+
+        agents_data = []
+        for name in self.list_agents():
+            agent = self.get_agent(name)
+            if agent:
+                try:
+                    report = agent.report()
+                    agents_data.append({
+                        "name": name,
+                        "status": report.status,
+                        "health_score": 90 if report.status == "idle" else 70,
+                        "schedule_interval": agent.config.schedule_interval_minutes,
+                        "last_run": getattr(report, "last_run", "never"),
+                        "allowed_resources": agent.config.allowed_resources,
+                    })
+                except Exception:
+                    agents_data.append({
+                        "name": name,
+                        "status": "unknown",
+                        "health_score": 50,
+                        "schedule_interval": 0,
+                        "last_run": "never",
+                        "allowed_resources": [],
+                    })
+
+        services_data = []
+        for svc_name in self.gateway.list_services():
+            status = self.gateway.service_status(svc_name)
+            health = self.monitor.assess_service(svc_name)
+            services_data.append({
+                "name": svc_name,
+                "circuit_state": status.get("circuit_state", "unknown"),
+                "success_rate": status.get("success_rate", 0),
+                "avg_latency_ms": status.get("avg_latency_ms", 0),
+                "risk_score": health.risk_score,
+            })
+
+        return self.notion_sync.full_sync(
+            agents=agents_data,
+            roadmap_phases=roadmap_phases or [],
+            services=services_data,
+            deliverables=deliverables or [],
+            decisions=decisions,
+        )
+
+    def sync_n8n_to_notion(self) -> SyncResult | None:
+        """Push n8n workflow status to Notion dashboard.
+
+        Returns None if Notion is not configured.
+        """
+        if not self.notion_sync:
+            return None
+
+        from guardian_one.integrations.notion_n8n_sync import NotionN8nSync
+
+        n8n_sync = NotionN8nSync(self.notion_sync, self.audit)
+
+        # Collect workflows from the provider
+        workflows = []
+        n8n_connected = False
+        if self.n8n_provider.has_credentials:
+            n8n_connected = self.n8n_provider.authenticate()
+            if n8n_connected:
+                workflows = self.n8n_provider.list_workflows()
+
+        # Also include any local workflows from WebArchitect if registered
+        web_architect = self.get_agent("web_architect")
+        if web_architect and hasattr(web_architect, "list_workflows"):
+            local_wfs = web_architect.list_workflows()
+            local_ids = {w.id for w in workflows}
+            for wf_id, wf in local_wfs.items():
+                if wf_id not in local_ids:
+                    workflows.append(wf)
+
+        return n8n_sync.push_workflow_dashboard(
+            workflows=workflows,
+            n8n_connected=n8n_connected,
+        )
 
     def get_agent(self, name: str) -> BaseAgent | None:
         return self._agents.get(name)
