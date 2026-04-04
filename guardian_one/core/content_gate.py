@@ -9,12 +9,23 @@ Design principles:
       are acceptable; false negatives are not)
     - Redaction is one-way — original values cannot be recovered from masked output
     - All agents and the audit system route through this gate
+    - Fail-closed: when recursion depth is exceeded, nested containers are
+      replaced with a redacted sentinel rather than passed through raw
 """
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Sentinel for over-depth containers (fail-closed)
+# ---------------------------------------------------------------------------
+
+_DEPTH_LIMIT = 10
+_DEPTH_EXCEEDED_SENTINEL = "[REDACTED-DEPTH-EXCEEDED]"
 
 
 # ---------------------------------------------------------------------------
@@ -71,42 +82,60 @@ _PII_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ), "[DOB-REDACTED]"),
 ]
 
-# Owner identity patterns — the user's known PII that should always be masked
-# in external-facing outputs and audit logs.
-_OWNER_NAME_VARIANTS: list[str] = [
-    "Jeremy Paulo Salvino Tabernero",
-    "Jeremy Tabernero",
-    "Jeremy Paulo Tabernero",
-    "J. Tabernero",
-    "JEREMY TABERNERO",
-    "JEREMY PAULO TABERNERO",
-    "jeremytabernero",
-    "jeremy_paulo21",
-    "JEREMY_PAULO21",
-]
 
-_OWNER_EMAIL_VARIANTS: list[str] = [
-    "jeremytabernero@gmail.com",
-    "jeremy_paulo21@yahoo.com",
-]
+# ---------------------------------------------------------------------------
+# Owner identity patterns — loaded from environment or config
+# ---------------------------------------------------------------------------
+# Source owner PII from env vars to avoid hardcoding personal data in source.
+# Falls back to empty lists if not set (general PII patterns still apply).
 
-# Compile owner patterns (case-insensitive).
-# Email patterns MUST come before name patterns so that
-# "jeremytabernero@gmail.com" is matched as an email, not partially
-# consumed by the "jeremytabernero" name pattern.
-_OWNER_PATTERNS: list[tuple[str, re.Pattern[str], str]] = []
-for _email in _OWNER_EMAIL_VARIANTS:
-    _OWNER_PATTERNS.append((
-        "owner_email",
-        re.compile(re.escape(_email), re.IGNORECASE),
-        "[OWNER-EMAIL-REDACTED]",
-    ))
-for _name in _OWNER_NAME_VARIANTS:
-    _OWNER_PATTERNS.append((
-        "owner_name",
-        re.compile(re.escape(_name), re.IGNORECASE),
-        "[OWNER-NAME-REDACTED]",
-    ))
+def _load_owner_names() -> list[str]:
+    """Load owner name variants from GUARDIAN_OWNER_NAMES env var.
+
+    Format: pipe-separated list, e.g.
+        GUARDIAN_OWNER_NAMES="Jeremy Tabernero|J. Tabernero|jeremytabernero"
+    """
+    raw = os.environ.get("GUARDIAN_OWNER_NAMES", "")
+    if raw:
+        return [n.strip() for n in raw.split("|") if n.strip()]
+    return []
+
+
+def _load_owner_emails() -> list[str]:
+    """Load owner email variants from GUARDIAN_OWNER_EMAILS env var.
+
+    Format: pipe-separated list, e.g.
+        GUARDIAN_OWNER_EMAILS="user@gmail.com|alias@yahoo.com"
+    """
+    raw = os.environ.get("GUARDIAN_OWNER_EMAILS", "")
+    if raw:
+        return [e.strip() for e in raw.split("|") if e.strip()]
+    return []
+
+
+def _compile_owner_patterns() -> list[tuple[str, re.Pattern[str], str]]:
+    """Build owner patterns from environment.
+
+    Email patterns come before name patterns so that full email addresses
+    are matched as emails, not partially consumed by a name pattern.
+    """
+    patterns: list[tuple[str, re.Pattern[str], str]] = []
+    for email in _load_owner_emails():
+        patterns.append((
+            "owner_email",
+            re.compile(re.escape(email), re.IGNORECASE),
+            "[OWNER-EMAIL-REDACTED]",
+        ))
+    for name in _load_owner_names():
+        patterns.append((
+            "owner_name",
+            re.compile(re.escape(name), re.IGNORECASE),
+            "[OWNER-NAME-REDACTED]",
+        ))
+    return patterns
+
+
+_OWNER_PATTERNS: list[tuple[str, re.Pattern[str], str]] = _compile_owner_patterns()
 
 
 # ---------------------------------------------------------------------------
@@ -149,11 +178,15 @@ def redact_dict(
 ) -> dict[str, Any]:
     """Recursively redact PII from all string values in a dict.
 
-    Handles nested dicts and lists up to 10 levels deep.
+    Handles nested dicts and lists.  When the recursion depth exceeds
+    ``_DEPTH_LIMIT``, remaining nested containers are replaced with a
+    redacted sentinel to fail closed (never leak raw data).
     Non-string, non-container values are passed through unchanged.
     """
-    if _depth > 10:
-        return data
+    if _depth > _DEPTH_LIMIT:
+        # Fail closed: replace entire over-depth dict with sentinel
+        return {k: _redact_over_depth(v, include_owner=include_owner)
+                for k, v in data.items()}
 
     result: dict[str, Any] = {}
     for key, value in data.items():
@@ -172,6 +205,19 @@ def redact_dict(
     return result
 
 
+def _redact_over_depth(value: Any, *, include_owner: bool = True) -> Any:
+    """Redact a value that exceeds the recursion depth limit.
+
+    Strings are still pattern-scanned; nested containers are replaced
+    with a sentinel to guarantee no PII leaks through deep nesting.
+    """
+    if isinstance(value, str):
+        return redact_text(value, include_owner=include_owner)
+    if isinstance(value, (dict, list)):
+        return _DEPTH_EXCEEDED_SENTINEL
+    return value
+
+
 def _redact_list(
     items: list[Any],
     *,
@@ -179,8 +225,10 @@ def _redact_list(
     _depth: int = 0,
 ) -> list[Any]:
     """Redact PII from string elements in a list (recursive)."""
-    if _depth > 10:
-        return items
+    if _depth > _DEPTH_LIMIT:
+        # Fail closed: redact each element individually
+        return [_redact_over_depth(item, include_owner=include_owner)
+                for item in items]
 
     result: list[Any] = []
     for item in items:
