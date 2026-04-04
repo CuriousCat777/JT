@@ -1,14 +1,14 @@
-"""VARYS Flask Blueprint — REST API for security operations.
+"""VARYS Flask Blueprint — REST API routes for security operations.
 
 Endpoints:
-    GET  /varys/health         — Liveness check
-    GET  /varys/status         — Full VARYS engine status
-    GET  /varys/alerts         — Recent alerts with filtering
-    GET  /varys/incidents      — Open incidents
-    GET  /varys/entities       — High-risk entity profiles
-    POST /varys/events         — Ingest external events via webhook
-    POST /varys/actions/{id}/approve — Approve a pending response action
-    POST /varys/actions/{id}/deny    — Deny a pending response action
+    GET  /varys/health           — Liveness check
+    GET  /varys/status           — Full VARYS engine status
+    GET  /varys/alerts           — Recent alerts with filtering
+    GET  /varys/incidents        — Open incidents
+    GET  /varys/entities         — High-risk entity profiles
+    POST /varys/events           — Ingest external events via webhook
+    GET  /varys/actions/pending  — Pending response actions
+    GET  /varys/rules            — Loaded detection rules
 """
 
 from __future__ import annotations
@@ -67,11 +67,22 @@ def create_varys_blueprint(engine: Any) -> Any:
                     continue
                 alert_list.append(d)
 
-        # Also include non-incident alerts from sigma matches
-        # (alerts that didn't escalate to incidents)
+        # Include non-incident alerts from executed actions
+        combined = all_alerts + alert_list
+        # Deduplicate by alert_id
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for a in combined:
+            aid = a.get("alert_id", "")
+            if aid and aid in seen:
+                continue
+            if aid:
+                seen.add(aid)
+            unique.append(a)
+
         return jsonify({
-            "alerts": alert_list[:limit],
-            "total": len(alert_list),
+            "alerts": unique[:limit],
+            "total": len(unique),
         })
 
     @bp.route("/incidents")

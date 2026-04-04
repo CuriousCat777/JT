@@ -131,10 +131,19 @@ class CloudSync:
             encrypted: Whether the file is already encrypted.
         """
         records: list[BackupRecord] = []
-        targets = (
-            [self._targets[target_name]] if target_name and target_name in self._targets
-            else [t for t in self._targets.values() if t.enabled]
-        )
+        if target_name:
+            if target_name not in self._targets:
+                record = BackupRecord(
+                    source_path=source_path,
+                    target_name=target_name,
+                    success=False,
+                    error=f"Unknown backup target: {target_name}",
+                )
+                self._backup_log.append(record)
+                return [record]
+            targets = [self._targets[target_name]]
+        else:
+            targets = [t for t in self._targets.values() if t.enabled]
 
         source = Path(source_path)
         if not source.exists():

@@ -96,10 +96,20 @@ class WazuhConnector(BaseCollector):
             )
 
             if resp.status_code == 401:
-                # Token expired, re-authenticate
+                # Token expired — re-authenticate once (no recursion)
                 if self._authenticate():
-                    return self.collect()
-                return events
+                    resp = httpx.get(
+                        f"{self._api_url}/alerts",
+                        headers=self._headers(),
+                        params={k: v for k, v in params.items() if v},
+                        verify=self._verify_ssl,
+                        timeout=30,
+                    )
+                    if resp.status_code != 200:
+                        logger.error("Wazuh re-auth failed, status=%d", resp.status_code)
+                        return events
+                else:
+                    return events
 
             resp.raise_for_status()
             data = resp.json()

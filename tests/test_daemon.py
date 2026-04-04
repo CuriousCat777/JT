@@ -4,6 +4,7 @@ import json
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 
 from guardian_one.core.config import AgentConfig, GuardianConfig

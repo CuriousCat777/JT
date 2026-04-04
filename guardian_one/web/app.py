@@ -1041,12 +1041,26 @@ def create_app() -> Flask:
                 }
             }), 400
 
-        # Extract system prompt and build conversation
+        # Validate and extract messages
         from guardian_one.core.ai_engine import AIMessage
-        ai_messages = [
-            AIMessage(role=m["role"], content=m.get("content", ""))
-            for m in messages
-        ]
+        valid_roles = {"system", "user", "assistant"}
+        ai_messages = []
+        for m in messages:
+            if not isinstance(m, dict) or "role" not in m:
+                return jsonify({
+                    "error": {
+                        "message": "Each message must be an object with a 'role' field",
+                        "type": "invalid_request_error",
+                    }
+                }), 400
+            if m["role"] not in valid_roles:
+                return jsonify({
+                    "error": {
+                        "message": f"Invalid role '{m['role']}'. Must be one of: {', '.join(valid_roles)}",
+                        "type": "invalid_request_error",
+                    }
+                }), 400
+            ai_messages.append(AIMessage(role=m["role"], content=str(m.get("content", ""))))
 
         # Find the right backend based on requested model
         requested_model = body.get("model", "guardian-one")

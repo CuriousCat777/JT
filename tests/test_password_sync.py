@@ -101,11 +101,14 @@ class TestAudit:
         sync._items = [
             VaultItem(name="Secure", category="login", has_totp=True, password_strength="strong"),
             VaultItem(name="Weak", category="login", has_totp=False, password_strength="weak"),
+            VaultItem(name="Unassessed", category="login", has_totp=False, password_strength=""),
             VaultItem(name="Compromised", category="login", compromised=True),
         ]
         result = sync.audit()
-        assert result["logins"] == 3
+        assert result["logins"] == 4
         assert "Weak" in result["weak_passwords"]
+        assert "Unassessed" not in result["weak_passwords"]
+        assert "Unassessed" in result["unassessed_passwords"]
         assert "Weak" in result["missing_2fa"]
         assert "Compromised" in result["compromised"]
         assert 0 <= result["score"] <= 100

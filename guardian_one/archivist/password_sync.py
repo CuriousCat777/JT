@@ -212,7 +212,8 @@ class PasswordSync:
             }
 
         logins = [i for i in self._items if i.category in ("login", "")]
-        weak = [i.name for i in logins if i.password_strength in ("weak", "")]
+        weak = [i.name for i in logins if i.password_strength == "weak"]
+        unassessed = [i.name for i in logins if i.password_strength == ""]
         no_totp = [i.name for i in logins if not i.has_totp]
         compromised = [i.name for i in logins if i.compromised]
         reused = [i.name for i in logins if i.reused]
@@ -221,6 +222,7 @@ class PasswordSync:
             "total_items": len(self._items),
             "logins": len(logins),
             "weak_passwords": weak,
+            "unassessed_passwords": unassessed,
             "missing_2fa": no_totp,
             "compromised": compromised,
             "reused": reused,
@@ -232,7 +234,8 @@ class PasswordSync:
             return 100
         score = 100
         total = len(logins)
-        weak = sum(1 for i in logins if i.password_strength in ("weak", ""))
+        # Only penalize confirmed weak passwords, not unassessed ones
+        weak = sum(1 for i in logins if i.password_strength == "weak")
         score -= min(40, int(weak / total * 40)) if total else 0
         no_2fa = sum(1 for i in logins if not i.has_totp)
         score -= min(30, int(no_2fa / total * 30)) if total else 0

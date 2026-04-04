@@ -161,10 +161,16 @@ class VarysEngine:
         self._start_time = datetime.now(timezone.utc).isoformat()
         logger.info("VARYS engine started (interval=%ds)", interval_seconds)
 
+        cycle_count = 0
+        flush_every = max(1, 3600 // interval_seconds)  # Flush ~once per hour
+
         try:
             while self._running:
                 self.cycle()
-                # Flush anomaly window periodically
+                cycle_count += 1
+                # Flush anomaly window periodically to build baselines
+                if cycle_count % flush_every == 0:
+                    self.anomaly.flush_window()
                 time.sleep(interval_seconds)
         except KeyboardInterrupt:
             logger.info("VARYS engine stopped by keyboard interrupt")

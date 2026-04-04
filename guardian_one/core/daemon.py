@@ -138,6 +138,14 @@ class DaemonRunner:
             if agent is None or not agent.config.enabled:
                 continue
             interval = agent.config.schedule_interval_minutes
+            if interval is None or interval < 1:
+                self.guardian.audit.record(
+                    agent="daemon",
+                    action=f"invalid_schedule_interval:{name}",
+                    severity=Severity.WARNING,
+                    details={"schedule_interval_minutes": interval},
+                )
+                continue
             schedule.every(interval).minutes.do(self._run_agent_job, name)
 
         schedule.every().day.at("06:00").do(self._run_cfo_sync)
@@ -191,6 +199,15 @@ class DaemonRunner:
             config_path = Path(self._config_path) if self._config_path else None
             new_config = load_config(config_path)
             self.guardian.config = new_config
+
+            # Propagate updated agent configs into live agent instances
+            new_agent_configs = getattr(new_config, "agents", {})
+            if isinstance(new_agent_configs, dict):
+                for name, agent_config in new_agent_configs.items():
+                    agent = self.guardian.get_agent(name)
+                    if agent is not None and hasattr(agent, "config"):
+                        agent.config = agent_config
+
             self._register_jobs()
             self.guardian.audit.record(
                 agent="daemon",
@@ -223,7 +240,7 @@ class DaemonRunner:
             (_HealthHandler,),
             {"daemon": self},
         )
-        self._health_server = HTTPServer(("0.0.0.0", self._health_port), handler_class)
+        self._health_server = HTTPServer(("127.0.0.1", self._health_port), handler_class)
         self._health_thread = threading.Thread(target=self._health_server.serve_forever, daemon=True)
         self._health_thread.start()
 

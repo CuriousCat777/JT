@@ -73,12 +73,14 @@ class ResponseEngine:
     Everything else is queued for approval.
     """
 
-    # Actions that can auto-execute by severity
+    # Actions that can auto-execute by severity.
+    # Per safety rule: only ALERT auto-executes. All containment
+    # actions (BLOCK_IP, KILL_PROCESS, etc.) require explicit approval.
     _AUTO_EXECUTE: dict[AlertSeverity, set[ActionType]] = {
         AlertSeverity.LOW: {ActionType.ALERT},
         AlertSeverity.MEDIUM: {ActionType.ALERT},
-        AlertSeverity.HIGH: {ActionType.ALERT, ActionType.BLOCK_IP},
-        AlertSeverity.CRITICAL: {ActionType.ALERT, ActionType.BLOCK_IP},
+        AlertSeverity.HIGH: {ActionType.ALERT},
+        AlertSeverity.CRITICAL: {ActionType.ALERT},
     }
 
     def __init__(self, dry_run: bool = True) -> None:
@@ -131,7 +133,7 @@ class ResponseEngine:
                     target=alert.source_ip,
                     reason=f"Block source of: {alert.title}",
                     alert_id=alert.alert_id,
-                    requires_approval=self._dry_run,
+                    requires_approval=True,  # Containment always requires approval
                 ))
 
         if alert.severity == AlertSeverity.CRITICAL:

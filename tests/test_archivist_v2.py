@@ -211,6 +211,12 @@ class TestCloudSync:
         cs2.load_config()
         assert "custom" in cs2.targets
 
+    def test_unknown_target_fails(self, sync):
+        records = sync.backup_file("/some/file.txt", target_name="nonexistent")
+        assert len(records) == 1
+        assert records[0].success is False
+        assert "Unknown backup target" in records[0].error
+
     def test_status(self, sync):
         status = sync.status()
         assert "targets" in status
