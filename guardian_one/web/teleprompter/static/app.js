@@ -147,9 +147,10 @@
       '<span class="stage-direction">[$1]</span>'
     );
 
-    // Placeholders [Patient Name], [diagnosis], etc.
+    // Placeholders [Patient Name], [diagnosis], etc. Exclude known
+    // pause/stage-direction markers so they keep their dedicated styling.
     html = html.replace(
-      /\[([^\]]+)\]/g,
+      /\[(?!(?:PAUSE|LOOK|GESTURE|TONE|SLOW DOWN|SPEED UP|EMPHASIZE|WARNING SHOT|SUMMARIZE)\b)([^\]]+)\]/gi,
       '<span class="highlight">[$1]</span>'
     );
 
