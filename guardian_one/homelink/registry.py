@@ -286,7 +286,7 @@ NOTION_INTEGRATION = IntegrationRecord(
                        "3. Revoke integration at notion.so/my-integrations. "
                        "4. Review audit log for unauthorized sync operations.",
     owner_agent="notion_sync",
-    additional_agents=["notion_website_sync"],
+    additional_agents=["notion_website_sync", "notion_n8n_sync"],
 )
 
 CLOUDFLARE_INTEGRATION = IntegrationRecord(

@@ -99,7 +99,10 @@ class SecretStore:
         plaintext = json.dumps(self._data).encode()
         encrypted = self._fernet.encrypt(plaintext)
         self._store_path.parent.mkdir(parents=True, exist_ok=True)
-        self._store_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
+        # Atomic write: write to temp file, then rename to prevent corruption
+        tmp_path = self._store_path.with_suffix(".tmp")
+        tmp_path.write_bytes(self._SALT_MARKER + self._salt + encrypted)
+        tmp_path.replace(self._store_path)
 
     def get(self, key: str) -> str | None:
         return self._data.get(key)

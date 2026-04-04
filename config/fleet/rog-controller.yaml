@@ -1,0 +1,96 @@
+# Guardian One — ROG Primary Controller Configuration
+# ASUS ROG Flow Z13 serves as the central orchestrator for the Guardian One fleet.
+
+controller:
+  node: "rog"
+  mode: "primary"
+  timezone: "America/Chicago"
+
+  heartbeat:
+    interval_seconds: 30
+    timeout_seconds: 90
+    max_missed: 3
+
+  health_check:
+    interval_seconds: 60
+    endpoints:
+      ollama: "http://localhost:11434/api/tags"
+      guardian_worker: "http://localhost:5000/health"
+      dev_panel: "http://localhost:5100/health"
+
+docker:
+  containers:
+    ollama:
+      image: "ollama/ollama"
+      restart: "unless-stopped"
+      ports:
+        - "11434:11434"
+      volumes:
+        - "ollama-data:/root/.ollama"
+      gpu: true
+
+    guardian-worker:
+      image: "python:3.11"
+      restart: "unless-stopped"
+      command: "python -m guardian_one.worker"
+      volumes:
+        - "guardian-data:/app/data"
+        - "guardian-logs:/app/logs"
+        - "guardian-config:/app/config"
+      environment:
+        GUARDIAN_DATA_DIR: "/app/data"
+        GUARDIAN_LOG_DIR: "/app/logs"
+        GUARDIAN_NODE_ROLE: "primary_controller"
+        GUARDIAN_FLEET_MODE: "true"
+        TZ: "America/Chicago"
+
+    scheduler:
+      image: "python:3.11"
+      restart: "unless-stopped"
+      command: "python main.py --schedule"
+      volumes:
+        - "guardian-data:/app/data"
+        - "guardian-logs:/app/logs"
+        - "guardian-config:/app/config"
+      depends_on:
+        - guardian-worker
+
+fleet_coordination:
+  discovery:
+    method: "static"
+    registry: "config/fleet/nodes.yaml"
+
+  routing:
+    default_target: "rog"
+    rules:
+      - service: "homelink_*"
+        target: "mac-mini"
+      - service: "n8n"
+        target: "mac-mini"
+      - service: "notion_sync"
+        target: "mac-mini"
+      - service: "ollama"
+        target: "rog"
+      - service: "guardian_*"
+        target: "rog"
+
+  failover:
+    enabled: true
+    strategy: "priority"
+    fallback_controller: "mac-mini"
+
+integrations:
+  anthropic:
+    organization_uuid: "3d2eac6c-cafd-42b2-956b-a3739c9c71aa"
+    service: "claude_code"
+
+  cloudflare:
+    # WARNING: Move token to env var or secrets manager before production use
+    user_token: "cfut_SjGY2WQ60VRAJ2lZTEuDQ1WvcbHkbDW1lH0cxD6Pe04f4b78"
+    service: "workers"
+
+logging:
+  fleet_log: "data/fleet/fleet.jsonl"
+  node_logs: "data/fleet/nodes/"
+  retention_days: 30
+  audit_all_commands: true

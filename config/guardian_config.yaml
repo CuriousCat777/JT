@@ -289,3 +289,66 @@ agents:
         flipper_zero:
           enabled: true
           authorized_testing_only: true # Legal compliance reminder
+
+  iot_sentinel:
+    enabled: true
+    schedule_interval_minutes: 5
+    allowed_resources:
+      - network
+      - devices
+      - mqtt
+      - security
+    custom:
+      # Network scanning
+      subnet: "192.168.1.0/24"
+      scan_interval_seconds: 300        # 5 min between scans
+      # Known/trusted MAC addresses (add your devices here)
+      known_macs: []
+      # MQTT broker (Mosquitto)
+      mqtt:
+        host: "localhost"
+        port: 1883
+        use_tls: false
+        username: ""
+        password: ""
+      # Network segmentation (VLAN IDs)
+      vlans:
+        core: 10
+        iot: 20
+        user: 30
+      # Firewall policy
+      firewall:
+        deny_all_outbound_iot: true
+        allow_iot_to_mqtt_only: true
+        vpn_only_external_access: true
+      # Home Assistant
+      home_assistant:
+        base_url: "http://homeassistant.local:8123"
+        access_token: ""                 # Store in Vault, not here
+        verify_ssl: false
+      # Tailscale VPN
+      tailscale:
+        enabled: true
+        accept_routes: true
+        accept_dns: true
+      # Node-RED
+      node_red:
+        base_url: "http://localhost:1880"
+        admin_auth_token: ""
+      # Core service stack (Docker)
+      services:
+        home_assistant: true
+        mosquitto_mqtt: true
+        node_red: true
+        zigbee2mqtt: false               # Enable when Zigbee coordinator attached
+        tailscale_vpn: true
+      # Maintenance schedule
+      maintenance:
+        daily: "health_summary"
+        weekly: "integrity_report"
+        monthly: "update_review"
+      # AI agents
+      ai_roles:
+        network_monitor: true
+        risk_summarizer: true
+        recommendation_engine: true

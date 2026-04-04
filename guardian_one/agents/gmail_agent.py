@@ -19,6 +19,7 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.core.content_gate import redact_dict, redact_text
 from guardian_one.integrations.gmail_sync import (
     EmailMessage,
     GmailProvider,
@@ -70,7 +71,7 @@ class GmailAgent(BaseAgent):
         self._set_status(AgentStatus.IDLE)
         authenticated = self._gmail.authenticate()
         self.log("initialized", details={
-            "target_email": self.TARGET_EMAIL,
+            "target_email": redact_text(self.TARGET_EMAIL),
             "authenticated": authenticated,
             "has_credentials": self._gmail.has_credentials,
             "has_token": self._gmail.has_token,
@@ -95,12 +96,12 @@ class GmailAgent(BaseAgent):
         for ref in recent[:5]:
             msg = self._gmail.get_message(ref["id"], format="metadata")
             if msg:
-                recent_details.append({
+                recent_details.append(redact_dict({
                     "subject": msg.subject,
                     "sender": msg.sender,
                     "date": msg.date,
                     "snippet": msg.snippet,
-                })
+                }))
 
         self._inbox_summary = {
             "unread_count": unread,
@@ -229,14 +230,18 @@ class GmailAgent(BaseAgent):
         # Sort categories by total amount
         sorted_cats = dict(sorted(categories.items(), key=lambda x: x[1], reverse=True))
 
+        # Redact account names and institution names that may contain PII
+        safe_accounts = {redact_text(k): v for k, v in accounts.items()}
+        safe_institutions = sorted(redact_text(inst) for inst in institutions)
+
         return {
             "total_transactions": len(transactions),
             "total_income": round(total_income, 2),
             "total_expenses": round(total_expenses, 2),
             "net": round(total_income - total_expenses, 2),
             "categories": sorted_cats,
-            "accounts": accounts,
-            "institutions": sorted(institutions),
+            "accounts": safe_accounts,
+            "institutions": safe_institutions,
             "date_range": {
                 "earliest": min(
                     (tx.get("Date", tx.get("date", "")) for tx in transactions),
@@ -274,13 +279,13 @@ class GmailAgent(BaseAgent):
             for ref in msgs:
                 msg = self._gmail.get_message(ref["id"], format="metadata")
                 if msg:
-                    results.append({
+                    results.append(redact_dict({
                         "subject": msg.subject,
                         "sender": msg.sender,
                         "date": msg.date,
                         "snippet": msg.snippet,
                         "labels": msg.labels,
-                    })
+                    }))
 
         self.log("financial_emails_searched", details={
             "results_count": len(results),
@@ -358,7 +363,7 @@ class GmailAgent(BaseAgent):
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
-            summary=f"Monitoring {self.TARGET_EMAIL} | Auth: {self._gmail.is_authenticated}",
+            summary=f"Monitoring {redact_text(self.TARGET_EMAIL)} | Auth: {self._gmail.is_authenticated}",
             data={
                 "inbox": self._inbox_summary,
                 "rocket_money": self._rocket_money_status,
