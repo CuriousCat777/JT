@@ -94,7 +94,7 @@ docs/
 ## Key Design Principles
 
 1. **Data sovereignty** — User owns all data, encrypted at rest and in transit
-2. **Write-only Notion** — Push operational data only, never read for decisions
+2. **Notion is not decision input** — Push operational data to Notion; allow operational reads only for idempotency/maintenance, never for agent decision-making
 3. **Content gate** — PHI/PII patterns blocked before any external sync
 4. **Audit everything** — Immutable log of all agent actions
 5. **On-demand credentials** — Tokens loaded from the encrypted Vault on demand and not persisted in plaintext or stored long-term on agent objects
