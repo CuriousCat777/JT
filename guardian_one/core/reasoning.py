@@ -361,7 +361,7 @@ class ReActEngine:
                 continue
 
             # Check for FINISH
-            if action_name.upper() == self.config.stop_phrase:
+            if action_name.casefold() == self.config.stop_phrase.casefold():
                 trace.add_action(f"FINISH: {action_input}")
                 trace.finish(action_input or thought)
                 break

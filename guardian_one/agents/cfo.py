@@ -450,8 +450,8 @@ class CFO(BaseAgent):
         totals: dict[str, float] = {}
         for account in self._accounts.values():
             key = account.account_type.value
-            totals[key] = round(totals.get(key, 0) + account.balance, 2)
-        return totals
+            totals[key] = totals.get(key, 0) + account.balance
+        return {k: round(v, 2) for k, v in totals.items()}
 
     # ------------------------------------------------------------------
     # Transaction tracking
