@@ -174,7 +174,7 @@ Two active web properties managed via `WebsiteManager` + `WebArchitect`:
 ## Flask Integration
 
 ```bash
-pytest tests/ -v                          # All tests (721 test functions across 26 files)
+pytest tests/ -v                          # All tests (720+ test functions across 26 files)
 pytest tests/test_agents.py               # All agent tests
 pytest tests/test_guardian.py             # Core guardian tests
 pytest tests/test_homelink.py             # H.O.M.E. L.I.N.K. tests
