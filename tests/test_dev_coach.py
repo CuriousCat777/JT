@@ -5,8 +5,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from guardian_one.core.audit import AuditLog
 from guardian_one.core.base_agent import AgentReport, AgentStatus
 from guardian_one.core.config import AgentConfig
