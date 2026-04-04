@@ -2,7 +2,8 @@
 
 **Prepared for:** Dr. Jeremy Paulo Salvino Tabernero
 **Date:** April 1, 2026
-**Classification:** Strategic Business Intelligence
+**Classification:** Internal
+**Document Type:** Strategic Business Intelligence
 
 ---
 
