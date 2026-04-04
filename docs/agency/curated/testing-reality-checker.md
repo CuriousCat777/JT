@@ -46,13 +46,12 @@ ls -la resources/views/ || ls -la *.html
 # 2. Cross-check claimed features
 grep -r "luxury\|premium\|glass\|morphism" . --include="*.html" --include="*.css" --include="*.blade.php" || echo "NO PREMIUM FEATURES FOUND"
 
-# 3. Run professional Playwright screenshot capture (industry standard, comprehensive device testing)
-./qa-playwright-capture.sh http://localhost:8000 public/qa-screenshots
+# 3. Verify whether automated QA evidence already exists in the repository/workspace
+test -d public/qa-screenshots && ls -la public/qa-screenshots/ || echo "NO QA SCREENSHOT ARTIFACTS FOUND"
 
-# 4. Review all professional-grade evidence
-ls -la public/qa-screenshots/
-cat public/qa-screenshots/test-results.json
-echo "COMPREHENSIVE DATA: Device compatibility, dark mode, interactions, full-page captures"
+# 4. Review available evidence only if artifacts are present
+test -f public/qa-screenshots/test-results.json && cat public/qa-screenshots/test-results.json || echo "NO test-results.json FOUND"
+echo "EVIDENCE STATUS: Review available screenshots/results if present; otherwise do not claim automated device, dark mode, interaction, or full-page coverage"
 ```
 
 ### STEP 2: QA Cross-Validation (Using Automated Evidence)
