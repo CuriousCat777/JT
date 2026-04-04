@@ -29,9 +29,10 @@ jobs:
         id: install
         continue-on-error: true
         run: |
-          python -m pip install --upgrade pip 2>&1 | tee /tmp/install-output.txt
-          pip install cffi 2>&1 | tee -a /tmp/install-output.txt
-          pip install -e ".[dev]" 2>&1 | tee -a /tmp/install-output.txt
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee /tmp/install-output.txt || exit 1
+          pip install cffi 2>&1 | tee -a /tmp/install-output.txt || exit 1
+          pip install -e ".[dev]" 2>&1 | tee -a /tmp/install-output.txt || exit 1
           echo "INSTALL_OK=true" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
