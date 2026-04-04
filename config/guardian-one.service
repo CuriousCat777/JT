@@ -1,0 +1,18 @@
+[Unit]
+Description=Guardian One — Personal Life Management System
+After=network.target
+
+[Service]
+Type=simple
+User=jeremy
+WorkingDirectory=/home/jeremy/JT
+Environment=PATH=/home/jeremy/JT/venv/bin:/home/jeremy/.local/bin:/usr/bin:/bin
+EnvironmentFile=/home/jeremy/JT/.env
+ExecStart=/home/jeremy/JT/venv/bin/python /home/jeremy/JT/main.py --daemon
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,95 @@
+# Guardian One — Docker Compose
+# Services: guardian (daemon + web panel), ollama (local AI, optional)
+#
+# Usage:
+#   docker compose up -d                          # Guardian only (cloud AI)
+#   docker compose --profile ollama up -d          # Guardian + local Ollama
+#   docker compose logs -f guardian                # Follow Guardian logs
+#   docker compose exec guardian python main.py --summary   # Run CLI commands
+#   docker compose down                            # Stop everything
+
+services:
+  # ── Guardian One Daemon ────────────────────────────────────────
+  guardian:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: guardian-one
+    restart: unless-stopped
+    ports:
+      - "5100:5100"   # Web panel + chat
+      - "5200:5200"   # Daemon health API
+    volumes:
+      - guardian-data:/app/data        # Vault, ledger, daemon state
+      - guardian-logs:/app/logs        # Audit + structured logs
+      - ./config:/app/config:ro        # Config (read-only)
+    env_file:
+      - .env
+    environment:
+      - GUARDIAN_MASTER_PASSPHRASE=${GUARDIAN_MASTER_PASSPHRASE:?Set GUARDIAN_MASTER_PASSPHRASE in .env}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - guardian-net
+
+  # ── Web Panel (separate instance for dev) ──────────────────────
+  # Uncomment to run web panel separately from daemon:
+  # guardian-web:
+  #   build: .
+  #   container_name: guardian-web
+  #   restart: unless-stopped
+  #   command: ["python", "main.py", "--devpanel", "--devpanel-port", "5100"]
+  #   ports:
+  #     - "5100:5100"
+  #   volumes:
+  #     - guardian-data:/app/data
+  #     - guardian-logs:/app/logs
+  #     - ./config:/app/config:ro
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #   networks:
+  #     - guardian-net
+
+  # ── Ollama (Local AI Engine) — opt-in with: --profile ollama ───
+  ollama:
+    image: ollama/ollama:latest
+    container_name: guardian-ollama
+    restart: unless-stopped
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama    # Persist downloaded models
+    deploy:
+      resources:
+        reservations:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    networks:
+      - guardian-net
+
+volumes:
+  guardian-data:
+    name: guardian-one-data
+  guardian-logs:
+    name: guardian-one-logs
+  ollama-models:
+    name: guardian-ollama-models
+
+networks:
+  guardian-net:
+    name: guardian-network
+    driver: bridge

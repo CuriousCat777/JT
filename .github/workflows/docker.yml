@@ -1,0 +1,44 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "requirements.txt"
+      - "guardian_one/**"
+      - "main.py"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Guardian One image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: guardian-one:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image runs
+        run: |
+          docker run --rm guardian-one:test python -c "from guardian_one.core.guardian import GuardianOne; print('Import OK')"
+
+      - name: Run tests in container
+        run: |
+          docker run --rm guardian-one:test python -m pytest tests/ -q --tb=short

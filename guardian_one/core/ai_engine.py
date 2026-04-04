@@ -175,13 +175,18 @@ class OllamaBackend:
 
 
 class AnthropicBackend:
-    """Claude API backend (cloud fallback)."""
+    """Claude API backend (cloud fallback) with tool-use for web research."""
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514", timeout: int = 60) -> None:
+    # Max rounds of tool calls per single generate() invocation
+    _MAX_TOOL_ROUNDS = 5
+
+    def __init__(self, model: str = "claude-sonnet-4-20250514", timeout: int = 60,
+                 enable_tools: bool = True) -> None:
         self._model = model
         self._timeout = timeout
         self._api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         self._client: Any = None  # Lazy-initialized, reused across calls
+        self._enable_tools = enable_tools
 
     @property
     def model(self) -> str:
@@ -191,13 +196,20 @@ class AnthropicBackend:
         """Check if the Anthropic API key is set."""
         return bool(self._api_key)
 
+    def _get_tools(self) -> list[dict[str, Any]]:
+        """Return tool definitions if tools are enabled."""
+        if not self._enable_tools:
+            return []
+        from guardian_one.core.web_tools import TOOL_DEFINITIONS
+        return TOOL_DEFINITIONS
+
     def generate(
         self,
         messages: list[AIMessage],
         max_tokens: int = 2048,
         temperature: float = 0.3,
     ) -> AIResponse:
-        """Send messages to Claude API and get a response."""
+        """Send messages to Claude API, automatically handling tool calls."""
         import time
 
         if not self._api_key:
@@ -220,7 +232,7 @@ class AnthropicBackend:
 
             # Separate system message from conversation
             system_text = ""
-            conv_messages = []
+            conv_messages: list[dict[str, Any]] = []
             for m in messages:
                 if m.role == "system":
                     system_text += m.content + "\n"
@@ -240,19 +252,77 @@ class AnthropicBackend:
             if system_text.strip():
                 kwargs["system"] = system_text.strip()
 
-            resp = client.messages.create(**kwargs)
+            tools = self._get_tools()
+            if tools:
+                kwargs["tools"] = tools
+
+            total_tokens = 0
+
+            # Agentic loop: Claude may call tools, we execute and feed results back
+            for _round in range(self._MAX_TOOL_ROUNDS):
+                resp = client.messages.create(**kwargs)
+                total_tokens += resp.usage.input_tokens + resp.usage.output_tokens
+
+                # Check if Claude wants to use tools
+                tool_use_blocks = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+
+                if not tool_use_blocks or resp.stop_reason != "tool_use":
+                    # No more tool calls — extract final text
+                    break
+
+                # Execute each tool call and build tool_result messages
+                from guardian_one.core.web_tools import execute_tool
+
+                # Add assistant's response — serialize only known block types
+                assistant_content = []
+                for b in resp.content:
+                    block_type = getattr(b, "type", None)
+                    if block_type == "text":
+                        assistant_content.append({"type": "text", "text": getattr(b, "text", "")})
+                    elif block_type == "tool_use":
+                        tid = getattr(b, "id", None)
+                        tname = getattr(b, "name", None)
+                        tinput = getattr(b, "input", None)
+                        if tid and tname and tinput is not None:
+                            assistant_content.append({"type": "tool_use", "id": tid, "name": tname, "input": tinput})
+                        else:
+                            logger.warning("Skipping malformed tool_use block")
+                    else:
+                        logger.debug("Skipping Anthropic block type: %r", block_type)
+                kwargs["messages"].append({"role": "assistant", "content": assistant_content})
+
+                tool_results = []
+                for tb in tool_use_blocks:
+                    logger.info("Tool call: %s(%s)", tb.name, tb.input)
+                    result_text = execute_tool(tb.name, tb.input)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tb.id,
+                        "content": result_text,
+                    })
+
+                kwargs["messages"].append({
+                    "role": "user",
+                    "content": tool_results,
+                })
+
             elapsed = (time.monotonic() - start) * 1000
 
+            # Extract final text from response
             content = ""
             for block in resp.content:
                 if hasattr(block, "text"):
                     content += block.text
 
+            # If the loop exhausted without a final text response, note it
+            if not content and resp.stop_reason == "tool_use":
+                content = "[AI reached tool-call limit without producing a final answer. Try a simpler query.]"
+
             return AIResponse(
                 content=content,
                 provider="anthropic",
                 model=self._model,
-                tokens_used=resp.usage.input_tokens + resp.usage.output_tokens,
+                tokens_used=total_tokens,
                 latency_ms=round(elapsed, 1),
             )
         except Exception as exc:

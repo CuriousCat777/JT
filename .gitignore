@@ -44,6 +44,9 @@ config/google_credentials.json
 # Plaid access tokens (sensitive — bank connection credentials)
 data/plaid_tokens.json
 
+# CFO ledger (contains real financial data)
+data/cfo_ledger.json
+
 # Generated Excel dashboard (contains financial data)
 data/dashboard.xlsx
 

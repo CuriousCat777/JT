@@ -30,6 +30,8 @@ guardian_one/
 ├── core/                       # System infrastructure
 │   ├── guardian.py              # Central coordinator
 │   ├── base_agent.py           # Agent contract (BaseAgent ABC)
+│   ├── daemon.py               # Headless daemon mode + health API (/health, /status, /metrics)
+│   ├── logging.py              # Structured JSON logging with daily rotation
 │   ├── mediator.py             # Cross-agent conflict resolution
 │   ├── scheduler.py            # Agent scheduling
 │   ├── sandbox.py              # Deployment testing
@@ -56,7 +58,12 @@ guardian_one/
 └── utils/                      # Shared utilities
 config/
 ├── guardian_config.yaml        # Agent & system configuration
-tests/                          # 200+ pytest test cases
+├── guardian-one.service        # systemd service unit for daemon mode
+scripts/
+├── setup.sh                    # Environment setup script
+.github/workflows/
+├── test.yml                    # CI pipeline (pytest on push/PR)
+tests/                          # 878 pytest test cases
 ```
 
 ## Managed Websites
@@ -137,7 +144,9 @@ Environment: `.env` (NOTION_TOKEN, API keys, etc.)
 ## Running Tests
 
 ```bash
-pytest tests/ -v                       # All tests (~200+)
+pytest tests/ -v                       # All tests (878)
+pytest tests/test_daemon.py            # Daemon + health API tests
+pytest tests/test_logging.py           # Structured logging tests
 pytest tests/test_website_manager.py   # Website manager tests
 pytest tests/test_notion_website_sync.py  # Notion website sync tests
 pytest tests/test_web_architect.py     # WebArchitect tests
@@ -148,6 +157,8 @@ pytest tests/test_web_architect.py     # WebArchitect tests
 ```bash
 python main.py                         # Run all agents once
 python main.py --schedule              # Start agent scheduler
+python main.py --daemon                # Run as background daemon (headless + health API)
+python main.py --daemon --daemon-port 5200  # Custom health API port
 python main.py --dashboard             # Generate CFO Excel dashboard
 python main.py --sync                  # Continuous financial sync
 python main.py --calendar-sync         # Sync Google Calendar
@@ -158,12 +169,49 @@ python main.py --brief                 # Weekly security brief
 python main.py --sandbox               # Sandbox deployment
 ```
 
+## Docker Deployment
+
+Guardian One runs in Docker. Ollama is optional (add `--with-ollama` for local AI).
+
+```bash
+# Quick start (cloud AI only)
+./scripts/docker-start.sh up                  # Guardian only
+./scripts/docker-start.sh up --with-ollama    # Guardian + local Ollama
+./scripts/docker-start.sh pull-model          # Pull llama3 into Ollama
+./scripts/docker-start.sh status              # Check health
+./scripts/docker-start.sh logs                # Follow Guardian logs
+./scripts/docker-start.sh cli --summary       # Run any CLI command
+./scripts/docker-start.sh down                # Stop everything
+
+# Or use docker compose directly
+docker compose up -d --build                         # Guardian only
+docker compose --profile ollama up -d --build        # With Ollama
+```
+
+### Services
+| Service | Container | Port | Purpose |
+|---------|-----------|------|---------|
+| guardian | guardian-one | 5100, 5200 | Daemon + web panel + health API |
+| ollama | guardian-ollama | 11434 | Local AI engine (opt-in via `--profile ollama`) |
+
+### Volumes
+- `guardian-one-data` — Vault, ledger, daemon state (persistent)
+- `guardian-one-logs` — Audit + structured logs (persistent)
+- `guardian-ollama-models` — Downloaded AI models (persistent)
+
+### Environment
+- `GUARDIAN_MASTER_PASSPHRASE` — Vault encryption passphrase
+- `OLLAMA_BASE_URL` — Override Ollama URL (auto-set in Docker to `http://ollama:11434`)
+- `ANTHROPIC_API_KEY` — Cloud AI fallback
+- See `.env` for all keys
+
 ## Development Notes
 
-- Python 3.11+, no Docker yet (on roadmap)
+- Python 3.11+
 - All agents extend `BaseAgent` (core/base_agent.py) with initialize/run/report
 - Tests use fake providers (no real API calls)
 - Config loaded via `load_config()` from core/config.py
+- `OLLAMA_BASE_URL` env var overrides the YAML config (for Docker compatibility)
 - Multi-device: This CLAUDE.md carries full context across machines via git
 
 ## Cross-Device Setup

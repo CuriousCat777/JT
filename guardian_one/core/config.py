@@ -93,7 +93,10 @@ def load_config(config_path: Path | None = None) -> GuardianConfig:
     ai_engine = AIEngineConfig(
         primary_provider=ai_raw.get("primary_provider", "ollama"),
         fallback_provider=ai_raw.get("fallback_provider", "anthropic"),
-        ollama_base_url=ai_raw.get("ollama_base_url", "http://localhost:11434"),
+        ollama_base_url=(
+            os.getenv("OLLAMA_BASE_URL") or
+            ai_raw.get("ollama_base_url", "http://localhost:11434")
+        ),
         ollama_model=ai_raw.get("ollama_model", "llama3"),
         anthropic_model=ai_raw.get("anthropic_model", "claude-sonnet-4-20250514"),
         max_tokens=ai_raw.get("max_tokens", 2048),
