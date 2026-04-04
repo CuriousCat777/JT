@@ -1,4 +1,4 @@
-"""VARYS FastAPI application — REST API for security operations.
+"""VARYS Flask Blueprint — REST API for security operations.
 
 Endpoints:
     GET  /varys/health         — Liveness check
