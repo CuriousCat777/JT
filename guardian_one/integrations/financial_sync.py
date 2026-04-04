@@ -20,7 +20,9 @@ All paths merge into the CFO ledger via SyncedAccount/SyncedTransaction.
 from __future__ import annotations
 
 import abc
+import base64
 import csv
+import html
 import io
 import json
 import os
@@ -1723,12 +1725,23 @@ def parse_ofx(
                     pass
 
             acct_label = f"{institution} {acct_type.replace('_', ' ').title()} {masked_id}"
+            # Build raw metadata dict so _balance_was_provided() can inspect it
+            raw_meta: dict[str, Any] = {
+                "acct_id": acct_id,
+                "acct_type": acct_type,
+                "institution": institution,
+                "source": "ofx",
+            }
+            if bal_el is not None and bal_el.text:
+                raw_meta["balance"] = balance
+                raw_meta["BALAMT"] = bal_el.text.strip()
             accounts.append(SyncedAccount(
                 name=acct_label,
                 account_type=acct_type,
                 balance=balance,
                 institution=institution,
                 last_updated=now,
+                raw=raw_meta,
             ))
 
             # Transactions
@@ -1760,12 +1773,24 @@ def parse_ofx(
                 tx_type = tx_type_el.text.strip().lower() if tx_type_el is not None and tx_type_el.text else ""
                 category = _map_ofx_tx_type(tx_type)
 
+                # Collect raw OFX fields for provenance
+                tx_raw: dict[str, Any] = {
+                    "TRNTYPE": tx_type,
+                    "DTPOSTED": tx_date,
+                    "TRNAMT": str(amount),
+                    "source": "ofx",
+                }
+                fitid_el = stmttrn.find("FITID")
+                if fitid_el is not None and fitid_el.text:
+                    tx_raw["FITID"] = fitid_el.text.strip()
+
                 transactions.append(SyncedTransaction(
                     date=tx_date,
                     description=desc,
                     amount=amount,
                     category=category,
                     account=acct_label,
+                    raw=tx_raw,
                 ))
 
     return accounts, transactions
@@ -1805,8 +1830,7 @@ def _sgml_ofx_to_xml(raw: str) -> str:
             value = m.group(2).strip()
             if tag.upper() in data_tags and not value.startswith("<"):
                 # XML-escape special characters in values
-                value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                result.append(f"<{tag}>{value}</{tag}>")
+                result.append(f"<{tag}>{html.escape(value)}</{tag}>")
                 continue
         result.append(stripped)
 
