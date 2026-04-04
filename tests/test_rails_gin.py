@@ -382,6 +382,19 @@ def test_scaffold_gin_success(mock_go, mock_cmd, mock_install):
         assert result["project"].framework == FrameworkType.GIN
         assert result["project"].port == 9090
 
+        # Verify go commands ran with correct cwd
+        target_str = str(target)
+        mod_init_call = mock_cmd.call_args_list[0]
+        assert mod_init_call[0][0] == ["go", "mod", "init", "myapi"]
+        assert mod_init_call[1].get("cwd") == target_str
+
+        mod_tidy_call = mock_cmd.call_args_list[1]
+        assert mod_tidy_call[0][0] == ["go", "mod", "tidy"]
+        assert mod_tidy_call[1].get("cwd") == target_str
+
+        # Verify install_gin was called with the target dir
+        mock_install.assert_called_once_with(target_str)
+
 
 @patch("guardian_one.integrations.rails_gin.install_gin")
 @patch("guardian_one.integrations.rails_gin._run_cmd")

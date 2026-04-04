@@ -135,8 +135,9 @@ def check_go() -> FrameworkInfo:
 def check_gin() -> FrameworkInfo:
     """Check if Gin is available (Go module).
 
-    Gin is a Go module, so we verify Go is present and that
-    `go list` can resolve the gin package.
+    Gin is a Go module installed per-project via ``go get``, so we only
+    verify that Go itself is present.  Gin availability is project-scoped
+    and resolved at scaffold/install time.
     """
     go_info = check_go()
     if go_info.status != ToolStatus.INSTALLED:
@@ -386,8 +387,8 @@ def start_rails_server(
         proc = subprocess.Popen(
             ["rails", "server", "-p", str(port), "-e", environment],
             cwd=str(app),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         return {
             "success": True,
@@ -425,8 +426,8 @@ def start_gin_server(
         proc = subprocess.Popen(
             ["go", "run", "."],
             cwd=str(app),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             env=env,
         )
         return {
