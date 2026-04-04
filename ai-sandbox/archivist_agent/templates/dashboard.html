@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archivist Agent — Guardian One</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <header>
+        <h1>Archivist Agent</h1>
+        <span class="subtitle">Guardian One — Temporary Environment</span>
+        <button id="refresh-btn" title="Refresh all data">Refresh</button>
+    </header>
+
+    <main>
+        <!-- Status cards -->
+        <section class="cards" id="status-cards">
+            <div class="card">
+                <h3>Files Tracked</h3>
+                <span class="metric" id="metric-files">--</span>
+            </div>
+            <div class="card">
+                <h3>Data Sources</h3>
+                <span class="metric" id="metric-sources">--</span>
+            </div>
+            <div class="card">
+                <h3>Privacy Tools</h3>
+                <span class="metric" id="metric-privacy">--</span>
+            </div>
+            <div class="card">
+                <h3>Audit Entries</h3>
+                <span class="metric" id="metric-audit">--</span>
+            </div>
+        </section>
+
+        <!-- File management -->
+        <section class="panel">
+            <h2>Files</h2>
+            <div class="toolbar">
+                <input type="text" id="file-search" placeholder="Search files...">
+                <select id="file-category-filter">
+                    <option value="">All categories</option>
+                    <option value="medical">Medical</option>
+                    <option value="financial">Financial</option>
+                    <option value="personal">Personal</option>
+                    <option value="professional">Professional</option>
+                    <option value="legal">Legal</option>
+                </select>
+                <button id="add-file-btn">+ Add File</button>
+            </div>
+            <table id="files-table">
+                <thead>
+                    <tr>
+                        <th>Path</th>
+                        <th>Category</th>
+                        <th>Tags</th>
+                        <th>Retention</th>
+                        <th>Encrypted</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="files-body"></tbody>
+            </table>
+        </section>
+
+        <!-- Add File modal -->
+        <div class="modal-overlay" id="add-file-modal">
+            <div class="modal">
+                <h2>Register File</h2>
+                <label>Path <input type="text" id="new-file-path" placeholder="/documents/report.pdf"></label>
+                <label>Category
+                    <select id="new-file-category">
+                        <option value="personal">Personal</option>
+                        <option value="financial">Financial</option>
+                        <option value="medical">Medical</option>
+                        <option value="professional">Professional</option>
+                        <option value="legal">Legal</option>
+                    </select>
+                </label>
+                <label>Tags (comma-separated) <input type="text" id="new-file-tags" placeholder="tax, 2026"></label>
+                <label>Retention
+                    <select id="new-file-retention">
+                        <option value="keep_3_years">3 Years</option>
+                        <option value="keep_1_year">1 Year</option>
+                        <option value="keep_7_years">7 Years</option>
+                        <option value="keep_forever">Forever</option>
+                        <option value="delete_after_use">Delete After Use</option>
+                    </select>
+                </label>
+                <label><input type="checkbox" id="new-file-encrypted"> Encrypted</label>
+                <div class="modal-actions">
+                    <button id="save-file-btn">Save</button>
+                    <button id="cancel-file-btn" class="secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data sources -->
+        <section class="panel">
+            <h2>Data Sources</h2>
+            <table id="sources-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Data Types</th>
+                        <th>Last Sync</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sources-body"></tbody>
+            </table>
+        </section>
+
+        <!-- Privacy audit -->
+        <section class="panel">
+            <h2>Privacy Audit</h2>
+            <button id="run-audit-btn">Run Audit</button>
+            <div id="audit-results"></div>
+        </section>
+
+        <!-- Audit log -->
+        <section class="panel">
+            <h2>Audit Log</h2>
+            <table id="audit-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Action</th>
+                        <th>Severity</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="audit-body"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

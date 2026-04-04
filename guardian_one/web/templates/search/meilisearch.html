@@ -1,0 +1,22 @@
+{% extends "search/_base.html" %}
+{% block title %}Document Search (Meilisearch){% endblock %}
+{% block badge_class %}badge-meili{% endblock %}
+{% block badge_text %}Meilisearch{% endblock %}
+{% block search_script %}
+<script src="https://cdn.jsdelivr.net/npm/@meilisearch/instant-meilisearch/dist/instant-meilisearch.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4"></script>
+<script>
+  const { instantMeiliSearch } = window["@meilisearch/instant-meilisearch"];
+  const { searchClient } = instantMeiliSearch("{{ meili_host }}", "{{ meili_api_key }}", {
+    primaryKey: "id",
+    finitePagination: true,
+  });
+  window.__searchClient = searchClient;
+  window.__indexName = "documents";
+  window.__sortItems = [
+    { label: "Relevance", value: "documents" },
+    { label: "Date (newest)", value: "documents:date_modified:desc" },
+    { label: "Date (oldest)", value: "documents:date_modified:asc" },
+  ];
+</script>
+{% endblock %}

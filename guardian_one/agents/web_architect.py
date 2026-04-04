@@ -94,6 +94,52 @@ class WebArchitect(BaseAgent):
         self._uptime_history: dict[str, list[UptimeRecord]] = {}
         self._domains: list[str] = []
         self._n8n_connected = False
+        self._power_tools: Any | None = None  # PowerToolsLibrary, injected by Guardian
+
+    def set_power_tools(self, library: Any) -> None:
+        """Inject the PowerToolsLibrary (called by GuardianOne)."""
+        self._power_tools = library
+
+    @property
+    def power_tools(self) -> Any | None:
+        """Access the PowerToolsLibrary for Rails/Gin project management."""
+        return self._power_tools
+
+    def scaffold_rails_site(
+        self,
+        app_name: str,
+        api_only: bool = False,
+        database: str = "sqlite3",
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Scaffold a Rails app via the power tools library."""
+        if self._power_tools is None:
+            return {"success": False, "error": "Power tools library not available"}
+        return self._power_tools.create_rails_app(
+            app_name=app_name,
+            requester=self.name,
+            api_only=api_only,
+            database=database,
+            tags=tags or ["rails", "web", "web_architect"],
+        )
+
+    def scaffold_gin_api(
+        self,
+        app_name: str,
+        module_path: str | None = None,
+        port: int = 8080,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Scaffold a Gin API app via the power tools library."""
+        if self._power_tools is None:
+            return {"success": False, "error": "Power tools library not available"}
+        return self._power_tools.create_gin_app(
+            app_name=app_name,
+            requester=self.name,
+            module_path=module_path,
+            port=port,
+            tags=tags or ["gin", "api", "web_architect"],
+        )
 
     # ------------------------------------------------------------------
     # BaseAgent lifecycle

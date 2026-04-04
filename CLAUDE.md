@@ -1,4 +1,4 @@
-# Guardian One — Claude Code Project Context
+# CLAUDE.md
 
 ## What This Is
 
@@ -155,7 +155,7 @@ Two active web properties managed via `WebsiteManager` + `WebArchitect`:
 | **drjeremytabernero.org** | Professional | Down (needs redeployment) | Personal/professional site, CV, publications |
 | **jtmdai.com** | Business | Live | JTMD AI — AI solutions, services, case studies |
 
-## Security Architecture
+## Agent Pattern
 
 - **Vault**: AES-256-GCM encrypted credential storage with per-credential scoping
 - **Gateway**: TLS enforcement, rate limiting, circuit breakers for all external calls
@@ -171,7 +171,7 @@ Two active web properties managed via `WebsiteManager` + `WebArchitect`:
 - **Environment**: `.env` (NOTION_TOKEN, API keys, etc.) — see `config/.env.example`
 - **Config loading**: `load_config()` from `core/config.py` returns typed config object
 
-## Running Tests
+## Flask Integration
 
 ```bash
 pytest tests/ -v                          # All tests (721 test functions across 26 files)
@@ -270,15 +270,11 @@ Requires **Python 3.10+** (3.11+ recommended).
 - Financial ledger snapshots stored in `data/cfo_ledger.json` (daily net-worth tracking)
 - Log backups: `guardian_one_log_backup_*.json` files in project root
 
-## Cross-Device Setup
+| Domain | Purpose |
+|--------|---------|
+| drjeremytabernero.org | Professional site, CV, publications |
+| jtmdai.com | JTMD AI — AI solutions, services |
 
-Clone on any machine and Claude Code will understand the project:
-```bash
-git clone <repo-url> ~/JT
-cd ~/JT
-pip install -r requirements.txt
-# Claude Code reads this CLAUDE.md automatically
-```
+## Cross-Device
 
-Both machines (current + ROG X 64GB) share context through this repo.
-Always pull latest before starting work on a new device.
+This CLAUDE.md carries full context across machines via git. Always pull latest before starting work on a new device. Both machines (current + ROG X 64GB) share context through this repo.
