@@ -18,9 +18,13 @@ search_bp = Blueprint("search", __name__, url_prefix="/search")
 TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
 TYPESENSE_PORT = os.getenv("TYPESENSE_PORT", "8108")
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "guardian-search-key")
+# Search-only key for browser clients (scoped, no write/admin access)
+TYPESENSE_SEARCH_KEY = os.getenv("TYPESENSE_SEARCH_KEY", TYPESENSE_API_KEY)
 
 MEILI_HOST = os.getenv("MEILI_HOST", "http://localhost:7700")
 MEILI_API_KEY = os.getenv("MEILI_API_KEY", "guardian-meili-key")
+# Search-only key for browser clients (never expose master key to browser)
+MEILI_SEARCH_KEY = os.getenv("MEILI_SEARCH_KEY", MEILI_API_KEY)
 
 
 def _get_typesense_client():
@@ -156,7 +160,7 @@ def ui_typesense():
     return render_template("search/typesense.html",
                            typesense_host=TYPESENSE_HOST,
                            typesense_port=TYPESENSE_PORT,
-                           typesense_api_key=TYPESENSE_API_KEY)
+                           typesense_api_key=TYPESENSE_SEARCH_KEY)
 
 
 @search_bp.route("/ui/meilisearch")
@@ -164,4 +168,4 @@ def ui_meilisearch():
     """Serve the Meilisearch search UI."""
     return render_template("search/meilisearch.html",
                            meili_host=MEILI_HOST,
-                           meili_api_key=MEILI_API_KEY)
+                           meili_api_key=MEILI_SEARCH_KEY)

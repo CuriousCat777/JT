@@ -2050,17 +2050,23 @@ class TestFrontendValidation:
             )
 
     def test_typesense_api_key_in_html(self):
-        """Typesense HTML must contain the API key for browser-side search."""
+        """Typesense HTML must contain a search-only API key (not admin key)."""
         content = FRONTEND_TYPESENSE.read_text()
-        assert "guardian-search-key" in content, (
-            "Typesense API key not configured in frontend HTML"
+        assert "guardian-search-only" in content, (
+            "Typesense search-only API key not configured in frontend HTML"
+        )
+        assert "guardian-search-key" not in content, (
+            "Admin API key must not be embedded in frontend HTML"
         )
 
     def test_meilisearch_api_key_in_html(self):
-        """Meilisearch HTML must contain the API key for browser-side search."""
+        """Meilisearch HTML must contain a search-only API key (not master key)."""
         content = FRONTEND_MEILI.read_text()
-        assert "guardian-meili-key" in content, (
-            "Meilisearch API key not configured in frontend HTML"
+        assert "guardian-meili-search-only" in content, (
+            "Meilisearch search-only API key not configured in frontend HTML"
+        )
+        assert "guardian-meili-key" not in content, (
+            "Master API key must not be embedded in frontend HTML"
         )
 
     def test_doctype_filter_id_present(self):

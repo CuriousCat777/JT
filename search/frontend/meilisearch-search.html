@@ -251,7 +251,9 @@
   <script>
     const { instantMeiliSearch } = window["@meilisearch/instant-meilisearch"];
 
-    const { searchClient } = instantMeiliSearch("http://localhost:7700", "guardian-meili-key", {
+    // SECURITY: Use a search-only API key here, never the master key.
+    // In production, generate a search key via Meilisearch API or proxy through backend.
+    const { searchClient } = instantMeiliSearch("http://localhost:7700", "guardian-meili-search-only", {
       primaryKey: "id",
       finitePagination: true,
     });

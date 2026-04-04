@@ -294,7 +294,9 @@
     // ── Typesense config ──────────────────────────
     const typesenseAdapter = new TypesenseInstantSearchAdapter({
       server: {
-        apiKey: "guardian-search-key",
+        // SECURITY: Use a search-only API key here, never the admin key.
+        // In production, generate a scoped key via Typesense API.
+        apiKey: "guardian-search-only",
         nodes: [{ host: "localhost", port: "8108", protocol: "http" }],
       },
       additionalSearchParameters: {
