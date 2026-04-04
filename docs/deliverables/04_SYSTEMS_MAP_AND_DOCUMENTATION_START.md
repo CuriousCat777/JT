@@ -81,14 +81,15 @@ Use this register as the master inventory table. Populate/maintain all rows.
 
 | System ID | System | Layer | Owner | Environment(s) | Data classification | Auth method | Dependencies | SLA/SLO | Logging source | Runbook link | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| SYS-CORE-001 | Guardian CLI/runtime | Core | Jeremy | local, server | Internal operational | local credential + vault | Python runtime, config, vault | TBD | local logs + audit | TBD | Active |
-| SYS-AGENT-001 | CFO Agent | Agent | Jeremy | local, server | Financial sensitive | vault-backed tokens | Plaid/financial connectors | TBD | audit + agent report | TBD | Active |
-| SYS-AGENT-002 | Chronos Agent | Agent | Jeremy | local, server | Personal schedule | OAuth tokens | Google Calendar | TBD | audit + agent report | TBD | Active |
-| SYS-AGENT-003 | WebsiteManager/WebArchitect | Agent | Jeremy | local + cloud | Public web + ops metadata | API token | Cloudflare, Notion, n8n | TBD | deploy/audit logs | TBD | Active |
-| SYS-CF-001 | guardian-one.pages.dev | Cloudflare Pages | Jeremy | prod (?) | Public web | Cloudflare auth | Cloudflare DNS/routing | TBD | Cloudflare logs | TBD | Verify |
-| SYS-CF-002 | drjeremytabernero.pages.dev | Cloudflare Pages | Jeremy | prod (?) | Public web | Cloudflare auth | Cloudflare DNS/routing | TBD | Cloudflare logs | TBD | Verify |
-| SYS-CF-003 | guardian-vault worker route | Cloudflare Worker | Jeremy | prod (?) | Sensitive endpoint | Cloudflare auth + app auth | Worker bindings/secrets | TBD | Worker analytics | TBD | Verify |
+| SYS-CORE-001 | Guardian CLI/runtime | Core | Jeremy | local, server | Internal | local credential + vault | Python runtime, config, vault | TBD | local logs + audit | TBD | Active |
+| SYS-AGENT-001 | CFO Agent | Agent | Jeremy | local, server | Sensitive | vault-backed tokens | Plaid/financial connectors | TBD | audit + agent report | TBD | Active |
+| SYS-AGENT-002 | Chronos Agent | Agent | Jeremy | local, server | Sensitive | OAuth tokens | Google Calendar | TBD | audit + agent report | TBD | Active |
+| SYS-AGENT-003 | WebsiteManager/WebArchitect | Agent | Jeremy | local + cloud | Internal | API token | Cloudflare, Notion, n8n | TBD | deploy/audit logs | TBD | Active |
+| SYS-CF-001 | guardian-one.pages.dev | Cloudflare Pages | Jeremy | prod (?) | Internal | Cloudflare auth | Cloudflare DNS/routing | TBD | Cloudflare logs | TBD | Verify |
+| SYS-CF-002 | drjeremytabernero.pages.dev | Cloudflare Pages | Jeremy | prod (?) | Internal | Cloudflare auth | Cloudflare DNS/routing | TBD | Cloudflare logs | TBD | Verify |
+| SYS-CF-003 | guardian-vault worker route | Cloudflare Worker | Jeremy | prod (?) | Sensitive | Cloudflare auth + app auth | Worker bindings/secrets | TBD | Worker analytics | TBD | Verify |
 
+> **Classification note:** This register uses the Information Security Policy taxonomy only: `Confidential`, `Sensitive`, and `Internal`. Any earlier labels such as “financial sensitive,” “personal schedule,” or “public web” should be treated as descriptive context, not alternate classification values. Public-facing systems are classified here based on the non-public operational/configuration data they handle.
 ---
 
 ## 5) Documentation process (recommended cadence)
