@@ -671,29 +671,20 @@ def main() -> None:
             print(f"  Ledger saved.")
         else:
             print("CFO agent not available.")
-    elif args.import_csv:
+    elif args.import_csv or args.import_ofx:
         cfo = guardian.get_agent("cfo")
         if cfo and isinstance(cfo, CFO):
-            print(f"\n  Importing bank CSV: {args.import_csv}")
-            result = cfo.import_bank_csv(
-                args.import_csv,
-                institution=args.import_institution,
-                account_name=args.import_account,
-                account_type=args.import_type,
-            )
-            print(f"  Accounts added: {result['accounts_added']}")
-            print(f"  Accounts updated: {result['accounts_updated']}")
-            print(f"  Transactions added: {result['transactions_added']}")
-            print(f"\n  Net worth: ${cfo.net_worth():,.2f}")
-            print(f"  Total accounts: {cfo.account_count}")
-            print(f"  Total transactions: {cfo.transaction_count}")
-        else:
-            print("CFO agent not available.")
-    elif args.import_ofx:
-        cfo = guardian.get_agent("cfo")
-        if cfo and isinstance(cfo, CFO):
-            print(f"\n  Importing OFX/QFX: {args.import_ofx}")
-            result = cfo.import_ofx(args.import_ofx)
+            if args.import_csv:
+                print(f"\n  Importing bank CSV: {args.import_csv}")
+                result = cfo.import_bank_csv(
+                    args.import_csv,
+                    institution=args.import_institution,
+                    account_name=args.import_account,
+                    account_type=args.import_type,
+                )
+            else:
+                print(f"\n  Importing OFX/QFX: {args.import_ofx}")
+                result = cfo.import_ofx(args.import_ofx)
             print(f"  Accounts added: {result['accounts_added']}")
             print(f"  Accounts updated: {result['accounts_updated']}")
             print(f"  Transactions added: {result['transactions_added']}")

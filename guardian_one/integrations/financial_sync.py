@@ -1326,6 +1326,8 @@ class TellerProvider(FinancialProvider):
 
             institution = item.get("institution", {})
             inst_name = institution.get("name", "") if isinstance(institution, dict) else str(institution)
+            if not inst_name:
+                inst_name = "Unknown"
 
             # Build stable unique name: "Institution AccountName (***last4)"
             # and fall back to a masked Teller account id when last_four is absent.
@@ -1595,12 +1597,21 @@ def parse_bank_csv(
 
     # Use real balance from CSV column if available; otherwise 0.0
     # to avoid corrupting net worth with sum-of-transactions.
+    raw_meta: dict[str, Any] = {
+        "source": "csv",
+        "file": str(csv_path),
+        "institution": institution,
+    }
+    if balance_col:
+        raw_meta["balance"] = last_balance
+        raw_meta["balance_column"] = balance_col
     account = SyncedAccount(
         name=account_name,
         account_type=account_type,
         balance=last_balance if balance_col else 0.0,
         institution=institution,
         last_updated=now,
+        raw=raw_meta,
     )
     return [account], transactions
 

@@ -69,3 +69,6 @@ data/*.xlsx
 data/*.csv
 data/*.png
 data/homelink-reference/
+
+# CFO ledger (contains financial data)
+data/cfo_ledger.json

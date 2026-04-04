@@ -20,6 +20,10 @@
 #   sudo systemctl enable guardian-one    # start on boot
 #   sudo systemctl start guardian-one     # start now
 #
+#   # 6. Verify it is running
+#   sudo systemctl status guardian-one
+#   sudo journalctl -u guardian-one --no-pager -n 20
+#
 # Manage:
 #   sudo systemctl status guardian-one    # check health
 #   sudo journalctl -u guardian-one -f    # tail logs
@@ -46,6 +50,7 @@ Type=simple
 User=guardian
 Group=guardian
 WorkingDirectory=/GUARDIAN_DIR
+EnvironmentFile=-/GUARDIAN_DIR/.env
 ExecStart=/GUARDIAN_DIR/scripts/guardian_daemon.sh
 
 # ── Restart policy ──────────────────────────────────────────────────

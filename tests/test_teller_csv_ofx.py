@@ -51,7 +51,7 @@ def audit(tmp_path):
 @pytest.fixture
 def data_dir(tmp_path):
     d = tmp_path / "data"
-    d.mkdir()
+    d.mkdir(exist_ok=True)
     return d
 
 
@@ -472,6 +472,8 @@ class TestCFOTellerIntegration:
         results = cfo.sync_all()
         assert "teller" in results
         assert results["teller"]["source"] == "teller"
+        # sync_all returns a dict with net_worth key as well
+        assert "net_worth" in results
 
 
 class TestCFOCSVImport:
