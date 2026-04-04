@@ -141,8 +141,8 @@ class Mediator:
 
     def _resolve_budget_conflict(self, a: Proposal, b: Proposal) -> ConflictRecord:
         """Approve the lower-cost proposal; defer to owner if costs are equal."""
-        cost_a = a.cost or 0.0
-        cost_b = b.cost or 0.0
+        cost_a = a.cost if a.cost is not None else 0.0
+        cost_b = b.cost if b.cost is not None else 0.0
 
         if cost_a < cost_b:
             resolution = Resolution.APPROVE_FIRST
