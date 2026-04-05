@@ -1,7 +1,7 @@
 """Database Schema Module — ACID-compliant relational + graph database models.
 
 Provides schema definitions for:
-- SQLite/PostgreSQL relational tables (ACID-compliant)
+- SQLite relational tables (ACID-compliant)
 - Neo4j Cypher graph models (nodes + relationships)
 - Dgraph GraphQL schema (edges + predicates)
 
