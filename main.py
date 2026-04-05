@@ -327,6 +327,8 @@ def main() -> None:
                         help="Start InputCortex daemon (listener|watcher|both)")
     parser.add_argument("--cortex-port", type=int, default=9473,
                         help="InputCortex listener port (default: 9473)")
+    parser.add_argument("--cortex-bind", type=str, default="127.0.0.1",
+                        help="InputCortex listener bind address (default: 127.0.0.1 loopback)")
     parser.add_argument("--cortex-digest", nargs="?", const="today", default=None,
                         help="Generate InputCortex daily digest (date or 'today')")
     parser.add_argument("--cortex-query", type=str, default=None,
@@ -1057,25 +1059,46 @@ def main() -> None:
             print("InputCortex agent not available.")
             guardian.shutdown()
             return
-        cortex.initialize()
+        # NOTE: guardian.register_agent() already called cortex.initialize().
+        # We do NOT call it again here to avoid resetting in-memory state.
 
         if args.cortex_daemon:
+            # CLI args override config.custom defaults
+            cortex_custom = cortex.config.custom or {}
             mode = args.cortex_daemon
+            if mode == "both" and "daemon_mode" in cortex_custom:
+                mode = cortex_custom["daemon_mode"]
             port = args.cortex_port
-            print(f"\n  InputCortex daemon starting (mode={mode}, port={port})")
+            if args.cortex_port == 9473 and "listener_port" in cortex_custom:
+                port = int(cortex_custom["listener_port"])
+            bind = args.cortex_bind
+            if args.cortex_bind == "127.0.0.1" and "listener_bind" in cortex_custom:
+                bind = str(cortex_custom["listener_bind"])
+            print(f"\n  InputCortex daemon starting (mode={mode}, bind={bind}:{port})")
+            print(f"  Auth token (X-Cortex-Token): {cortex.auth_token}")
             print(f"  Endpoints:")
-            print(f"    POST http://localhost:{port}/input   — single payload")
-            print(f"    POST http://localhost:{port}/batch   — batch payloads")
-            print(f"    GET  http://localhost:{port}/status  — agent status")
-            print(f"    GET  http://localhost:{port}/query   — query context")
-            print(f"  Drop dir: {cortex._drop_dir}")
+            print(f"    POST http://{bind}:{port}/input   — single payload")
+            print(f"    POST http://{bind}:{port}/batch   — batch payloads")
+            print(f"    GET  http://{bind}:{port}/status  — agent status")
+            print(f"    GET  http://{bind}:{port}/query   — query context")
+            print(f"  Drop dir: {cortex.drop_dir}")
             print(f"\n  Press Ctrl+C to stop.\n")
-            cortex.start_daemon(mode=mode, port=port)
+            cortex.start_daemon(mode=mode, port=port, bind=bind)
+            # Periodically trigger run() so stale sessions get flushed to
+            # disk and the cortex index stays current for queries/digests.
+            flush_interval = max(
+                1, cortex.config.schedule_interval_minutes
+            ) * 60
             try:
+                elapsed = 0
                 while True:
                     time.sleep(1)
+                    elapsed += 1
+                    if elapsed >= flush_interval:
+                        cortex.run()
+                        elapsed = 0
             except KeyboardInterrupt:
-                print("\n  Stopping daemon...")
+                print("\n  Stopping daemon (flushing open sessions)...")
                 cortex.stop_daemon()
 
         elif args.cortex_digest:

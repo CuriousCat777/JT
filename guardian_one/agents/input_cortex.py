@@ -92,10 +92,34 @@ class InputCortex(BaseAgent):
         self._sessions_flushed = 0
         self._last_batch_time: str = ""
 
+        # Auth token for HTTP listener (generated on initialize, or from config)
+        self._auth_token: str = ""
+
+    # ── Public properties ─────────────────────────────────────────────────
+
+    @property
+    def drop_dir(self) -> Path:
+        """Directory watched by the daemon for payload JSON files."""
+        return self._drop_dir
+
+    @property
+    def data_dir(self) -> Path:
+        """Directory where processed session data is written."""
+        return self._data_dir
+
+    @property
+    def auth_token(self) -> str:
+        """Auth token required for HTTP listener (empty string when disabled)."""
+        return self._auth_token
+
     # ── BaseAgent Lifecycle ───────────────────────────────────────────────
 
     def initialize(self) -> None:
-        """Set up the processor and directories."""
+        """Set up the processor and directories.
+
+        Idempotent: repeated calls do NOT reset in-memory processor state
+        or running counters/sessions if already initialized.
+        """
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._drop_dir.mkdir(parents=True, exist_ok=True)
 
@@ -104,11 +128,22 @@ class InputCortex(BaseAgent):
         )
         min_words = self.config.custom.get("min_words_to_store", 3)
 
-        self._processor = InputStreamProcessor(
-            output_dir=self._data_dir,
-            min_words_to_store=min_words,
-            session_timeout_seconds=session_timeout,
-        )
+        if self._processor is None:
+            self._processor = InputStreamProcessor(
+                output_dir=self._data_dir,
+                min_words_to_store=min_words,
+                session_timeout_seconds=session_timeout,
+            )
+
+        # Generate an auth token on first init (or load from config/env)
+        if not self._auth_token:
+            import os
+            import secrets
+            self._auth_token = (
+                self.config.custom.get("listener_auth_token")
+                or os.environ.get("CORTEX_AUTH_TOKEN")
+                or secrets.token_urlsafe(24)
+            )
 
         self._set_status(AgentStatus.IDLE)
         self.log(
@@ -204,12 +239,20 @@ class InputCortex(BaseAgent):
 
     # ── Daemon Mode ───────────────────────────────────────────────────────
 
-    def start_daemon(self, mode: str = "both", port: int = 9473) -> None:
+    def start_daemon(
+        self,
+        mode: str = "both",
+        port: int = 9473,
+        bind: str = "127.0.0.1",
+    ) -> None:
         """Start the background daemon for receiving keystroke payloads.
 
         Args:
             mode: "listener" (HTTP), "watcher" (file drop), or "both"
             port: HTTP listener port (default 9473)
+            bind: interface to bind (default loopback 127.0.0.1). Pass
+                "0.0.0.0" ONLY when you understand the exposure and have
+                a reverse proxy / firewall / auth token enforced.
         """
         if self._daemon_thread and self._daemon_thread.is_alive():
             self.log("daemon_already_running", severity=Severity.WARNING)
@@ -222,13 +265,13 @@ class InputCortex(BaseAgent):
 
             if mode in ("listener", "both"):
                 t = threading.Thread(
-                    target=self._run_listener, args=(port,), daemon=True
+                    target=self._run_listener, args=(port, bind), daemon=True
                 )
                 t.start()
                 threads.append(t)
                 self.log(
                     "listener_started",
-                    details={"port": port},
+                    details={"port": port, "bind": bind},
                 )
 
             if mode in ("watcher", "both"):
@@ -268,12 +311,32 @@ class InputCortex(BaseAgent):
             self._daemon_thread = None
         self.log("daemon_stopped")
 
-    def _run_listener(self, port: int) -> None:
-        """HTTP listener that accepts keystroke payloads."""
+    def _run_listener(self, port: int, bind: str = "127.0.0.1") -> None:
+        """HTTP listener that accepts keystroke payloads.
+
+        Requires a matching X-Cortex-Token header on all requests.
+        """
         cortex = self
 
+        def _authorized(handler) -> bool:
+            if not cortex._auth_token:
+                return True  # auth disabled (token empty)
+            token = handler.headers.get("X-Cortex-Token", "")
+            # Constant-time comparison
+            import hmac
+            return hmac.compare_digest(token, cortex._auth_token)
+
         class _Handler(BaseHTTPRequestHandler):
+            def _reject(self):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", "X-Cortex-Token")
+                self.end_headers()
+                self.wfile.write(b"unauthorized")
+
             def do_POST(self):
+                if not _authorized(self):
+                    self._reject()
+                    return
                 if self.path == "/input":
                     length = int(self.headers.get("Content-Length", 0))
                     body = self.rfile.read(length)
@@ -321,6 +384,9 @@ class InputCortex(BaseAgent):
                     self.end_headers()
 
             def do_GET(self):
+                if not _authorized(self):
+                    self._reject()
+                    return
                 if self.path == "/status":
                     report = cortex.report()
                     self.send_response(200)
@@ -348,7 +414,7 @@ class InputCortex(BaseAgent):
             def log_message(self, format, *args):
                 pass  # Suppress default logging
 
-        self._http_server = HTTPServer(("0.0.0.0", port), _Handler)
+        self._http_server = HTTPServer((bind, port), _Handler)
         self._http_server.serve_forever()
 
     def _run_watcher(self) -> None:
@@ -438,11 +504,14 @@ class InputCortex(BaseAgent):
         return count
 
     def _flush_stale_sessions(self) -> list[Path]:
-        """Flush sessions that haven't received data recently."""
+        """Flush sessions idle longer than the configured session_timeout.
+
+        Uses the InputStreamProcessor's monotonic last-update tracker —
+        does NOT flush active sessions.
+        """
         if not self._processor:
             return []
-        # For now, flush all — the processor tracks timestamps internally
-        return self._processor.flush_all()
+        return self._processor.flush_stale_sessions()
 
     # ── Skill Interface (AI-invocable) ────────────────────────────────────
 
@@ -545,6 +614,43 @@ class InputCortex(BaseAgent):
             ),
         }
 
+    def session_summary(self, session_id: str) -> dict[str, Any] | None:
+        """Return a detailed summary of a specific typing session.
+
+        Looks up the session in the on-disk index first, then loads the
+        full session JSON. Returns None if the session isn't found.
+        """
+        if not self._processor:
+            return None
+
+        # First check open in-memory sessions
+        for s in self._processor.get_open_sessions():
+            if s["session_id"] == session_id:
+                return {**s, "status": "open"}
+
+        # Check index for completed sessions
+        index_path = self._data_dir / "cortex_index.jsonl"
+        if not index_path.exists():
+            return None
+
+        with open(index_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                if entry.get("session_id") != session_id:
+                    continue
+                # Load full session file
+                session_file = self._data_dir / entry.get("file", "")
+                if session_file.exists():
+                    with open(session_file) as sf:
+                        data = json.load(sf)
+                    data["status"] = "flushed"
+                    return data
+                return {**entry, "status": "flushed_file_missing"}
+        return None
+
     def _maybe_generate_digest(self) -> dict[str, Any] | None:
         """Generate today's digest if it doesn't exist yet."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -607,6 +713,8 @@ class InputCortex(BaseAgent):
             ],
             "daemon_modes": ["listener", "watcher", "both"],
             "default_port": 9473,
+            "default_bind": "127.0.0.1",
+            "auth": "X-Cortex-Token header required on all requests",
             "endpoints": {
                 "POST /input": "Single keystroke payload",
                 "POST /batch": "Array of keystroke payloads",
@@ -617,7 +725,7 @@ class InputCortex(BaseAgent):
                 "phi_scrubbing": True,
                 "credential_detection": True,
                 "raw_text_stored": False,
-                "encryption": "AES-256-GCM via Vault",
+                "encryption_at_rest": "filesystem-level (OS/disk); Vault-backed encryption is roadmap",
             },
             "dispatch_roles": ["researcher", "builder", "auditor"],
         }

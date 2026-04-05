@@ -13,8 +13,13 @@ Privacy guarantees:
     - All processing is local (no external API calls)
     - PHI/PII patterns are scrubbed before any AI analysis
     - Raw keystrokes are NEVER stored — only processed context blocks
-    - Vault entries are AES-256-GCM encrypted at rest
     - Passwords/tokens detected in input are redacted immediately
+
+Storage note:
+    Current implementation writes processed session JSON to the output
+    directory on local disk (plaintext at the filesystem layer — rely on
+    OS/disk encryption). Vault-backed encryption for these session files
+    is planned but not yet wired; see InputCortex agent for roadmap.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -207,6 +213,8 @@ class InputStreamProcessor:
         self._min_words = min_words_to_store
         self._session_timeout = session_timeout_seconds
         self._sessions: dict[str, InputSession] = {}
+        # Tracks monotonic last-update time per session for staleness checks
+        self._session_last_update: dict[str, float] = {}
         self._lock = threading.Lock()
         self._block_counter = 0
 
@@ -273,6 +281,7 @@ class InputStreamProcessor:
         """Write a completed session to disk and remove from memory."""
         with self._lock:
             session = self._sessions.pop(session_id, None)
+            self._session_last_update.pop(session_id, None)
 
         if session is None or not session.blocks:
             return None
@@ -308,6 +317,22 @@ class InputStreamProcessor:
             f.write(json.dumps(index_entry) + "\n")
 
         return path
+
+    def flush_stale_sessions(self) -> list[Path]:
+        """Flush sessions idle longer than the configured timeout."""
+        now = time.monotonic()
+        cutoff = self._session_timeout
+        with self._lock:
+            stale_ids = [
+                sid for sid, last in self._session_last_update.items()
+                if now - last >= cutoff
+            ]
+        paths = []
+        for sid in stale_ids:
+            p = self.flush_session(sid)
+            if p:
+                paths.append(p)
+        return paths
 
     def flush_all(self) -> list[Path]:
         """Flush all open sessions to disk."""
@@ -517,13 +542,16 @@ class InputStreamProcessor:
         session.ended = batch.timestamp_end
         session.total_words += block.word_count
         session.app_sequence.append(block.app_label)
+        self._session_last_update[sid] = time.monotonic()
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
     def _next_block_id(self) -> str:
-        self._block_counter += 1
+        with self._lock:
+            self._block_counter += 1
+            counter = self._block_counter
         ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        return f"ICX-{ts}-{self._block_counter:04d}"
+        return f"ICX-{ts}-{counter:04d}"
 
     def _log_redaction(self, batch: RawKeystrokeBatch, reason: str) -> None:
         """Log that a batch was fully redacted (no content stored)."""

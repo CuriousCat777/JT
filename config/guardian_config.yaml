@@ -235,14 +235,20 @@ agents:
       - context_index
       - behavioral_digest
     custom:
+      # --- Currently consumed by the agent/processor ---
       session_timeout_seconds: 300     # Flush session after 5 min idle
       min_words_to_store: 3            # Skip very short input
       daemon_mode: both                # listener + watcher
       listener_port: 9473              # HTTP endpoint for phone payloads
-      phi_scrub_enabled: true          # Always scrub PHI/PII
-      credential_redact: true          # Never store password entries
-      daily_digest_hour: 23            # Generate digest at 11 PM
-      retention_days: 90               # Keep processed sessions for 90 days
+      listener_bind: "127.0.0.1"       # Loopback by default
+      # listener_auth_token: ""        # Override random token (optional)
+      # --- Forward-looking (not yet wired) ---
+      # phi_scrub_enabled and credential_redact are always ON at the code
+      # level; these keys are placeholders and do not currently toggle behavior.
+      phi_scrub_enabled: true
+      credential_redact: true
+      daily_digest_hour: 23            # Planned: scheduled digest generation
+      retention_days: 90               # Planned: retention sweep
 
   device_agent:
     enabled: true

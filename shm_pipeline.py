@@ -444,7 +444,7 @@ class OnlineCollector:
                 # (simple extraction — full scraping would need beautifulsoup)
                 text = resp.text
                 title_re = re.compile(r'<h[23][^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)</a>')
-                for match in title_re.finditer(text)[:10]:
+                for match in list(title_re.finditer(text))[:10]:
                     url, title = match.groups()
                     results.append(OnlineResult(
                         result_id=f"SHM-{hashlib.md5(url.encode()).hexdigest()[:8]}",

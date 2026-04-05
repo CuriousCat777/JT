@@ -117,16 +117,33 @@ def section_current_state():
         with open(vault_csv) as f:
             vault_services = max(0, sum(1 for _ in f) - 1)  # minus header
 
+    # Load live pipeline stats written by shm_pipeline.py
+    stats_file = PIPELINE_OUTPUT / "pipeline_stats.json"
+    pipe_words = pipe_citations = pipe_stats = pipe_claims = 0
+    top_tools_str = "(no pipeline runs yet)"
+    if stats_file.exists():
+        try:
+            with open(stats_file) as f:
+                stats = json.load(f)
+            pipe_words = stats.get("total_words", 0)
+            pipe_citations = stats.get("total_citations", 0)
+            pipe_stats = stats.get("total_statistics", 0)
+            pipe_claims = stats.get("total_claims", 0)
+            tools = stats.get("top_tools", {}) or {}
+            top_items = sorted(tools.items(), key=lambda x: -x[1])[:5]
+            if top_items:
+                top_tools_str = ", ".join(f"{t}({c})" for t, c in top_items)
+        except (json.JSONDecodeError, IOError):
+            pass
+
     return f"""## CURRENT STATE ({datetime.now(timezone.utc).strftime('%Y-%m-%d')})
 Conference DOX: {pdf_count} PDFs in {CONFERENCE_DOX}
 Pipeline output: {json_count} JSON extracts in {PIPELINE_OUTPUT}
-Pipeline stats: 43,445 words, 244 citations, 521 statistics, 171 claim-study links.
-Seminal studies: SAFE, ProCESS, RECOVERY, ADRENAL, REALITY, MINT.
-Top tools: HEART(173), START(34), RASS(12), bCAM(12), ABCDEF(7).
+Pipeline stats: {pipe_words:,} words, {pipe_citations} citations, {pipe_stats} statistics, {pipe_claims} claim-study links.
+Top tools: {top_tools_str}.
 Vault: {vault_services} services tracked via {HOME_DOX}/vault.py
 Live dashboard: jtmdai.com/vault (Cloudflare Worker + KV)
 Decision log entries: {dec_count}
-Baselines: 5 claims Level-1a | 7 claims <25% utilization | CMS FY2026 78.2% penalized | FHIR R4 70% endpoints.
 ⚠ TWO DOX directories exist (not linked): Conference={CONFERENCE_DOX} | Home={HOME_DOX}
 """
 
