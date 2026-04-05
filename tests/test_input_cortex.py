@@ -22,6 +22,7 @@ from guardian_one.agents.input_cortex import InputCortex
 from guardian_one.core.audit import AuditLog
 from guardian_one.core.config import AgentConfig
 from guardian_one.integrations.input_stream import (
+    BatchResult,
     InputCategory,
     InputStreamProcessor,
     RawKeystrokeBatch,
@@ -70,8 +71,9 @@ def test_credential_entry_blocked_via_field_hint(processor):
         text="mys3cret!",
         word_count=1,
     )
-    block = processor.process_batch(batch)
+    block, result = processor.process_batch(batch)
     assert block is None, "password field input must not return a block"
+    assert result == BatchResult.CREDENTIAL_REDACTED
 
 
 def test_credential_entry_blocked_via_input_type(processor):
@@ -81,7 +83,9 @@ def test_credential_entry_blocked_via_input_type(processor):
         text="token123",
         word_count=1,
     )
-    assert processor.process_batch(batch) is None
+    block, result = processor.process_batch(batch)
+    assert block is None
+    assert result == BatchResult.CREDENTIAL_REDACTED
 
 
 def test_credential_entry_blocked_via_signal_keywords(processor):
@@ -91,7 +95,9 @@ def test_credential_entry_blocked_via_signal_keywords(processor):
         text="my pin",
         word_count=2,
     )
-    assert processor.process_batch(batch) is None
+    block, result = processor.process_batch(batch)
+    assert block is None
+    assert result == BatchResult.CREDENTIAL_REDACTED
 
 
 def test_credential_redaction_logged(processor, tmp_output):
@@ -118,7 +124,7 @@ def test_phi_scrubbing_ssn_and_dob_and_phone(processor):
         field_hint="Search",
         word_count=9,
     )
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert "[SSN-REDACTED]" in block.processed_text
     assert "[DOB-REDACTED]" in block.processed_text
@@ -137,7 +143,7 @@ def test_phi_scrubbing_email_and_card(processor):
         field_hint="",
         word_count=7,
     )
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert "[EMAIL-REDACTED]" in block.processed_text
     assert "[CARD-REDACTED]" in block.processed_text
@@ -147,7 +153,7 @@ def test_phi_scrubbing_email_and_card(processor):
 
 def test_non_sensitive_text_is_unchanged(processor):
     batch = _batch(text="Schedule morning rounds for tomorrow at 7am", word_count=7)
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert block.redactions_applied == 0
     assert "Schedule morning rounds" in block.processed_text
@@ -157,7 +163,7 @@ def test_non_sensitive_text_is_unchanged(processor):
 
 def test_gmail_classified_as_message(processor):
     batch = _batch(app_package="com.google.android.gm", app_label="Gmail")
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert block.category == InputCategory.MESSAGE.value
     assert block.confidence == "high"
@@ -170,14 +176,14 @@ def test_chrome_classified_as_search(processor):
         app_label="Chrome",
         field_hint="Search",
     )
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert block.category == InputCategory.SEARCH.value
 
 
 def test_intent_signals_extracted(processor):
     batch = _batch(text="schedule a meeting tomorrow at 3pm", word_count=6)
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert "scheduling_intent" in block.intent_signals
     assert "meeting_intent" in block.intent_signals
@@ -185,7 +191,7 @@ def test_intent_signals_extracted(processor):
 
 def test_urgency_signal_extracted(processor):
     batch = _batch(text="urgent need this STAT please respond", word_count=6)
-    block = processor.process_batch(batch)
+    block, _ = processor.process_batch(batch)
     assert block is not None
     assert "urgency_high" in block.intent_signals
 
@@ -411,3 +417,92 @@ def test_cortex_skill_manifest_advertises_loopback_and_auth():
     # session_summary advertised AND implemented
     skill_names = {s["name"] for s in manifest["skills"]}
     assert "session_summary" in skill_names
+
+
+# ── HTTP listener auth integration test ───────────────────────────────────
+
+def test_http_listener_rejects_without_token_and_accepts_with(tmp_path):
+    """Integration test: start the listener on an ephemeral port,
+    verify that requests without a valid X-Cortex-Token get 401,
+    and requests with the correct token get 200."""
+    import http.client
+    import threading
+
+    audit = AuditLog(log_dir=tmp_path / "logs")
+    cfg = AgentConfig(
+        name="input_cortex",
+        custom={"session_timeout_seconds": 1, "min_words_to_store": 1},
+    )
+    agent = InputCortex(config=cfg, audit=audit, data_dir=str(tmp_path))
+    agent.initialize()
+
+    # Use port 0 to let OS pick an available port
+    port = 19473  # high ephemeral port unlikely to conflict
+
+    # Start daemon listener in background
+    agent.start_daemon(mode="listener", port=port, bind="127.0.0.1")
+    time.sleep(0.5)  # let server start
+
+    try:
+        # Request WITHOUT token → should get 401
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/status")
+        resp = conn.getresponse()
+        assert resp.status == 401, f"Expected 401, got {resp.status}"
+        resp.read()
+        conn.close()
+
+        # Request WITH valid token → should get 200
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request(
+            "GET", "/status",
+            headers={"X-Cortex-Token": agent.auth_token},
+        )
+        resp = conn.getresponse()
+        assert resp.status == 200, f"Expected 200, got {resp.status}"
+        body = json.loads(resp.read())
+        assert "batches_processed" in body
+        conn.close()
+
+        # POST with valid token → should get 200
+        payload = json.dumps({
+            "device_id": "test",
+            "app_package": "com.google.android.gm",
+            "app_label": "Gmail",
+            "text": "test auth message for listener",
+            "session_id": "auth-test",
+        }).encode()
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request(
+            "POST", "/input",
+            body=payload,
+            headers={
+                "X-Cortex-Token": agent.auth_token,
+                "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        resp = conn.getresponse()
+        assert resp.status == 200, f"Expected 200, got {resp.status}"
+        result = json.loads(resp.read())
+        assert result["status"] == "ok"
+        assert result["block_id"] is not None
+        conn.close()
+
+        # POST with WRONG token → 401
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request(
+            "POST", "/input",
+            body=payload,
+            headers={
+                "X-Cortex-Token": "wrong-token",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        resp = conn.getresponse()
+        assert resp.status == 401
+        conn.close()
+
+    finally:
+        agent.stop_daemon()

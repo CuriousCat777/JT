@@ -38,6 +38,13 @@ from typing import Any
 
 # ─── Classification ──────────────────────────────────────────────────────────
 
+class BatchResult(Enum):
+    """Why process_batch returned None (or a block)."""
+    STORED = "stored"               # block created and added to session
+    CREDENTIAL_REDACTED = "credential_redacted"  # entire batch blocked
+    TOO_SHORT = "too_short"         # below min_words_to_store after scrub
+
+
 class InputCategory(Enum):
     """What type of activity the keystroke block represents."""
     SEARCH = "search"                # Search queries (Google, app search bars)
@@ -223,15 +230,18 @@ class InputStreamProcessor:
 
     # ── Public API ────────────────────────────────────────────────────────
 
-    def process_batch(self, batch: RawKeystrokeBatch) -> ContextBlock | None:
+    def process_batch(
+        self, batch: RawKeystrokeBatch
+    ) -> tuple[ContextBlock | None, BatchResult]:
         """Process a single keystroke batch into a context block.
 
-        Returns None if the batch is too short or is a credential entry.
+        Returns a (block, result) tuple so callers can distinguish
+        credential redactions from benign skips (too-short text).
         """
         # Step 1: Detect credential entry — redact entire block
         if self._is_credential_entry(batch):
             self._log_redaction(batch, "credential_detected")
-            return None
+            return None, BatchResult.CREDENTIAL_REDACTED
 
         # Step 2: Classify the input
         category, confidence = self._classify(batch)
@@ -242,7 +252,7 @@ class InputStreamProcessor:
         # Step 4: Skip if too short after scrubbing
         word_count = len(clean_text.split())
         if word_count < self._min_words:
-            return None
+            return None, BatchResult.TOO_SHORT
 
         # Step 5: Generate summary
         summary = self._summarize(clean_text, category, batch.app_label)
@@ -275,7 +285,7 @@ class InputStreamProcessor:
         with self._lock:
             self._add_to_session(block, batch)
 
-        return block
+        return block, BatchResult.STORED
 
     def flush_session(self, session_id: str) -> Path | None:
         """Write a completed session to disk and remove from memory."""
@@ -294,10 +304,12 @@ class InputStreamProcessor:
         session.total_words = sum(b.word_count for b in session.blocks)
         session.app_sequence = [b.app_label for b in session.blocks]
 
-        # Write session file
+        # Write session file. Sanitize session_id to prevent path traversal
+        # (session_id comes from phone payloads over HTTP and could contain
+        # "..", "/" or other path separators).
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        safe_session_suffix = re.sub(r"[^A-Za-z0-9_-]", "_", session_id[:8]) or "session"
-        filename = f"session_{ts}_{safe_session_suffix}.json"
+        safe_sid = re.sub(r"[^A-Za-z0-9_-]", "_", session_id[:8]) or "session"
+        filename = f"session_{ts}_{safe_sid}.json"
         path = self._output_dir / filename
 
         with open(path, "w") as f:

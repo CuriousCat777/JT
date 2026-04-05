@@ -4,7 +4,7 @@ Responsibilities:
 - Receive encrypted keystroke batches from phone (Android IME / iOS keyboard)
 - Process raw input into classified, PHI-scrubbed context blocks
 - Run as a background daemon that listens for incoming payloads
-- Store processed sessions in encrypted vault
+- Store processed sessions as local JSON (vault-backed encryption is roadmap)
 - Provide queryable context for other agents and AI sessions
 - Generate behavioral summaries (what was Jeremy doing today?)
 - Expose skill interface for Guardian One and external AI dispatch
@@ -326,6 +326,31 @@ class InputCortex(BaseAgent):
             import hmac
             return hmac.compare_digest(token, cortex._auth_token)
 
+        # 2 MB — generous for batches of typed text but small enough to
+        # block abuse.  Override via config custom.max_payload_bytes.
+        _MAX_PAYLOAD = int(
+            cortex.config.custom.get("max_payload_bytes", 2 * 1024 * 1024)
+        )
+
+        def _read_body(handler, max_bytes: int = _MAX_PAYLOAD) -> bytes | None:
+            """Read request body with size guard. Returns None on reject."""
+            raw = handler.headers.get("Content-Length", "")
+            try:
+                length = int(raw)
+            except (ValueError, TypeError):
+                handler.send_response(411)
+                handler.end_headers()
+                handler.wfile.write(b"Content-Length required")
+                return None
+            if length > max_bytes:
+                handler.send_response(413)
+                handler.end_headers()
+                handler.wfile.write(
+                    f"Payload too large ({length} > {max_bytes})".encode()
+                )
+                return None
+            return handler.rfile.read(length)
+
         class _Handler(BaseHTTPRequestHandler):
             def _reject(self):
                 self.send_response(401)
@@ -338,8 +363,9 @@ class InputCortex(BaseAgent):
                     self._reject()
                     return
                 if self.path == "/input":
-                    length = int(self.headers.get("Content-Length", 0))
-                    body = self.rfile.read(length)
+                    body = _read_body(self)
+                    if body is None:
+                        return
                     try:
                         payload = json.loads(body)
                         block = cortex.ingest_payload(payload)
@@ -357,8 +383,9 @@ class InputCortex(BaseAgent):
                         self.end_headers()
                         self.wfile.write(str(e).encode())
                 elif self.path == "/batch":
-                    length = int(self.headers.get("Content-Length", 0))
-                    body = self.rfile.read(length)
+                    body = _read_body(self)
+                    if body is None:
+                        return
                     try:
                         payloads = json.loads(body)
                         results = []
@@ -450,9 +477,11 @@ class InputCortex(BaseAgent):
             session_id=payload.get("session_id", "default"),
         )
 
-        block = self._processor.process_batch(batch)
+        from guardian_one.integrations.input_stream import BatchResult
 
-        if block:
+        block, result = self._processor.process_batch(batch)
+
+        if result == BatchResult.STORED:
             self._batches_processed += 1
             self._last_batch_time = batch.timestamp_start
             self.log(
@@ -464,11 +493,18 @@ class InputCortex(BaseAgent):
                     "words": block.word_count,
                 },
             )
-        else:
+        elif result == BatchResult.CREDENTIAL_REDACTED:
             self._batches_redacted += 1
             self.log(
                 "batch_redacted",
-                details={"app": batch.app_label},
+                details={"app": batch.app_label, "reason": "credential"},
+            )
+        else:
+            # TOO_SHORT or other benign skip — log at debug level, don't
+            # inflate redaction metrics.
+            self.log(
+                "batch_skipped",
+                details={"app": batch.app_label, "reason": result.value},
             )
 
         return block
