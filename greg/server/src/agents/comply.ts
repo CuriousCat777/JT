@@ -365,7 +365,7 @@ export function registerComplyTools(server: McpServer): void {
     async (params) => {
       let oigResult: unknown;
       try {
-        oigResult = await checkOIGExclusion({ firstName: params.first_name, lastName: params.last_name });
+        oigResult = await checkOIGExclusion({ first_name: params.first_name, last_name: params.last_name });
       } catch {
         oigResult = { error: "OIG API unavailable", fallback: "Manual check at https://exclusions.oig.hhs.gov/" };
       }

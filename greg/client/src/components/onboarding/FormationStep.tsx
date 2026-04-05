@@ -184,6 +184,13 @@ export default function FormationStep({ onComplete, onBack }: FormationStepProps
               onChange={(e) => store.setField('ein', e.target.value)}
               helperText="Apply free at irs.gov/ein -- instant online"
             />
+            <Input
+              label="Malpractice Insurance Provider"
+              placeholder="e.g., MEDPRO, The Doctors Company, ProAssurance"
+              value={store.malpracticeInsurance}
+              onChange={(e) => store.setField('malpracticeInsurance', e.target.value)}
+              helperText="Required for hospital privileges and payer credentialing"
+            />
             <div className="md:col-span-2">
               <Input
                 label="Business Address"
