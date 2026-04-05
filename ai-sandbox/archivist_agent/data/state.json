@@ -1,0 +1,65 @@
+{
+  "files": {},
+  "sources": {
+    "smartwatch": {
+      "name": "Smartwatch",
+      "source_type": "smartwatch",
+      "data_types": [
+        "heart_rate",
+        "steps",
+        "sleep",
+        "stress"
+      ],
+      "sync_enabled": false,
+      "last_sync": null,
+      "config": {}
+    },
+    "nordvpn": {
+      "name": "NordVPN",
+      "source_type": "vpn",
+      "data_types": [
+        "connection_log",
+        "bandwidth"
+      ],
+      "sync_enabled": false,
+      "last_sync": null,
+      "config": {}
+    },
+    "deleteme": {
+      "name": "DeleteMe",
+      "source_type": "privacy_service",
+      "data_types": [
+        "broker_removal_status",
+        "exposure_report"
+      ],
+      "sync_enabled": false,
+      "last_sync": null,
+      "config": {}
+    }
+  },
+  "privacy_tools": {
+    "nordvpn": {
+      "name": "NordVPN",
+      "tool_type": "vpn",
+      "active": true,
+      "config": {
+        "auto_connect": true,
+        "kill_switch": true,
+        "protocol": "NordLynx"
+      },
+      "last_check": null
+    },
+    "deleteme": {
+      "name": "DeleteMe",
+      "tool_type": "data_broker_removal",
+      "active": true,
+      "config": {
+        "scan_frequency": "quarterly",
+        "auto_remove": true
+      },
+      "last_check": null
+    }
+  },
+  "profile": {},
+  "audit_log": []
+}

@@ -140,6 +140,8 @@ class Gateway:
                               headers={"Authorization": "Bearer ..."}, agent="doordash")
     """
 
+    _MAX_HISTORY = 10_000  # Cap request history to prevent unbounded memory growth
+
     def __init__(self, audit: AuditLog) -> None:
         self._audit = audit
         self._services: dict[str, ServiceConfig] = {}
@@ -253,6 +255,8 @@ class Gateway:
                 )
                 with self._history_lock:
                     self._history.append(record)
+                    if len(self._history) > self._MAX_HISTORY:
+                        self._history = self._history[-self._MAX_HISTORY:]
                 self._audit.record(
                     agent="homelink",
                     action=f"api_call:{service}:{method}:{path}",
@@ -279,6 +283,8 @@ class Gateway:
                         status_code=0, latency_ms=round(latency, 1),
                         success=False, error=last_error,
                     ))
+                    if len(self._history) > self._MAX_HISTORY:
+                        self._history = self._history[-self._MAX_HISTORY:]
                 breaker.record_failure()
 
                 if attempt < config.max_retries:

@@ -8,7 +8,7 @@ timezone: "America/Chicago"
 daily_summary_hour: 7   # 7 AM local time
 data_dir: "data"
 log_dir: "logs"
-phone: "6028100527"
+# phone: loaded from NOTIFY_PHONE env var (not stored in config)
 
 # AI Engine — the sovereign brain
 # Ollama runs locally on your machine (true data sovereignty)
@@ -140,6 +140,7 @@ agents:
       - data_sources
       - privacy_tools
       - master_profile
+      - power_tools
     custom:
       auto_encrypt_sensitive: true
       retention_check_daily: true
@@ -181,6 +182,7 @@ agents:
       - deployments
       - security_scans
       - uptime_records
+      - power_tools
     custom:
       domains:
         - drjeremytabernero.org
@@ -264,7 +266,7 @@ agents:
         philips_hue:
           enabled: true
           local_only: true              # Use bridge local API only
-          bridge_ip: ""                 # Set after discovery
+          bridge_ip: "192.168.1.147"    # Discovered on LAN
         govee:
           enabled: true
           prefer_lan: true              # Use LAN UDP API for newer models
@@ -283,3 +285,138 @@ agents:
         flipper_zero:
           enabled: true
           authorized_testing_only: true # Legal compliance reminder
+
+  iot_sentinel:
+    enabled: true
+    schedule_interval_minutes: 5
+    allowed_resources:
+      - network
+      - devices
+      - mqtt
+      - security
+    custom:
+      # Network scanning
+      subnet: "192.168.1.0/24"
+      scan_interval_seconds: 300        # 5 min between scans
+      # Known/trusted MAC addresses (add your devices here)
+      known_macs: []
+      # MQTT broker (Mosquitto)
+      mqtt:
+        host: "localhost"
+        port: 1883
+        use_tls: false
+        username: ""
+        password: ""
+      # Network segmentation (VLAN IDs)
+      vlans:
+        core: 10
+        iot: 20
+        user: 30
+      # Firewall policy
+      firewall:
+        deny_all_outbound_iot: true
+        allow_iot_to_mqtt_only: true
+        vpn_only_external_access: true
+      # Home Assistant
+      home_assistant:
+        base_url: "http://homeassistant.local:8123"
+        access_token: ""                 # Store in Vault, not here
+        verify_ssl: false
+      # Tailscale VPN
+      tailscale:
+        enabled: true
+        accept_routes: true
+        accept_dns: true
+      # Node-RED
+      node_red:
+        base_url: "http://localhost:1880"
+        admin_auth_token: ""
+      # Core service stack (Docker)
+      services:
+        home_assistant: true
+        mosquitto_mqtt: true
+        node_red: true
+        zigbee2mqtt: false               # Enable when Zigbee coordinator attached
+        tailscale_vpn: true
+      # Maintenance schedule
+      maintenance:
+        daily: "health_summary"
+        weekly: "integrity_report"
+        monthly: "update_review"
+      # AI agents
+      ai_roles:
+        network_monitor: true
+        risk_summarizer: true
+        recommendation_engine: true
+
+  # Sovereign IoT Local Control — H.O.M.E. L.I.N.K. IoT stack
+  # Docker Compose stack: Home Assistant, Mosquitto, Node-RED, n8n, Zigbee2MQTT, Ollama, Tailscale
+  iot_stack:
+    enabled: true
+    custom:
+      stack_dir: "~/iot-stack"                   # Docker Compose root
+      subnet: "192.168.1.0/24"                   # LAN subnet for nmap scans
+      scan_interval_minutes: 5                   # Network scan frequency
+      zigbee_device: "/dev/ttyUSB0"              # Zigbee USB coordinator path
+      # VLAN segmentation
+      vlans:
+        core: 10        # Guardian host, NAS, router
+        iot: 20          # IoT devices (sensors, plugs, lights, cameras)
+        user: 30         # User devices (laptops, phones, tablets)
+      # Firewall policy
+      firewall:
+        deny_all_outbound_iot: true              # IoT VLAN blocked from internet
+        allow_iot_to_mqtt_only: true             # IoT can only reach MQTT broker
+        vpn_only_external_access: true           # Remote access via Tailscale only
+      # Services
+      services:
+        home_assistant:
+          enabled: true
+          port: 8123
+        mosquitto:
+          enabled: true
+          port: 1883
+          tls_port: 8883                         # Enable after initial setup
+          anonymous_access: false                # MUST be false in production
+        node_red:
+          enabled: true
+          port: 1880
+        n8n:
+          enabled: true
+          port: 5678
+        zigbee2mqtt:
+          enabled: true                          # Requires USB coordinator
+          frontend_port: 8080
+        ollama:
+          enabled: true
+          port: 11434
+        tailscale:
+          enabled: true
+      # AI agent workflows
+      ai_agents:
+        network_monitor:
+          enabled: true
+          scan_interval_minutes: 5
+          alert_on_unknown_device: true
+        risk_summarizer:
+          enabled: true
+          llm_provider: ollama                   # "ollama" or "openai"
+          model: "llama3"
+        recommendation_engine:
+          enabled: true
+          confidence_threshold: 0.7
+          execution_policy: "user_approval_required"
+      # Maintenance
+      maintenance:
+        config_backup_daily: true
+        health_summary_daily: true
+        integrity_report_weekly: true
+        update_review_monthly: true
+      # Security hardening (track completion)
+      hardening:
+        mqtt_auth_enabled: false                 # TODO: enable after initial setup
+        mqtt_tls_enabled: false                  # TODO: generate certs
+        ha_https_enabled: false                  # TODO: configure SSL
+        ufw_configured: false                    # TODO: restrict ports
+        image_versions_pinned: false             # TODO: pin after stable
+        zigbee_persistent_path: false            # TODO: use /dev/serial/by-id/

@@ -1,0 +1,95 @@
+name: Deploy to Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        default: 'latest'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "host=${{ secrets.PROD_DEPLOY_HOST }}" >> $GITHUB_OUTPUT
+            echo "user=${{ secrets.PROD_DEPLOY_USER }}" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.PROD_DEPLOY_PATH }}" >> $GITHUB_OUTPUT
+            echo "port=${{ secrets.PROD_DEPLOY_PORT }}" >> $GITHUB_OUTPUT
+            echo "compose_file=docker-compose.production.yml" >> $GITHUB_OUTPUT
+          else
+            echo "host=${{ secrets.STAGING_DEPLOY_HOST }}" >> $GITHUB_OUTPUT
+            echo "user=${{ secrets.STAGING_DEPLOY_USER }}" >> $GITHUB_OUTPUT
+            echo "path=${{ secrets.STAGING_DEPLOY_PATH }}" >> $GITHUB_OUTPUT
+            echo "port=22" >> $GITHUB_OUTPUT
+            echo "compose_file=docker-compose.staging.yml" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Capture pre-deploy revision and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.vars.outputs.host }}
+          username: ${{ steps.vars.outputs.user }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ steps.vars.outputs.port }}
+          script: |
+            cd ${{ steps.vars.outputs.path }}
+            # Save current revision for rollback
+            git rev-parse HEAD > .pre-deploy-revision
+            git pull origin main
+            export IMAGE_TAG=${{ github.event.inputs.image_tag }}
+            docker compose -f ${{ steps.vars.outputs.compose_file }} pull
+            docker compose -f ${{ steps.vars.outputs.compose_file }} up -d
+            echo "Waiting for services to start..."
+            sleep 15
+
+      - name: Health check after deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.vars.outputs.host }}
+          username: ${{ steps.vars.outputs.user }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ steps.vars.outputs.port }}
+          script: |
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:5678/healthz > /dev/null 2>&1; then
+                echo "Health check passed"
+                rm -f ${{ steps.vars.outputs.path }}/.pre-deploy-revision
+                exit 0
+              fi
+              echo "Attempt $i/12, waiting..."
+              sleep 5
+            done
+            echo "Health check failed, initiating rollback..."
+            cd ${{ steps.vars.outputs.path }}
+            ROLLBACK_REV=$(cat .pre-deploy-revision 2>/dev/null || echo "HEAD~1")
+            docker compose -f ${{ steps.vars.outputs.compose_file }} down
+            git checkout "$ROLLBACK_REV"
+            docker compose -f ${{ steps.vars.outputs.compose_file }} up -d
+            rm -f .pre-deploy-revision
+            exit 1
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        run: |
+          STATUS="${{ job.status }}"
+          EMOJI="$([ "$STATUS" = "success" ] && echo "white_check_mark" || echo "x")"
+          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-type: application/json' \
+            -d "{\"text\":\":${EMOJI}: Deploy to *${{ github.event.inputs.environment }}* ${STATUS} (tag: \`${{ github.event.inputs.image_tag }}\`)\"}" \
+            2>/dev/null || true

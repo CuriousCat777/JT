@@ -1,0 +1,84 @@
+# Guardian One — Fleet Node Registry
+# Defines all nodes in the Guardian One network and their roles.
+
+fleet:
+  name: "guardian-one"
+  version: "1.0.0"
+
+nodes:
+  rog:
+    hostname: "rog"
+    display_name: "ASUS ROG Flow Z13"
+    role: "primary_controller"
+    os: "windows"
+    kernel: "Microsoft Windows [Version 10.0.22631]"
+    arch: "x86_64"
+    always_on: false
+    docker: true
+    services:
+      - guardian_one
+      - ollama
+      - docker_desktop
+      - claude_code
+      - guardian_worker
+      - dev_panel
+      - scheduler
+
+  macbook-pro:
+    hostname: "macbook-pro"
+    display_name: "MacBook Pro 2024"
+    role: "workstation"
+    os: "darwin"
+    kernel: "Darwin 24.1.0 arm64"
+    arch: "arm64"
+    always_on: false
+    docker: false
+    services:
+      - claude_code
+      - dev_tools
+
+  mac-mini:
+    hostname: "mac-mini"
+    display_name: "Mac Mini"
+    role: "daemon"
+    os: "darwin"
+    kernel: "Darwin 23.6.0 arm64"
+    arch: "arm64"
+    always_on: true
+    docker: true
+    services:
+      - homelink_gateway
+      - homelink_monitor
+      - n8n
+      - notion_sync
+      - email_agent
+      - web_architect
+      - cron_scheduler
+
+roles:
+  primary_controller:
+    description: "Central orchestrator that coordinates all fleet nodes"
+    capabilities:
+      - fleet_management
+      - agent_orchestration
+      - docker_management
+      - service_routing
+      - health_monitoring
+    priority: 1
+
+  workstation:
+    description: "Developer workstation for interactive work"
+    capabilities:
+      - development
+      - testing
+      - interactive_sessions
+    priority: 3
+
+  daemon:
+    description: "Always-on node for persistent background services"
+    capabilities:
+      - background_services
+      - scheduled_tasks
+      - webhook_handling
+      - persistent_monitoring
+    priority: 2

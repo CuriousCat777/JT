@@ -1,8 +1,18 @@
 """Tests for the Guardian One web-based dev panel."""
 
 import json
+import os
 import pytest
+
 from guardian_one.web.app import create_app
+
+
+@pytest.fixture(autouse=True)
+def _set_vault_passphrase(monkeypatch):
+    monkeypatch.setenv("GUARDIAN_MASTER_PASSPHRASE", "test-passphrase")
+    # Reset the cached singleton so it picks up the env var
+    import guardian_one.web.app as _app_mod
+    _app_mod._guardian = None
 
 
 @pytest.fixture

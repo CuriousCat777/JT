@@ -1,0 +1,40 @@
+name: Compose Validation
+
+on:
+  push:
+    paths:
+      - 'docker-compose*.yml'
+      - 'Dockerfile'
+      - '.env.example'
+  pull_request:
+    paths:
+      - 'docker-compose*.yml'
+      - 'Dockerfile'
+      - '.env.example'
+
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compose_file:
+          - docker-compose.yml
+          - docker-compose.staging.yml
+          - docker-compose.production.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ${{ matrix.compose_file }}
+        run: |
+          if [ -f "${{ matrix.compose_file }}" ]; then
+            docker compose -f ${{ matrix.compose_file }} config --quiet
+            echo "${{ matrix.compose_file }} is valid"
+          else
+            echo "${{ matrix.compose_file }} not found, skipping"
+          fi
+
+      - name: Check for required services
+        if: hashFiles(matrix.compose_file) != ''
+        run: |
+          SERVICES=$(docker compose -f ${{ matrix.compose_file }} config --services 2>/dev/null || true)
+          echo "Services found: $SERVICES"
