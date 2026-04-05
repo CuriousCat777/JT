@@ -84,7 +84,6 @@ from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
 from guardian_one.agents.input_cortex import InputCortex
-from guardian_one.agents.teleprompter import Teleprompter
 
 
 def _build_agents(guardian: GuardianOne) -> None:

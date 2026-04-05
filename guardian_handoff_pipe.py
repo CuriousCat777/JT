@@ -254,7 +254,7 @@ def generate_dispatch(task_file: str) -> str:
     with open(task_file) as f:
         task = json.load(f)
 
-    # Deterministic ID: date + 12 hex chars of sha256(task + timestamp).
+    # Unique ID: date + 12 hex chars of sha256(task + timestamp + randomness).
     # Python's built-in hash() is process-salted so it can't be used for
     # stable cross-run identifiers.
     import hashlib

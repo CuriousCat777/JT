@@ -263,6 +263,9 @@ class InputStreamProcessor:
         # Step 7: Build tags
         tags = self._build_tags(category, batch.app_label, confidence)
 
+        # Normalize session_id once so the block and session index agree.
+        sid = batch.session_id or "default"
+
         # Step 8: Create context block
         block = ContextBlock(
             block_id=self._next_block_id(),
@@ -275,7 +278,7 @@ class InputStreamProcessor:
             summary=summary,
             processed_text=clean_text,
             word_count=word_count,
-            session_id=batch.session_id,
+            session_id=sid,
             tags=tags,
             intent_signals=signals,
             redactions_applied=redaction_count,
@@ -541,8 +544,11 @@ class InputStreamProcessor:
     def _add_to_session(
         self, block: ContextBlock, batch: RawKeystrokeBatch
     ) -> None:
-        """Add a block to its session, creating the session if needed."""
-        sid = batch.session_id or "default"
+        """Add a block to its session, creating the session if needed.
+
+        Uses block.session_id (already normalized by process_batch).
+        """
+        sid = block.session_id
         if sid not in self._sessions:
             self._sessions[sid] = InputSession(
                 session_id=sid,
