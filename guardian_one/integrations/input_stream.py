@@ -310,9 +310,10 @@ class InputStreamProcessor:
         # Write session file. Sanitize session_id to prevent path traversal
         # (session_id comes from phone payloads over HTTP and could contain
         # "..", "/" or other path separators).
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         safe_sid = re.sub(r"[^A-Za-z0-9_-]", "_", session_id[:8]) or "session"
-        filename = f"session_{ts}_{safe_sid}.json"
+        sid_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
+        filename = f"session_{ts}_{safe_sid}_{sid_hash}.json"
         path = self._output_dir / filename
 
         with open(path, "w") as f:

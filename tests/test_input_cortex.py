@@ -436,8 +436,11 @@ def test_http_listener_rejects_without_token_and_accepts_with(tmp_path):
     agent = InputCortex(config=cfg, audit=audit, data_dir=str(tmp_path))
     agent.initialize()
 
-    # Use port 0 to let OS pick an available port
-    port = 19473  # high ephemeral port unlikely to conflict
+    # Probe for a free port to avoid flake on shared CI runners.
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
 
     # Start daemon listener in background
     agent.start_daemon(mode="listener", port=port, bind="127.0.0.1")

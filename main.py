@@ -338,16 +338,8 @@ def main() -> None:
                         help="InputCortex behavioral pattern analysis (N days)")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
-    parser.add_argument("--sentinel", action="store_true",
-                        help="IoT Sentinel dashboard (network security + device control)")
-    parser.add_argument("--sentinel-scan", action="store_true",
-                        help="Run a one-time network scan and report anomalies")
-    parser.add_argument("--sentinel-monitor", action="store_true",
-                        help="Start continuous network monitoring")
-    parser.add_argument("--sentinel-approve", type=int, default=None,
-                        help="Approve a pending sentinel recommendation by index")
-    parser.add_argument("--sentinel-deny", type=int, default=None,
-                        help="Deny a pending sentinel recommendation by index")
+    # NOTE: --sentinel* flags removed — handler was never wired in main.py.
+    # The sentinel agent module still exists for standalone / future use.
     parser.add_argument("--network-audit", action="store_true",
                         help="LAN security audit (VLAN, DNS blocking, credentials)")
     parser.add_argument("--vpn-status", action="store_true",

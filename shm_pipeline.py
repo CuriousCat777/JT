@@ -27,10 +27,10 @@ Daemon mode:
 Skill interface:
     Other AI agents can invoke this pipeline via the dispatch protocol:
     - process_pdfs(directory)     — extract from local PDFs
-    - search_literature(query)    — search online sources
+    - search_literature(query)    — search PubMed + SHM
     - get_statistics()            — pipeline stats
-    - get_extracts(filters)       — query processed extracts
-    - export_payload(role)        — generate handoff payload
+    - collect_online(topics)      — run one online collection cycle
+    - export_all()                — export all data as JSON
 """
 
 from __future__ import annotations
@@ -467,6 +467,7 @@ class OnlineCollector:
                     "https://www.hospitalmedicine.org/",
                     params={"s": query},
                 )
+                resp.raise_for_status()
                 # Parse basic results from response
                 # (simple extraction — full scraping would need beautifulsoup)
                 text = resp.text
