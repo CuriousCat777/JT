@@ -18,62 +18,42 @@ Timezone: America/Chicago
 main.py                             # CLI entry point (35+ commands)
 mcp_server.py                       # MCP server (stdio/SSE) — exposes Guardian tools to Claude
 guardian_one/
-├── agents/                         # Subordinate agents
-│   ├── chronos.py                  # Schedule & calendar management
-│   ├── archivist.py                # File & data sovereignty
-│   ├── cfo.py                      # Financial intelligence (Plaid, Empower, Rocket Money)
-│   ├── cfo_dashboard.py            # Excel financial dashboards (openpyxl)
-│   ├── doordash.py                 # Meal delivery coordination
-│   ├── gmail_agent.py              # Email & inbox monitoring
-│   ├── device_agent.py             # IoT/smart-home device management
-│   ├── web_architect.py            # Website security & n8n deployment
-│   └── website_manager.py          # Per-site build/deploy pipelines
-├── core/                           # System infrastructure
-│   ├── guardian.py                  # Central coordinator (registers agents, runs orchestration)
-│   ├── base_agent.py               # Agent contract (BaseAgent ABC: initialize/run/report)
-│   ├── ai_engine.py                # Sovereign AI reasoning (Ollama primary, Claude fallback)
-│   ├── cfo_router.py               # Natural-language CFO query routing
-│   ├── mediator.py                 # Cross-agent conflict resolution
-│   ├── scheduler.py                # Agent scheduling (interval-based)
-│   ├── sandbox.py                  # Deployment testing
-│   ├── evaluator.py                # Performance metrics
-│   ├── audit.py                    # Immutable audit logging (severity-tagged)
-│   ├── security.py                 # Access control & encryption
-│   ├── security_remediation.py     # Security task tracking & verification
-│   └── config.py                   # Configuration management (load_config / AgentConfig)
-├── integrations/                   # External service connectors
-│   ├── notion_sync.py              # Write-only Notion workspace sync
-│   ├── notion_website_sync.py      # Per-site Notion dashboards
-│   ├── notion_remediation_sync.py  # Security remediation → Notion
-│   ├── n8n_sync.py                 # n8n workflow automation
-│   ├── financial_sync.py           # Plaid/Empower/Rocket Money
-│   ├── calendar_sync.py            # Google Calendar
-│   ├── gmail_sync.py               # Gmail API
-│   ├── doordash_sync.py            # DoorDash API
-│   ├── ollama_sync.py              # Ollama local LLM integration
-│   ├── plaid_connect.py            # Plaid bank account linking
-│   ├── ring_monitor.py             # Ring security camera monitoring
-│   └── privacy_tools.py            # VPN/privacy services
-├── homelink/                       # H.O.M.E. L.I.N.K. smart-home service layer
-│   ├── gateway.py                  # API gateway (rate limit, TLS, circuit breaker)
-│   ├── vault.py                    # Fernet/PBKDF2-encrypted credential storage
-│   ├── registry.py                 # Integration catalog with threat models
-│   ├── monitor.py                  # System health monitoring
-│   ├── devices.py                  # IoT device inventory & lifecycle
-│   ├── drivers.py                  # Device drivers (Kasa, Hue, Govee)
-│   ├── automations.py              # Scene engine & event triggers
-│   ├── lan_security.py             # LAN/VLAN security auditing
-│   └── email_commands.py           # Email-based device commands
-├── web/                            # Web-based dev panel (Flask)
-│   ├── app.py                      # Dev panel server (port 5100)
-│   └── templates/
-│       ├── panel.html              # Main dashboard template
-│       └── homelink.html           # H.O.M.E. L.I.N.K. dashboard
-├── templates/                      # Agent scaffolding
-│   └── agent_template.py           # New agent boilerplate
-└── utils/                          # Shared utilities
-    ├── encryption.py               # Encryption helpers
-    └── notifications.py            # Email/SMS/push notification dispatch
+├── agents/                     # Subordinate agents
+│   ├── chronos.py              # Schedule & calendar management
+│   ├── archivist.py            # File & data sovereignty
+│   ├── cfo.py                  # Financial intelligence (Plaid, Empower, Rocket Money)
+│   ├── cfo_dashboard.py        # Excel financial dashboards
+│   ├── doordash.py             # Meal delivery coordination
+│   ├── gmail_agent.py          # Email & inbox monitoring
+│   ├── dev_coach.py             # The Archivist — Developer Coach (Fireship-style)
+│   ├── web_architect.py        # Website security & n8n deployment
+│   └── website_manager.py      # Per-site build/deploy pipelines
+├── core/                       # System infrastructure
+│   ├── guardian.py              # Central coordinator
+│   ├── base_agent.py           # Agent contract (BaseAgent ABC)
+│   ├── mediator.py             # Cross-agent conflict resolution
+│   ├── scheduler.py            # Agent scheduling
+│   ├── sandbox.py              # Deployment testing
+│   ├── evaluator.py            # Performance metrics
+│   ├── audit.py                # Immutable audit logging
+│   ├── security.py             # Access control
+│   ├── db_schema.py             # ACID SQL + Neo4j + Dgraph graph schemas
+│   └── config.py               # Configuration management
+├── integrations/               # External service connectors
+│   ├── notion_sync.py          # Write-only Notion workspace sync
+│   ├── notion_website_sync.py  # Per-site Notion dashboards
+│   ├── n8n_sync.py             # n8n workflow automation
+│   ├── financial_sync.py       # Plaid/Empower/Rocket Money
+│   ├── calendar_sync.py        # Google Calendar
+│   ├── gmail_sync.py           # Gmail API
+│   ├── doordash_sync.py        # DoorDash API
+│   └── privacy_tools.py        # VPN/privacy services
+├── homelink/                   # H.O.M.E. L.I.N.K. service layer
+│   ├── gateway.py              # API gateway (rate limit, TLS, circuit breaker)
+│   ├── vault.py                # Encrypted credential storage
+│   ├── registry.py             # Integration catalog with threat models
+│   └── monitor.py              # System health monitoring
+└── utils/                      # Shared utilities
 config/
 ├── guardian_config.yaml            # Agent & system configuration
 ├── .env.example                    # Environment variable template
@@ -144,12 +124,41 @@ npx @modelcontextprotocol/inspector python mcp_server.py  # Inspect tools
 
 ## H.O.M.E. L.I.N.K. (Smart Home)
 
-Full IoT management layer in `guardian_one/homelink/`:
-- **Devices**: Inventory, health monitoring, firmware tracking
-- **Drivers**: TP-Link Kasa, Philips Hue, Govee, Flipper Zero (all local-first)
-- **Automations**: Scenes (movie, work, away, goodnight) and events (wake, sleep, sunrise, sunset)
-- **LAN Security**: VLAN enforcement, unknown device alerting, telemetry blocking
-- **Email Commands**: Remote device control via email
+## The Archivist — Developer Coach
+
+The Archivist is Jeremy's **Developer Yoda** — a Fireship (Jeff Delaney) inspired
+AI agent that provides opinionated, high-intensity developer coaching.
+
+**Personality**: Fast. Witty. No-BS. Ships code, not excuses.
+**Advisory Role**: Sits alongside Varys (security/intel) as a strategic advisor.
+Varys watches the network. The Archivist watches the code.
+
+### Capabilities
+- **Tech Tier List**: Opinionated S-F ranking of every technology (Fireship-style)
+- **Code This Not That**: Best practice pattern vault with antipatterns
+- **Stack Recommendations**: AI-powered tech stack advice by project type
+- **Web Dev Auditing**: Performance, security, accessibility checklist
+- **System Discovery**: Auto-detect hardware/software on connected machines
+- **Learning Paths**: Structured skill tracks with progress tracking
+- **Developer Wisdom**: 30+ curated tips in Jeff Delaney's voice
+- **Productivity Analytics**: Dev session tracking and insights
+
+### Database Schemas (guardian_one/core/db_schema.py)
+- **SQLite/PostgreSQL**: ACID-compliant relational schema (tech_entries, projects, snippets, learning_paths, system_components, dev_sessions)
+- **Neo4j Cypher**: Knowledge graph with Technology, Project, Snippet, Owner nodes and DEPENDS_ON, WORKS_WITH, KNOWS relationships
+- **Dgraph GraphQL**: Distributed graph schema with full edge definitions
+
+### CLI Commands
+```bash
+python main.py --dev-coach              # Full Archivist report
+python main.py --dev-coach-tier         # Tech tier list (S through F)
+python main.py --dev-coach-wisdom       # Random developer wisdom tip
+python main.py --dev-coach-system       # System hardware/software inventory
+python main.py --dev-coach-stack saas   # Stack recommendation (saas|api|static_site|ai_app|mobile)
+python main.py --dev-coach-audit jtmdai.com  # Web dev audit for a domain
+```
+
+## Key Design Principles
 
 ## Managed Websites
 

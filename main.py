@@ -90,7 +90,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
-from guardian_one.agents.teleprompter import Teleprompter
+from guardian_one.agents.dev_coach import DevCoach
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -119,12 +119,8 @@ def _build_agents(guardian: GuardianOne) -> None:
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
-    tp_cfg = config.agents.get("teleprompter", AgentConfig(name="teleprompter"))
-    guardian.register_agent(Teleprompter(config=tp_cfg, audit=guardian.audit))
-
-    from guardian_one.varys.agent import VarysAgent
-    varys_cfg = config.agents.get("varys", AgentConfig(name="varys"))
-    guardian.register_agent(VarysAgent(config=varys_cfg, audit=guardian.audit))
+    dc_cfg = config.agents.get("dev_coach", AgentConfig(name="dev_coach"))
+    guardian.register_agent(DevCoach(config=dc_cfg, audit=guardian.audit))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -358,57 +354,18 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
-    # Power Tools — Rails + Gin
-    parser.add_argument("--power-tools", action="store_true",
-                        help="Show Rails + Gin power tools status")
-    parser.add_argument("--rails-new", type=str, default=None,
-                        help="Scaffold a new Rails app (name)")
-    parser.add_argument("--rails-api", action="store_true",
-                        help="Generate API-only Rails app (use with --rails-new)")
-    parser.add_argument("--rails-db", type=str, default="sqlite3",
-                        help="Database adapter for Rails (sqlite3/postgresql/mysql)")
-    parser.add_argument("--rails-server", type=str, default=None,
-                        help="Start Rails dev server (path to app)")
-    parser.add_argument("--rails-port", type=int, default=3000,
-                        help="Rails server port (default: 3000)")
-    parser.add_argument("--rails-install", action="store_true",
-                        help="Install Ruby on Rails via gem")
-    parser.add_argument("--gin-new", type=str, default=None,
-                        help="Scaffold a new Gin (Go) app (name)")
-    parser.add_argument("--gin-module", type=str, default=None,
-                        help="Go module path for Gin app (default: app name)")
-    parser.add_argument("--gin-server", type=str, default=None,
-                        help="Start Gin dev server (path to app)")
-    parser.add_argument("--gin-port", type=int, default=8080,
-                        help="Gin server port (default: 8080)")
-    parser.add_argument("--iot", action="store_true",
-                        help="Sovereign IoT stack dashboard (service status, network, health)")
-    parser.add_argument("--iot-scaffold", action="store_true",
-                        help="Scaffold IoT Docker Compose stack (creates dirs + configs)")
-    parser.add_argument("--iot-start", action="store_true",
-                        help="Start the IoT Docker Compose stack")
-    parser.add_argument("--iot-stop", action="store_true",
-                        help="Stop the IoT Docker Compose stack")
-    parser.add_argument("--iot-scan", nargs="?", const="__CONFIG__", default=None,
-                        help="Scan LAN for devices (default: subnet from config or 192.168.1.0/24)")
-    parser.add_argument("--iot-security", action="store_true",
-                        help="IoT security hardening checklist + VLAN policy")
-    parser.add_argument("--iot-workflows", type=str, default=None,
-                        help="Export n8n + Node-RED workflow templates to directory")
-    parser.add_argument("--hue", action="store_true",
-                        help="Show all Hue lights and groups")
-    parser.add_argument("--hue-register", action="store_true",
-                        help="Register with Hue Bridge (press link button first!)")
-    parser.add_argument("--hue-on", type=str, default=None,
-                        help="Turn on a Hue light by ID (e.g. --hue-on 1)")
-    parser.add_argument("--hue-off", type=str, default=None,
-                        help="Turn off a Hue light by ID (e.g. --hue-off 1)")
-    parser.add_argument("--hue-dim", type=str, default=None,
-                        help="Dim a Hue light: 'ID:PCT' (e.g. --hue-dim 1:50)")
-    parser.add_argument("--hue-color", type=str, default=None,
-                        help="Set Hue light color: 'ID:COLOR' (warm/daylight/red/green/blue)")
-    parser.add_argument("--hue-scene", type=str, default=None,
-                        help="Activate Hue scene: 'GROUP_ID:SCENE_ID'")
+    parser.add_argument("--dev-coach", dest="archivist", action="store_true",
+                        help="Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--dev-coach-tier", dest="archivist_tier", action="store_true",
+                        help="Show the Developer Coach's opinionated tech tier list")
+    parser.add_argument("--dev-coach-wisdom", dest="archivist_wisdom", action="store_true",
+                        help="Get a Fireship-style developer wisdom tip")
+    parser.add_argument("--dev-coach-system", dest="archivist_system", action="store_true",
+                        help="Show system inventory (hardware/software)")
+    parser.add_argument("--dev-coach-stack", dest="archivist_stack", type=str, default=None,
+                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
+    parser.add_argument("--dev-coach-audit", dest="archivist_audit", type=str, default=None,
+                        help="Run web dev audit on a domain")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -418,6 +375,71 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # ------------------------------------------------------------------
+    # The Archivist — Developer Coach commands
+    # ------------------------------------------------------------------
+    if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
+        coach = guardian.get_agent("dev_coach")
+        if coach and isinstance(coach, DevCoach):
+            if args.archivist_tier:
+                tiers = coach.get_tier_list()
+                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
+                print("  " + "=" * 55)
+                for tier_name in ["S", "A", "B", "C", "D", "F"]:
+                    entries = tiers.get(tier_name, [])
+                    if entries:
+                        print(f"\n  [{tier_name}-TIER]")
+                        for e in entries:
+                            print(f"    {e['name']:<20} {e['notes']}")
+                print()
+            elif args.archivist_wisdom:
+                tip = coach.get_wisdom()
+                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
+            elif args.archivist_system:
+                inventory = coach.get_system_inventory()
+                print("\n  THE ARCHIVIST — System Inventory")
+                print("  " + "=" * 55)
+                for comp in inventory:
+                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
+                    for k, v in comp.get('specs', {}).items():
+                        print(f"    {k}: {v}")
+                print()
+            elif args.archivist_stack:
+                rec = coach.recommend_stack(args.archivist_stack)
+                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.archivist_stack}")
+                print("  " + "=" * 55)
+                for item in rec.get("stack", []):
+                    print(f"  {item['name']:<20} {item['reason']}")
+                print(f"\n  \"{rec.get('summary', '')}\"\n")
+            elif args.archivist_audit:
+                audit = coach.web_audit(args.archivist_audit)
+                print(f"\n  THE ARCHIVIST — Web Audit: {args.archivist_audit}")
+                print("  " + "=" * 55)
+                for check, info in audit.items():
+                    status = info.get("status", "needs_review")
+                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
+                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
+                print()
+            else:
+                report = guardian.run_agent("dev_coach")
+                print(f"\n  THE ARCHIVIST — Developer Coach Report")
+                print("  " + "=" * 55)
+                print(f"  Status: {report.status}")
+                print(f"  {report.summary}")
+                if report.recommendations:
+                    print("\n  Recommendations:")
+                    for r in report.recommendations:
+                        print(f"    - {r}")
+                if report.alerts:
+                    print("\n  Alerts:")
+                    for a in report.alerts:
+                        print(f"    [!] {a}")
+                print()
+        else:
+            print("DevCoach agent not available.")
+        guardian.shutdown()
+        return
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")
