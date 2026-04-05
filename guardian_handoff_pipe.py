@@ -96,10 +96,14 @@ def section_current_state():
     if CONFERENCE_DOX.exists():
         pdf_count = len(list(CONFERENCE_DOX.glob("*.pdf")))
 
-    # Count pipeline outputs
+    # Count pipeline outputs (extracts only; exclude stats/metadata JSON)
     json_count = 0
     if PIPELINE_OUTPUT.exists():
-        json_count = len(list(PIPELINE_OUTPUT.glob("*.json")))
+        excluded_json = {"pipeline_stats.json"}
+        json_count = sum(
+            1 for p in PIPELINE_OUTPUT.glob("*.json")
+            if p.name not in excluded_json
+        )
 
     # Check decision log
     dec_count = 0
@@ -141,7 +145,7 @@ Conference DOX: {pdf_count} PDFs in {CONFERENCE_DOX}
 Pipeline output: {json_count} JSON extracts in {PIPELINE_OUTPUT}
 Pipeline stats: {pipe_words:,} words, {pipe_citations} citations, {pipe_stats} statistics, {pipe_claims} claim-study links.
 Top tools: {top_tools_str}.
-Vault: {vault_services} services tracked via {HOME_DOX}/vault.py
+Vault: {vault_services} services tracked in {HOME_DOX}/guardian_dependency_tracker.csv
 Live dashboard: jtmdai.com/vault (Cloudflare Worker + KV)
 Decision log entries: {dec_count}
 ⚠ TWO DOX directories exist (not linked): Conference={CONFERENCE_DOX} | Home={HOME_DOX}
@@ -173,7 +177,7 @@ def section_dispatch_protocol():
     return """## DISPATCH PROTOCOL (AI-to-AI task delegation)
 To send work to another AI session, generate a dispatch envelope:
 ```json
-{"dispatch_id": "DSP-YYYYMMDD-NNN",
+{"dispatch_id": "DSP-YYYYMMDD-<12-hex>",
  "from": "session_id or role",
  "to": "target_role (researcher|builder|auditor|gatherer)",
  "task": "plain English task description",
@@ -250,9 +254,17 @@ def generate_dispatch(task_file: str) -> str:
     with open(task_file) as f:
         task = json.load(f)
 
+    # Deterministic ID: date + 12 hex chars of sha256(task + timestamp).
+    # Python's built-in hash() is process-salted so it can't be used for
+    # stable cross-run identifiers.
+    import hashlib
+    import secrets
+    now = datetime.now(timezone.utc)
+    seed = f"{task.get('task', '')}|{now.isoformat()}|{secrets.token_hex(4)}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
     envelope = {
-        "dispatch_id": f"DSP-{datetime.now().strftime('%Y%m%d')}-{str(hash(task.get('task','')))[-3:]}",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "dispatch_id": f"DSP-{now.strftime('%Y%m%d')}-{digest}",
+        "timestamp": now.isoformat(),
         "from": task.get("from", "guardian-one-primary"),
         "to": task.get("to", "gatherer"),
         "task": task.get("task", ""),

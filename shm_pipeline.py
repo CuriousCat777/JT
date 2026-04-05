@@ -119,6 +119,7 @@ class PDFExtract:
     citations: list[str] = field(default_factory=list)
     statistics: list[str] = field(default_factory=list)
     tools_mentioned: list[str] = field(default_factory=list)
+    tool_mentions: dict[str, int] = field(default_factory=dict)
     evidence_levels: list[str] = field(default_factory=list)
     key_claims: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
@@ -174,40 +175,60 @@ def _extract_text_from_pdf(pdf_path: Path) -> str:
     """Extract text from a PDF file.
 
     Tries PyMuPDF (fitz) first, falls back to pdfplumber, then pdfminer.
+    Per-extractor runtime errors (corrupt/encrypted PDFs) log a warning
+    and move on to the next extractor instead of aborting the whole run.
     """
+    any_library_available = False
+
     # Try PyMuPDF
     try:
         import fitz  # type: ignore[import-untyped]
-        doc = fitz.open(str(pdf_path))
-        text = ""
-        for page in doc:
-            text += page.get_text()
-        doc.close()
-        return text
+        any_library_available = True
     except ImportError:
         pass
+    else:
+        try:
+            doc = fitz.open(str(pdf_path))
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            return text
+        except Exception as exc:
+            print(f"  [!] PyMuPDF failed for {pdf_path.name}: {exc}", file=sys.stderr)
 
     # Try pdfplumber
     try:
         import pdfplumber  # type: ignore[import-untyped]
-        with pdfplumber.open(str(pdf_path)) as pdf:
-            text = ""
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-            return text
+        any_library_available = True
     except ImportError:
         pass
+    else:
+        try:
+            with pdfplumber.open(str(pdf_path)) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                return text
+        except Exception as exc:
+            print(f"  [!] pdfplumber failed for {pdf_path.name}: {exc}", file=sys.stderr)
 
     # Try pdfminer
     try:
         from pdfminer.high_level import extract_text  # type: ignore[import-untyped]
-        return extract_text(str(pdf_path))
+        any_library_available = True
     except ImportError:
         pass
+    else:
+        try:
+            return extract_text(str(pdf_path))
+        except Exception as exc:
+            print(f"  [!] pdfminer failed for {pdf_path.name}: {exc}", file=sys.stderr)
 
-    print(f"  [!] No PDF library available. Install: pip install PyMuPDF", file=sys.stderr)
+    if not any_library_available:
+        print("  [!] No PDF library available. Install: pip install PyMuPDF", file=sys.stderr)
     return ""
 
 
@@ -293,6 +314,7 @@ def process_pdf(pdf_path: Path) -> PDFExtract | None:
         citations=citations[:50],  # cap at 50
         statistics=statistics[:100],
         tools_mentioned=list(tool_counts.keys()),
+        tool_mentions=tool_counts,
         evidence_levels=evidence_levels,
         key_claims=key_claims,
         tags=tags,
@@ -318,9 +340,14 @@ def process_directory(directory: Path) -> list[PDFExtract]:
         extract = process_pdf(pdf)
         if extract:
             extracts.append(extract)
-            # Save individual extract
+            # Save individual extract with a unique, stable filename that
+            # avoids collisions when identically named PDFs come from
+            # different directories (stem + parent slug + content hash).
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            out_path = OUTPUT_DIR / f"{pdf.stem}.json"
+            parent_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", pdf.parent.name or "root")
+            # Sanitize stem too — PDF names can contain arbitrary characters
+            stem_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", pdf.stem)
+            out_path = OUTPUT_DIR / f"{parent_slug}__{stem_slug}__{extract.text_hash}.json"
             with open(out_path, "w") as f:
                 json.dump(extract.to_dict(), f, indent=2)
         else:
@@ -554,9 +581,13 @@ def update_stats(extracts: list[PDFExtract], stats: PipelineStats) -> PipelineSt
         stats.total_citations += len(e.citations)
         stats.total_statistics += len(e.statistics)
         stats.total_claims += len(e.key_claims)
-        for tool in e.tools_mentioned:
-            stats.top_tools[tool] = stats.top_tools.get(tool, 0) + 1
-            stats.total_tool_mentions += 1
+        # Use real per-tool frequency from tool_mentions; fall back to
+        # deduped tools_mentioned only for extracts written by the old
+        # code path (one count per tool = PDF-mention count).
+        mentions = e.tool_mentions or {tool: 1 for tool in e.tools_mentioned}
+        for tool, count in mentions.items():
+            stats.top_tools[tool] = stats.top_tools.get(tool, 0) + count
+            stats.total_tool_mentions += count
     stats.last_pdf_run = datetime.now(timezone.utc).isoformat()
     return stats
 

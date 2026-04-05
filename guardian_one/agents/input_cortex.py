@@ -490,10 +490,16 @@ class InputCortex(BaseAgent):
                     self.ingest_payload(p)
                     count += 1
 
-                # Move processed file
+                # Move processed file to archive. Use shutil.move to
+                # handle cross-filesystem moves; add a timestamp suffix
+                # to guarantee uniqueness (Windows rename fails when the
+                # destination already exists).
+                import shutil
                 processed_dir = self._drop_dir / "processed"
                 processed_dir.mkdir(exist_ok=True)
-                path.rename(processed_dir / path.name)
+                ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+                dest = processed_dir / f"{path.stem}__{ts}{path.suffix}"
+                shutil.move(str(path), str(dest))
 
             except Exception as e:
                 self.log(

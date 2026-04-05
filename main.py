@@ -329,6 +329,8 @@ def main() -> None:
                         help="InputCortex listener port (default: 9473)")
     parser.add_argument("--cortex-bind", type=str, default="127.0.0.1",
                         help="InputCortex listener bind address (default: 127.0.0.1 loopback)")
+    parser.add_argument("--cortex-show-token", action="store_true",
+                        help="Print the InputCortex auth token on daemon start (default: hide)")
     parser.add_argument("--cortex-digest", nargs="?", const="today", default=None,
                         help="Generate InputCortex daily digest (date or 'today')")
     parser.add_argument("--cortex-query", type=str, default=None,
@@ -1075,7 +1077,12 @@ def main() -> None:
             if args.cortex_bind == "127.0.0.1" and "listener_bind" in cortex_custom:
                 bind = str(cortex_custom["listener_bind"])
             print(f"\n  InputCortex daemon starting (mode={mode}, bind={bind}:{port})")
-            print(f"  Auth token (X-Cortex-Token): {cortex.auth_token}")
+            if args.cortex_show_token:
+                print(f"  Auth token (X-Cortex-Token): {cortex.auth_token}")
+            else:
+                print("  Auth token (X-Cortex-Token): [hidden] — "
+                      "use --cortex-show-token to print, or set "
+                      "CORTEX_AUTH_TOKEN / listener_auth_token in config to rotate.")
             print(f"  Endpoints:")
             print(f"    POST http://{bind}:{port}/input   — single payload")
             print(f"    POST http://{bind}:{port}/batch   — batch payloads")
