@@ -296,7 +296,8 @@ class InputStreamProcessor:
 
         # Write session file
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"session_{ts}_{session_id[:8]}.json"
+        safe_session_suffix = re.sub(r"[^A-Za-z0-9_-]", "_", session_id[:8]) or "session"
+        filename = f"session_{ts}_{safe_session_suffix}.json"
         path = self._output_dir / filename
 
         with open(path, "w") as f:
