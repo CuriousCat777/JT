@@ -338,8 +338,8 @@ def main() -> None:
                         help="InputCortex behavioral pattern analysis (N days)")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
-    # NOTE: --sentinel* flags removed — handler was never wired in main.py.
-    # The sentinel agent module still exists for standalone / future use.
+    # NOTE: --sentinel* flags are intentionally not exposed in this CLI.
+    # The sentinel agent module still exists for standalone use or future reintegration.
     parser.add_argument("--network-audit", action="store_true",
                         help="LAN security audit (VLAN, DNS blocking, credentials)")
     parser.add_argument("--vpn-status", action="store_true",

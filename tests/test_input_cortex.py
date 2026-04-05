@@ -12,7 +12,6 @@ Covers the security-critical paths:
 from __future__ import annotations
 
 import json
-import tempfile
 import time
 from pathlib import Path
 
@@ -444,7 +443,23 @@ def test_http_listener_rejects_without_token_and_accepts_with(tmp_path):
 
     # Start daemon listener in background
     agent.start_daemon(mode="listener", port=port, bind="127.0.0.1")
-    time.sleep(0.5)  # let server start
+
+    # Poll until the listener is ready (replaces flaky time.sleep)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            probe = http.client.HTTPConnection("127.0.0.1", port, timeout=0.5)
+            probe.request("GET", "/status", headers={"X-Cortex-Token": agent.auth_token})
+            resp = probe.getresponse()
+            resp.read()
+            probe.close()
+            if resp.status == 200:
+                break
+        except OSError:
+            pass
+        time.sleep(0.1)
+    else:
+        pytest.fail("HTTP listener did not become ready within 5s")
 
     try:
         # Request WITHOUT token → should get 401

@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import threading
 import time
 from datetime import datetime, timezone, timedelta
@@ -137,7 +136,6 @@ class InputCortex(BaseAgent):
 
         # Generate an auth token on first init (or load from config/env)
         if not self._auth_token:
-            import os
             import secrets
             self._auth_token = (
                 self.config.custom.get("listener_auth_token")
@@ -378,10 +376,11 @@ class InputCortex(BaseAgent):
                             "redacted": block is None,
                         }
                         self.wfile.write(json.dumps(result).encode())
-                    except Exception as e:
+                    except Exception:
                         self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
                         self.end_headers()
-                        self.wfile.write(str(e).encode())
+                        self.wfile.write(json.dumps({"error": "bad_request"}).encode())
                 elif self.path == "/batch":
                     body = _read_body(self)
                     if body is None:
@@ -402,10 +401,11 @@ class InputCortex(BaseAgent):
                             "status": "ok",
                             "results": results,
                         }).encode())
-                    except Exception as e:
+                    except Exception:
                         self.send_response(400)
+                        self.send_header("Content-Type", "application/json")
                         self.end_headers()
-                        self.wfile.write(str(e).encode())
+                        self.wfile.write(json.dumps({"error": "bad_request"}).encode())
                 else:
                     self.send_response(404)
                     self.end_headers()
@@ -424,11 +424,22 @@ class InputCortex(BaseAgent):
                     # Simple query: /query?category=search&limit=10
                     from urllib.parse import urlparse, parse_qs
                     params = parse_qs(urlparse(self.path).query)
+                    limit = 50
+                    limit_raw = params.get("limit", [None])[0]
+                    if limit_raw is not None:
+                        try:
+                            limit = int(limit_raw)
+                        except (TypeError, ValueError):
+                            self.send_response(400)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(json.dumps({"error": "invalid limit"}).encode())
+                            return
                     results = cortex.query_context(
                         category=params.get("category", [None])[0],
                         app=params.get("app", [None])[0],
                         since=params.get("since", [None])[0],
-                        limit=int(params.get("limit", [50])[0]),
+                        limit=limit,
                     )
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
