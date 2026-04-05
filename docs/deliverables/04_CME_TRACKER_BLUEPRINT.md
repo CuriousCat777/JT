@@ -50,17 +50,17 @@ Build a **web-first CME Conference Tracker** for US hospitalist clinicians (MD/D
 ---
 
 ## 5) Data Sources (Open/Public + User-Provided)
-## Hospital medicine conference and CME sources
+### Hospital medicine conference and CME sources
 - Society of Hospital Medicine (conference pages, public event listings).
 - Major academic center CME catalogs (e.g., Mayo, Johns Hopkins, UCSF, Harvard, Stanford where publicly listed).
 - Public ACCME-recognized provider event pages and published conference metadata.
 
-## Credential verification sources
+### Credential verification sources
 - State medical board license lookups (public verification portals).
 - NPI registry/NPPES public provider records.
 - Public institution directories (when available).
 
-## User-provided records
+### User-provided records
 - Conference registrations, agendas, transcripts, certificates, receipts.
 
 ---
