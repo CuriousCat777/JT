@@ -25,7 +25,10 @@ from guardian_one.agents.dev_coach import DevCoach
 
 
 def _make_audit() -> AuditLog:
-    return AuditLog(log_dir=Path(tempfile.mkdtemp()))
+    temp_dir = tempfile.TemporaryDirectory()
+    audit = AuditLog(log_dir=Path(temp_dir.name))
+    audit._temp_dir = temp_dir
+    return audit
 
 
 def _make_coach() -> DevCoach:
