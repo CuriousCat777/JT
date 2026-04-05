@@ -201,7 +201,7 @@ export default function Landing() {
             <div className="flex items-center gap-6 mt-10 text-sm text-primary-200">
               <div className="flex items-center gap-1.5">
                 <Lock className="w-4 h-4" />
-                HIPAA Compliant
+                Designed for HIPAA
               </div>
               <div className="flex items-center gap-1.5">
                 <Zap className="w-4 h-4" />
@@ -209,7 +209,7 @@ export default function Landing() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Shield className="w-4 h-4" />
-                SOC 2 Type II
+                Security First
               </div>
             </div>
           </div>
@@ -383,7 +383,7 @@ export default function Landing() {
               GREG AI Agent Platform -- Helping physicians build independent practices.
             </p>
             <p className="text-xs text-neutral-500">
-              HIPAA Compliant | SOC 2 Type II | BAA Available
+              Designed for HIPAA | Security First | BAA Available on Enterprise
             </p>
           </div>
         </div>

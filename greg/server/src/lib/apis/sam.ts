@@ -11,7 +11,6 @@ export interface SAMSearchParams {
   legalBusinessName?: string;
   dbaName?: string;
   cageCode?: string;
-  npi?: string;
   stateCode?: string;
   registrationStatus?: "A" | "E" | "ID";
 }
@@ -112,8 +111,7 @@ export async function searchSAMEntities(
 }
 
 export async function checkSAMExclusions(
-  name: string,
-  npi?: string
+  name: string
 ): Promise<SAMExclusionResponse> {
   const apiKey = process.env.SAM_API_KEY;
   const exclusionUrl = "https://api.sam.gov/entity-information/v3/exclusions";

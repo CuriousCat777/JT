@@ -50,6 +50,21 @@ export async function importKey(base64Key: string): Promise<CryptoKey> {
 }
 
 /**
+ * Load the encryption key from the ENCRYPTION_KEY environment variable.
+ * The env var must contain a base64-encoded 256-bit (32-byte) raw key.
+ */
+export async function loadKeyFromEnv(): Promise<CryptoKey> {
+  const base64Key = process.env.ENCRYPTION_KEY;
+  if (!base64Key) {
+    throw new Error(
+      "ENCRYPTION_KEY environment variable is not set. " +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
+    );
+  }
+  return importKey(base64Key);
+}
+
+/**
  * Encrypt plaintext data using AES-256-GCM.
  * Returns an EncryptedPayload with base64-encoded ciphertext and IV.
  */

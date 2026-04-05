@@ -1,6 +1,9 @@
 /**
- * Zod validation schemas for all GREG agent tool inputs.
- * One schema per tool across all 6 agents.
+ * Zod validation shapes for GREG agent tool inputs.
+ * These are plain objects of Zod properties (shapes) designed to be passed
+ * directly to McpServer.tool() which accepts shape objects, not z.object() schemas.
+ * Each agent file uses inline shapes for its tools; these are provided as a
+ * centralized reference and can be used via z.object(shape) if needed elsewhere.
  */
 import { z } from "zod";
 

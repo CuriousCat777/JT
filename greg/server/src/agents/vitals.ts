@@ -6,40 +6,31 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const CPT_CODES: Record<string, { code: string; description: string; category: string; rvu: number }[]> = {
+// Common primary care CPT code ranges for reference only.
+// CPT codes and descriptions are copyrighted by the AMA. This tool provides
+// code-range guidance; users must supply a licensed CPT dataset for full descriptions.
+const CPT_CODE_RANGES: Record<string, { range: string; category: string; note: string }[]> = {
   "E&M": [
-    { code: "99202", description: "New patient office visit, straightforward", category: "E&M", rvu: 1.6 },
-    { code: "99203", description: "New patient office visit, low complexity", category: "E&M", rvu: 2.6 },
-    { code: "99204", description: "New patient office visit, moderate complexity", category: "E&M", rvu: 3.69 },
-    { code: "99205", description: "New patient office visit, high complexity", category: "E&M", rvu: 4.84 },
-    { code: "99211", description: "Established patient, may not require physician", category: "E&M", rvu: 0.7 },
-    { code: "99212", description: "Established patient, straightforward", category: "E&M", rvu: 1.15 },
-    { code: "99213", description: "Established patient, low complexity", category: "E&M", rvu: 1.92 },
-    { code: "99214", description: "Established patient, moderate complexity", category: "E&M", rvu: 2.86 },
-    { code: "99215", description: "Established patient, high complexity", category: "E&M", rvu: 3.99 },
+    { range: "99202-99205", category: "E&M", note: "New patient office visits (straightforward to high complexity)" },
+    { range: "99211-99215", category: "E&M", note: "Established patient office visits" },
   ],
   lab: [
-    { code: "36415", description: "Venipuncture", category: "lab", rvu: 0.17 },
-    { code: "85025", description: "CBC with differential", category: "lab", rvu: 0.0 },
-    { code: "80053", description: "Comprehensive metabolic panel", category: "lab", rvu: 0.0 },
-    { code: "83036", description: "Hemoglobin A1c", category: "lab", rvu: 0.0 },
-    { code: "80061", description: "Lipid panel", category: "lab", rvu: 0.0 },
-    { code: "81001", description: "Urinalysis with microscopy", category: "lab", rvu: 0.0 },
-    { code: "87880", description: "Rapid strep test", category: "lab", rvu: 0.0 },
+    { range: "36415", category: "lab", note: "Venipuncture (collection)" },
+    { range: "80047-80081", category: "lab", note: "Organ/disease-oriented panels" },
+    { range: "81000-81099", category: "lab", note: "Urinalysis" },
+    { range: "85004-85999", category: "lab", note: "Hematology" },
+    { range: "87040-87999", category: "lab", note: "Microbiology/infectious disease" },
   ],
   procedure: [
-    { code: "11102", description: "Tangential biopsy, skin, single lesion", category: "procedure", rvu: 1.47 },
-    { code: "17000", description: "Destruction of premalignant lesion, first", category: "procedure", rvu: 0.81 },
-    { code: "69210", description: "Cerumen removal, one ear", category: "procedure", rvu: 0.61 },
-    { code: "20610", description: "Joint injection, major joint", category: "procedure", rvu: 1.37 },
-    { code: "10060", description: "I&D of abscess, simple", category: "procedure", rvu: 2.04 },
+    { range: "10060-10180", category: "procedure", note: "Incision and drainage" },
+    { range: "11102-11107", category: "procedure", note: "Skin biopsy" },
+    { range: "17000-17286", category: "procedure", note: "Destruction of lesions" },
+    { range: "20600-20611", category: "procedure", note: "Joint injections/aspirations" },
+    { range: "69200-69222", category: "procedure", note: "Ear procedures" },
   ],
   preventive: [
-    { code: "99381", description: "Preventive visit, new patient, infant", category: "preventive", rvu: 2.33 },
-    { code: "99391", description: "Preventive visit, established, infant", category: "preventive", rvu: 1.93 },
-    { code: "99395", description: "Preventive visit, established, 18-39", category: "preventive", rvu: 2.27 },
-    { code: "99396", description: "Preventive visit, established, 40-64", category: "preventive", rvu: 2.56 },
-    { code: "99397", description: "Preventive visit, established, 65+", category: "preventive", rvu: 2.78 },
+    { range: "99381-99387", category: "preventive", note: "Preventive visit, new patient (by age)" },
+    { range: "99391-99397", category: "preventive", note: "Preventive visit, established patient (by age)" },
   ],
 };
 
@@ -334,8 +325,12 @@ export function registerVitalsTools(server: McpServer): void {
       category: z.enum(["E&M", "procedure", "lab", "preventive", "all"]).default("all").describe("CPT category"),
     },
     async (params) => {
-      const categories = params.category === "all" ? Object.keys(CPT_CODES) : [params.category];
-      const results = categories.flatMap((cat) => (CPT_CODES[cat] ?? []).filter((c) => c.code.includes(params.query) || c.description.toLowerCase().includes(params.query.toLowerCase())));
+      const categories = params.category === "all" ? Object.keys(CPT_CODE_RANGES) : [params.category];
+      const results = categories.flatMap((cat) =>
+        (CPT_CODE_RANGES[cat] ?? []).filter((c) =>
+          c.range.includes(params.query) || c.note.toLowerCase().includes(params.query.toLowerCase())
+        )
+      );
 
       return {
         content: [{
@@ -343,8 +338,9 @@ export function registerVitalsTools(server: McpServer): void {
           text: JSON.stringify({
             query: params.query,
             category: params.category,
-            results: results.length > 0 ? results : Object.values(CPT_CODES).flat().slice(0, 10),
-            note: "CPT codes are copyrighted by the AMA. This is a reference subset for common primary care codes.",
+            results: results.length > 0 ? results : Object.values(CPT_CODE_RANGES).flat(),
+            note: "CPT codes and descriptions are copyrighted by the AMA. This tool provides code ranges for reference only. A licensed CPT dataset is required for full descriptions and billing use.",
+            resource: "Licensed CPT data available from the AMA at https://www.ama-assn.org/practice-management/cpt",
           }, null, 2),
         }],
       };

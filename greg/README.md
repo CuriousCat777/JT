@@ -67,8 +67,9 @@ A family medicine physician graduates residency and wants to open a clinic in El
 ## Regulatory Compliance
 
 - HIPAA Technical Safeguards built-in (access control, audit, encryption)
-- Zero-knowledge architecture — no PHI on GREG's servers
-- AES-256 encryption at rest, TLS 1.3 in transit
+- PHI stored locally on physician's infrastructure with AES-256 encryption at rest
+- TLS 1.3 in transit for all external communications
+- Role-based access controls with audit logging for all PHI access
 - State-by-state compliance matrix for all 50 states + DC
 
 ## External APIs
