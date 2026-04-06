@@ -467,9 +467,12 @@ class FleetOrchestrator:
             result["os_version"] = sw_vers.stdout.strip() if sw_vers.success else ""
             result["uptime"] = uptime.stdout.strip() if uptime.success else ""
         else:
-            # Windows (local) or Linux
-            kern = self.ssh_exec(node_id, "ver 2>nul || uname -srm", timeout=10)
-            uptime = self.ssh_exec(node_id, "uptime 2>/dev/null || echo N/A", timeout=10)
+            if node.os.value == "windows":
+                kern = self.ssh_exec(node_id, "ver 2>nul", timeout=10)
+                uptime = self.ssh_exec(node_id, "echo N/A", timeout=10)
+            else:
+                kern = self.ssh_exec(node_id, "uname -srm", timeout=10)
+                uptime = self.ssh_exec(node_id, "uptime 2>/dev/null || echo N/A", timeout=10)
             result["kernel"] = kern.stdout.strip() if kern.success else "unreachable"
             result["uptime"] = uptime.stdout.strip() if uptime.success else ""
 
