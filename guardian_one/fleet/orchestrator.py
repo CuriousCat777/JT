@@ -530,7 +530,11 @@ class FleetOrchestrator:
         result["reachable"] = cmd_result.return_code != -1
 
         # Docker containers separately for structured data
-        docker_result = self.ssh_exec(node_id, "docker ps --format '{{.Names}}|{{.Status}}|{{.Image}}' 2>/dev/null", timeout=10)
+        docker_result = self.ssh_exec(
+            node_id,
+            "docker ps --format '{{.Names}}|{{.Status}}|{{.Image}}'",
+            timeout=10,
+        )
         containers = []
         if docker_result.success and docker_result.stdout:
             for line in docker_result.stdout.strip().split("\n"):
