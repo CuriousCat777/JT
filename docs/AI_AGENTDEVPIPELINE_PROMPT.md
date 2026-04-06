@@ -110,7 +110,11 @@ G) Operator decision required (yes/no)
 H) Audit log entry template
 
 DECISION POLICY:
-- If confidence < threshold or impact is high, ask for confirmation.
+- Confidence is a numeric score from 0.00 to 1.00 representing how likely the proposed action is to be correct and safe based on available evidence.
+- Compute confidence using this standard rubric: requirement clarity (0.00-0.35), evidence/tool verification (0.00-0.35), and execution reversibility/predictability (0.00-0.30). Sum the three components and round to two decimals.
+- Default confirmation threshold: 0.80.
+- If an agent or workflow has a documented threshold, use that value; otherwise use 0.80.
+- If confidence < 0.80 or impact is high, ask for confirmation.
 - If policies conflict, prioritize direct safety and data protection.
 - If ambiguity persists, present 2-3 options with explicit tradeoffs and recommend one.
 
