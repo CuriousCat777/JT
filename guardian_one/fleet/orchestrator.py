@@ -459,7 +459,7 @@ class FleetOrchestrator:
                                 return_code=-1, stderr=f"Unknown node: {node_id}")
 
         if node.os.value == "macos":
-            cmd = "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null; echo '---'; ps aux | grep -E 'guardian|n8n|ollama' | grep -v grep"
+            cmd = "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null; echo '---'; (ps aux | grep -E 'guardian|n8n|ollama' | grep -v grep) || true"
         else:
             cmd = "docker ps --format \"table {{.Names}}\\t{{.Status}}\\t{{.Ports}}\" 2>nul"
         return self.ssh_exec(node_id, cmd, timeout=15)
