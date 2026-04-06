@@ -139,7 +139,7 @@ class FleetOrchestrator:
     def _build_ssh_command(self, node: ComputeNode, command: str) -> list[str]:
         """Build the SSH command for a remote node."""
         net = node.network
-        ssh_cmd = ["ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=accept-new"]
+        ssh_cmd = ["ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=yes"]
 
         if net.ssh_key_path:
             ssh_cmd.extend(["-i", net.ssh_key_path])
