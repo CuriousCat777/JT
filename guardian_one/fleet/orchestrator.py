@@ -390,17 +390,17 @@ class FleetOrchestrator:
                 "windows": "docker start n8n 2>nul || docker run -d --name n8n -p 5678:5678 n8nio/n8n",
             },
             "homelink_gateway": {
-                "macos": "cd ~/JT && python -m guardian_one.homelink.gateway &",
+                "macos": "cd ~/JT && nohup python -m guardian_one.homelink.gateway > ~/homelink_gateway.log 2>&1 < /dev/null &",
             },
             "homelink_monitor": {
-                "macos": "cd ~/JT && python -m guardian_one.homelink.monitor &",
+                "macos": "cd ~/JT && nohup python -m guardian_one.homelink.monitor > ~/homelink_monitor.log 2>&1 < /dev/null &",
             },
             "ollama": {
                 "windows": "ollama serve",
                 "macos": "ollama serve",
             },
             "backup_agent": {
-                "macos": "cd ~/JT && python main.py --schedule &",
+                "macos": "cd ~/JT && nohup python main.py --schedule > ~/backup_agent.log 2>&1 < /dev/null &",
             },
         }
 
