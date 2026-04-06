@@ -201,7 +201,7 @@ Suggested triggers:
 
 ## 6) Governance Notes
 
-- **System ownership:** AIAGENTDEVPIPELINE under ARCHIVITS AI governance.
+- **System ownership:** AI AGENTDEVPIPELINE under ARCHIVITS AI governance.
 - **Operational principle:** Protect first, then optimize.
 - **Change control:** No high-impact policy changes without explicit operator approval.
 - **Recordkeeping:** Keep immutable audit snapshots for every major revision.
