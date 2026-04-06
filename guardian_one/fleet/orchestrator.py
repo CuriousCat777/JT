@@ -226,7 +226,7 @@ class FleetOrchestrator:
         uptime_result = self.ssh_exec(node_id, "uptime", timeout=10)
         docker_result = self.ssh_exec(node_id, "docker ps --format '{{.Names}}' 2>/dev/null", timeout=10)
 
-        reachable = cpu_result.return_code != -1
+        reachable = cpu_result.success
         cpu_load = 0.0
         ram_pct = 0.0
 
