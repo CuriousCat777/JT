@@ -1,0 +1,4 @@
+interface:
+  display_name: "World Creation"
+  short_description: "Design geolocated, physics-based virtual worlds"
+  default_prompt: "Design a world-creation architecture using open geospatial data, simulation engines, and interactive agents with VR deployment in mind."
