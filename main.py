@@ -370,8 +370,8 @@ def main() -> None:
     # Fleet management (multi-device orchestration)
     parser.add_argument("--fleet", action="store_true", help="Fleet command center dashboard")
     parser.add_argument("--fleet-health", action="store_true", help="Health check all fleet nodes")
-    parser.add_argument("--fleet-ssh", nargs=2, metavar=("NODE", "CMD"), default=None,
-                        help="Execute SSH command on a fleet node")
+    parser.add_argument("--fleet-ssh", nargs=argparse.REMAINDER, metavar=("NODE", "CMD"), default=None,
+                        help="Execute SSH command on a fleet node (use '--' before NODE and command)")
     parser.add_argument("--fleet-start", nargs=2, metavar=("NODE", "SERVICE"), default=None,
                         help="Start a service on a fleet node")
     parser.add_argument("--fleet-stop", nargs=2, metavar=("NODE", "SERVICE"), default=None,
