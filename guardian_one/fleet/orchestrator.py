@@ -427,11 +427,28 @@ class FleetOrchestrator:
 
     def stop_service(self, node_id: str, service: str) -> CommandResult:
         """Stop a service on a remote node."""
-        stop_commands: dict[str, str] = {
-            "n8n": "docker stop n8n",
-            "ollama": "pkill ollama",
+        node = self.registry.get(node_id)
+        if not node:
+            return CommandResult(node_id=node_id, command=f"stop {service}",
+                                return_code=-1, stderr=f"Unknown node: {node_id}")
+
+        os_key = "macos" if node.os.value == "macos" else "windows"
+        stop_commands: dict[str, dict[str, str]] = {
+            "n8n": {
+                "macos": "docker stop n8n",
+                "windows": "docker stop n8n",
+            },
+            "ollama": {
+                "macos": "pkill ollama",
+                "windows": "taskkill /IM ollama.exe /F",
+            },
         }
-        cmd = stop_commands.get(service, f"pkill -f {service}")
+        default_commands: dict[str, str] = {
+            "macos": f"pkill -f {service}",
+            "windows": f'taskkill /F /FI "IMAGENAME eq {service}.exe"',
+        }
+        cmd_map = stop_commands.get(service, {})
+        cmd = cmd_map.get(os_key, default_commands[os_key])
         return self.ssh_exec(node_id, cmd, timeout=15)
 
     def list_services(self, node_id: str) -> CommandResult:
