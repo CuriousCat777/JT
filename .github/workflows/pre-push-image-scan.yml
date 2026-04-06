@@ -1,0 +1,32 @@
+name: Pre-Push Image Scan
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Dockerfile'
+      - 'scripts/**'
+
+jobs:
+  scan-before-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: n8n-local:scan
+
+      - name: Run Trivy on built image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: n8n-local:scan
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH

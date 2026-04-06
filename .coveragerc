@@ -1,0 +1,15 @@
+[run]
+source = guardian_one
+branch = true
+omit =
+    guardian_one/templates/*
+    guardian_one/*/__init__.py
+
+[report]
+fail_under = 65
+show_missing = true
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__
+    raise NotImplementedError
+    if TYPE_CHECKING
