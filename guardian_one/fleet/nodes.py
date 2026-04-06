@@ -238,11 +238,21 @@ class FleetRegistry:
 
     def fleet_summary(self) -> dict[str, Any]:
         nodes = self.all_nodes()
-        online = [n for n in nodes if n.status == NodeStatus.ONLINE]
+        online_statuses = {
+            NodeStatus.ONLINE,
+            NodeStatus.BUSY,
+            NodeStatus.STANDBY,
+        }
+        offline_statuses = {
+            NodeStatus.OFFLINE,
+            NodeStatus.UNREACHABLE,
+        }
+        online = [n for n in nodes if n.status in online_statuses]
+        offline = [n for n in nodes if n.status in offline_statuses]
         return {
             "total_nodes": len(nodes),
             "online": len(online),
-            "offline": len(nodes) - len(online),
+            "offline": len(offline),
             "total_ram_gb": self.total_ram_gb(),
             "total_storage_gb": self.total_storage_gb(),
             "nodes": [
