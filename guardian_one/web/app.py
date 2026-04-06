@@ -78,6 +78,24 @@ def create_app() -> Flask:
     )
 
     # ------------------------------------------------------------------
+    # GOOS Platform — registration, onboarding, health checks
+    # ------------------------------------------------------------------
+    from guardian_one.goos.routes import goos_bp, init_goos
+    app.register_blueprint(goos_bp)
+    init_goos()
+
+    # Top-level health check (redirects to GOOS health)
+    @app.route("/health")
+    def health_check():
+        from datetime import datetime, timezone
+        return jsonify({
+            "status": "ok",
+            "platform": "Guardian One Operating System",
+            "version": "1.0",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # ------------------------------------------------------------------
     # Search — document search routes
     # ------------------------------------------------------------------
     from guardian_one.web.search_routes import search_bp

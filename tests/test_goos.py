@@ -10,6 +10,7 @@ from guardian_one.goos.client import (
     ClientTier,
     GOOSClient,
     OnboardingStep,
+    VarysNode,
 )
 from guardian_one.goos.registration import RegistrationService
 from guardian_one.goos.onboarding import OnboardingEngine
@@ -422,6 +423,119 @@ class TestGOOSAPI:
         assert status["platform"] == "Guardian One Operating System"
         assert status["version"] == "1.0"
         assert status["total_clients"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Sentinel tests
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# GOOS Database tests
+# ---------------------------------------------------------------------------
+
+class TestGOOSDatabase:
+    def test_save_and_load_client(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        client = GOOSClient(
+            client_id="db-test-1",
+            email="db@test.com",
+            display_name="DB Test",
+            tier=ClientTier.PREMIUM,
+            status=ClientStatus.ACTIVE,
+            agents_enabled=["guardian", "cfo"],
+        )
+        db.save_client(client)
+        loaded = db.load_client("db-test-1")
+        assert loaded is not None
+        assert loaded.email == "db@test.com"
+        assert loaded.tier == ClientTier.PREMIUM
+        assert "cfo" in loaded.agents_enabled
+        db.close()
+
+    def test_load_by_email(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        client = GOOSClient(
+            client_id="email-test",
+            email="find@me.com",
+            display_name="Find Me",
+        )
+        db.save_client(client)
+        loaded = db.load_client_by_email("find@me.com")
+        assert loaded is not None
+        assert loaded.client_id == "email-test"
+        db.close()
+
+    def test_save_with_varys_node(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        client = GOOSClient(
+            client_id="node-test",
+            email="node@test.com",
+            display_name="Node Test",
+        )
+        client.varys_nodes.append(VarysNode(
+            node_id="n1", hostname="laptop", os_type="linux",
+            installed_at="2026-01-01", last_seen="2026-01-01",
+        ))
+        db.save_client(client)
+        loaded = db.load_client("node-test")
+        assert len(loaded.varys_nodes) == 1
+        assert loaded.varys_nodes[0].hostname == "laptop"
+        db.close()
+
+    def test_client_count(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        assert db.client_count() == 0
+        db.save_client(GOOSClient(
+            client_id="c1", email="a@b.com", display_name="A",
+        ))
+        db.save_client(GOOSClient(
+            client_id="c2", email="c@d.com", display_name="C",
+        ))
+        assert db.client_count() == 2
+        db.close()
+
+    def test_delete_client(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        db.save_client(GOOSClient(
+            client_id="del-me", email="del@me.com", display_name="Del",
+        ))
+        assert db.delete_client("del-me")
+        assert db.load_client("del-me") is None
+        db.close()
+
+    def test_registry_bridge(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+
+        # Save via registry
+        reg = ClientRegistry()
+        c = reg.create_client("bridge@test.com", "Bridge")
+        db.save_from_registry(reg)
+
+        # Load into new registry
+        reg2 = ClientRegistry()
+        loaded = db.load_into_registry(reg2)
+        assert loaded == 1
+        assert reg2.get_by_email("bridge@test.com") is not None
+        db.close()
+
+    def test_session_management(self, tmp_path):
+        from guardian_one.goos.database import GOOSDatabase
+        db = GOOSDatabase(db_path=tmp_path / "test.db")
+        db.save_client(GOOSClient(
+            client_id="sess-test", email="s@t.com", display_name="S",
+        ))
+        db.create_session("sess-test", "tok-123", "127.0.0.1")
+        assert db.validate_session("tok-123") == "sess-test"
+        assert db.validate_session("bad-token") is None
+        db.invalidate_session("tok-123")
+        assert db.validate_session("tok-123") is None
+        db.close()
 
 
 # ---------------------------------------------------------------------------
