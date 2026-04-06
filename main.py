@@ -31,11 +31,37 @@ Usage:
     python main.py --scene movie         # Activate a scene (movie, work, away, goodnight)
     python main.py --home-event wake     # Fire event (wake, sleep, leave, arrive, sunrise, sunset)
     python main.py --flipper             # Flipper Zero device profiles
+    python main.py --hue                  # Show all Hue lights and groups
+    python main.py --hue-register         # Register with Hue Bridge (press link button first!)
+    python main.py --hue-on 1             # Turn on light 1
+    python main.py --hue-off 1            # Turn off light 1
+    python main.py --hue-dim 1:50         # Dim light 1 to 50%
+    python main.py --hue-color 1:warm     # Set light 1 to warm white
+    python main.py --hue-scene 1:abc123   # Activate scene in group
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --power-tools          # Rails + Gin power tools status
+    python main.py --rails-new APP        # Scaffold a new Rails app
+    python main.py --gin-new APP          # Scaffold a new Gin app
+    python main.py --rails-server PATH    # Start Rails dev server
+    python main.py --gin-server PATH      # Start Gin dev server
+    python main.py --rails-install        # Install Ruby on Rails via gem
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --sentinel             # IoT Sentinel dashboard (network + security)
+    python main.py --sentinel-scan        # Run one-time network scan
+    python main.py --sentinel-monitor     # Start continuous network monitoring
+    python main.py --network-audit        # LAN security audit (VLAN, DNS, credentials)
+    python main.py --vpn-status           # Tailscale VPN status
+    python main.py --iot                  # Sovereign IoT stack dashboard
+    python main.py --iot-scaffold         # Scaffold Docker Compose IoT stack
+    python main.py --iot-start            # Start IoT Docker Compose stack
+    python main.py --iot-stop             # Stop IoT Docker Compose stack
+    python main.py --iot-scan             # Scan LAN for devices (nmap)
+    python main.py --iot-scan 10.0.0.0/24 # Scan custom subnet
+    python main.py --iot-security         # IoT security checklist + VLAN policy
+    python main.py --iot-workflows ./out  # Export n8n + Node-RED workflow templates
 """
 
 from __future__ import annotations
@@ -64,6 +90,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.dev_coach import DevCoach
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -91,6 +118,9 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    dc_cfg = config.agents.get("dev_coach", AgentConfig(name="dev_coach"))
+    guardian.register_agent(DevCoach(config=dc_cfg, audit=guardian.audit))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -275,6 +305,8 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--n8n-sync", action="store_true", help="Push n8n workflow status to Notion dashboard")
+    parser.add_argument("--n8n-status", action="store_true", help="Show n8n connection and workflow status")
     parser.add_argument("--devices", action="store_true",
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
@@ -295,6 +327,20 @@ def main() -> None:
                         help="Audit Claude connector/MCP attack surface")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
+    parser.add_argument("--sentinel", action="store_true",
+                        help="IoT Sentinel dashboard (network security + device control)")
+    parser.add_argument("--sentinel-scan", action="store_true",
+                        help="Run a one-time network scan and report anomalies")
+    parser.add_argument("--sentinel-monitor", action="store_true",
+                        help="Start continuous network monitoring")
+    parser.add_argument("--sentinel-approve", type=int, default=None,
+                        help="Approve a pending sentinel recommendation by index")
+    parser.add_argument("--sentinel-deny", type=int, default=None,
+                        help="Deny a pending sentinel recommendation by index")
+    parser.add_argument("--network-audit", action="store_true",
+                        help="LAN security audit (VLAN, DNS blocking, credentials)")
+    parser.add_argument("--vpn-status", action="store_true",
+                        help="Tailscale VPN connection status")
     parser.add_argument("--cfo-clean", action="store_true",
                         help="Clean ledger: strip sandbox data, RM goals, zero-balance dupes")
     parser.add_argument("--cfo-clean-dry", action="store_true",
@@ -308,6 +354,18 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
+    parser.add_argument("--dev-coach", dest="archivist", action="store_true",
+                        help="Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--dev-coach-tier", dest="archivist_tier", action="store_true",
+                        help="Show the Developer Coach's opinionated tech tier list")
+    parser.add_argument("--dev-coach-wisdom", dest="archivist_wisdom", action="store_true",
+                        help="Get a Fireship-style developer wisdom tip")
+    parser.add_argument("--dev-coach-system", dest="archivist_system", action="store_true",
+                        help="Show system inventory (hardware/software)")
+    parser.add_argument("--dev-coach-stack", dest="archivist_stack", type=str, default=None,
+                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
+    parser.add_argument("--dev-coach-audit", dest="archivist_audit", type=str, default=None,
+                        help="Run web dev audit on a domain")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
@@ -317,6 +375,71 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # ------------------------------------------------------------------
+    # The Archivist — Developer Coach commands
+    # ------------------------------------------------------------------
+    if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
+        coach = guardian.get_agent("dev_coach")
+        if coach and isinstance(coach, DevCoach):
+            if args.archivist_tier:
+                tiers = coach.get_tier_list()
+                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
+                print("  " + "=" * 55)
+                for tier_name in ["S", "A", "B", "C", "D", "F"]:
+                    entries = tiers.get(tier_name, [])
+                    if entries:
+                        print(f"\n  [{tier_name}-TIER]")
+                        for e in entries:
+                            print(f"    {e['name']:<20} {e['notes']}")
+                print()
+            elif args.archivist_wisdom:
+                tip = coach.get_wisdom()
+                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
+            elif args.archivist_system:
+                inventory = coach.get_system_inventory()
+                print("\n  THE ARCHIVIST — System Inventory")
+                print("  " + "=" * 55)
+                for comp in inventory:
+                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
+                    for k, v in comp.get('specs', {}).items():
+                        print(f"    {k}: {v}")
+                print()
+            elif args.archivist_stack:
+                rec = coach.recommend_stack(args.archivist_stack)
+                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.archivist_stack}")
+                print("  " + "=" * 55)
+                for item in rec.get("stack", []):
+                    print(f"  {item['name']:<20} {item['reason']}")
+                print(f"\n  \"{rec.get('summary', '')}\"\n")
+            elif args.archivist_audit:
+                audit = coach.web_audit(args.archivist_audit)
+                print(f"\n  THE ARCHIVIST — Web Audit: {args.archivist_audit}")
+                print("  " + "=" * 55)
+                for check, info in audit.items():
+                    status = info.get("status", "needs_review")
+                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
+                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
+                print()
+            else:
+                report = guardian.run_agent("dev_coach")
+                print(f"\n  THE ARCHIVIST — Developer Coach Report")
+                print("  " + "=" * 55)
+                print(f"  Status: {report.status}")
+                print(f"  {report.summary}")
+                if report.recommendations:
+                    print("\n  Recommendations:")
+                    for r in report.recommendations:
+                        print(f"    - {r}")
+                if report.alerts:
+                    print("\n  Alerts:")
+                    for a in report.alerts:
+                        print(f"    [!] {a}")
+                print()
+        else:
+            print("DevCoach agent not available.")
+        guardian.shutdown()
+        return
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")
@@ -434,6 +557,337 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    # --- Power Tools: Rails + Gin ---
+    if (args.power_tools or args.rails_new or args.rails_server
+            or args.rails_install or args.gin_new or args.gin_server):
+        from guardian_one.integrations.rails_gin import (
+            power_tools_status, scaffold_rails, scaffold_gin,
+            start_rails_server, start_gin_server, install_rails,
+        )
+
+        if args.power_tools:
+            status = power_tools_status()
+            print()
+            print("  POWER TOOLS — Rails + Gin")
+            print("  " + "=" * 50)
+            print(f"  Ruby:   {status['ruby']['status']:<16} {status['ruby']['version']}")
+            print(f"  Rails:  {status['rails']['status']:<16} {status['rails']['version']}")
+            print(f"  Go:     {status['go']['status']:<16} {status['go']['version']}")
+            print(f"  Gin:    {status['gin']['status']:<16} {status['gin'].get('note', '')}")
+            print()
+            print("  RAILS CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["rails"]:
+                print(f"    - {cap}")
+            print()
+            print("  GIN CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["gin"]:
+                print(f"    - {cap}")
+            print()
+            print("  USE CASES")
+            print("  " + "-" * 50)
+            for key, desc in status["use_cases"].items():
+                label = key.replace("_", " ").title()
+                print(f"    {label}:")
+                print(f"      {desc}")
+            print()
+
+        elif args.rails_install:
+            print("\n  Installing Ruby on Rails...")
+            result = install_rails()
+            if result["success"]:
+                if result.get("already_installed"):
+                    print(f"  Rails already installed: {result['version']}")
+                else:
+                    print(f"  Rails installed: {result['version']}")
+            else:
+                print(f"  Installation failed: {result['error']}")
+
+        elif args.rails_new:
+            app_name = args.rails_new
+            print(f"\n  Scaffolding Rails app: {app_name}")
+            if args.rails_api:
+                print("  Mode: API-only")
+            print(f"  Database: {args.rails_db}")
+            result = scaffold_rails(
+                app_name=app_name,
+                api_only=args.rails_api,
+                database=args.rails_db,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --rails-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_new:
+            app_name = args.gin_new
+            module = args.gin_module or app_name
+            print(f"\n  Scaffolding Gin app: {app_name}")
+            print(f"  Module: {module}")
+            print(f"  Port: {args.gin_port}")
+            result = scaffold_gin(
+                app_name=app_name,
+                module_path=module,
+                port=args.gin_port,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --gin-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.rails_server:
+            app_path = args.rails_server
+            port = args.rails_port
+            print(f"\n  Starting Rails server: {app_path} on port {port}")
+            result = start_rails_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_server:
+            app_path = args.gin_server
+            port = args.gin_port
+            print(f"\n  Starting Gin server: {app_path} on port {port}")
+            result = start_gin_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+    if args.iot or args.iot_scaffold or args.iot_start or args.iot_stop or args.iot_scan is not None or args.iot_security or args.iot_workflows:
+        from guardian_one.homelink.iot_controller import IoTController
+
+        iot_cfg = config.agents.get("iot_stack", AgentConfig(name="iot_stack"))
+        custom = iot_cfg.custom if hasattr(iot_cfg, "custom") and iot_cfg.custom else {}
+        stack_dir = Path(custom.get("stack_dir", "~/iot-stack")).expanduser()
+        tz = config.timezone or "America/Chicago"
+
+        iot = IoTController(stack_dir=stack_dir, audit=guardian.audit, timezone=tz)
+        iot.initialize()
+
+        if args.iot_scaffold:
+            zigbee = custom.get("zigbee_device", "/dev/ttyUSB0")
+            print(f"\n  Scaffolding IoT stack at {stack_dir}...")
+            result = iot.scaffold_stack(zigbee_device=zigbee)
+            if result["success"]:
+                print(f"  [OK] Stack scaffolded: {result['stack_dir']}")
+                print(f"  Files created: {len(result['files_created'])}")
+                for f in result["files_created"]:
+                    print(f"    {f}")
+                print(f"\n  Next steps:")
+                for step in result["next_steps"]:
+                    print(f"    {step}")
+            else:
+                print(f"  [FAILED] {result.get('error', 'unknown')}")
+
+        elif args.iot_start:
+            print(f"\n  Starting IoT stack...")
+            result = iot.start_stack()
+            if result["success"]:
+                print(f"  [OK] Stack started.")
+                if result.get("output"):
+                    print(f"  {result['output'][:200]}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_stop:
+            print(f"\n  Stopping IoT stack...")
+            result = iot.stop_stack()
+            if result["success"]:
+                print(f"  [OK] Stack stopped.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_scan is not None:
+            subnet = custom.get("subnet", "192.168.1.0/24") if args.iot_scan == "__CONFIG__" else args.iot_scan
+            print(f"\n  Scanning LAN: {subnet}...")
+            devices = iot.scan_network(subnet)
+            if not devices:
+                print("  No devices found (nmap may not be installed or scan failed).")
+            else:
+                print(f"  Found {len(devices)} device(s):\n")
+                print(f"  {'IP Address':15s} {'MAC Address':17s} {'Vendor':20s} {'Class':12s} {'Risk':4s}")
+                print("  " + "-" * 70)
+                for d in devices:
+                    print(
+                        f"  {d.ip_address:15s} {d.mac_address:17s} "
+                        f"{(d.vendor or 'unknown')[:20]:20s} "
+                        f"{d.device_class.value:12s} {d.risk_score}"
+                    )
+                unknown = iot.unknown_devices()
+                if unknown:
+                    print(f"\n  [!!] {len(unknown)} UNKNOWN device(s) detected!")
+                    print("  Run --iot-security for recommended actions.")
+
+        elif args.iot_security:
+            print("\n  H.O.M.E. L.I.N.K. — IoT SECURITY POSTURE")
+            print("  " + "=" * 50)
+
+            # Security checklist
+            checklist = iot.security_checklist()
+            print("\n  HARDENING CHECKLIST:")
+            for item in checklist:
+                prio = item["priority"].upper()
+                print(f"    [{prio:8s}] {item['item']}")
+                print(f"              {item['action']}")
+
+            # VLAN policy
+            policy = iot.vlan_policy()
+            print("\n  VLAN SEGMENTATION:")
+            for v in policy["vlans"]:
+                print(f"    VLAN {v['vlan_id']:2d} ({v['name']:6s}): {v['description']}")
+
+            print(f"\n  FIREWALL RULES:")
+            for rule in policy["firewall_rules"]:
+                print(f"    - {rule}")
+
+            print(f"\n  {policy['recommendation']}")
+            print()
+
+        elif args.iot_workflows:
+            from guardian_one.homelink.iot_stack import export_all_workflows
+            output_dir = args.iot_workflows
+            print(f"\n  Exporting IoT workflow templates to {output_dir}...")
+            files = export_all_workflows(output_dir)
+            print(f"  [OK] Exported {len(files)} workflow(s):")
+            for name, path in files.items():
+                print(f"    {name}: {path}")
+            print("\n  Import these into n8n and Node-RED via their respective UIs or APIs.")
+
+        else:
+            # --iot: full dashboard
+            print(iot.dashboard_text())
+
+            # Maintenance schedule
+            maint = iot.maintenance_schedule()
+            print("  MAINTENANCE:")
+            for task, freq in maint["automated"].items():
+                print(f"    {task:30s} {freq}")
+            print("\n  REQUIRES MANUAL APPROVAL:")
+            for task in maint["manual_approval_required"]:
+                print(f"    - {task}")
+            print()
+
+        guardian.shutdown()
+        return
+
+    if args.hue or args.hue_register or args.hue_on or args.hue_off or args.hue_dim or args.hue_color or args.hue_scene:
+        from guardian_one.homelink.drivers import HueDriver
+
+        dev_cfg = config.agents.get("device_agent", AgentConfig(name="device_agent"))
+        custom = dev_cfg.custom if hasattr(dev_cfg, "custom") and dev_cfg.custom else {}
+        hue_cfg = custom.get("ecosystems", {}).get("philips_hue", {})
+        bridge_ip = hue_cfg.get("bridge_ip", "192.168.1.147")
+
+        if args.hue_register:
+            print(f"\n  Registering with Hue Bridge at {bridge_ip}...")
+            print("  (Make sure you pressed the link button within the last 30 seconds!)\n")
+            result = HueDriver.register(bridge_ip)
+            if result["success"]:
+                username = result["username"]
+                print(f"  [OK] Registered! API username: {username}")
+                print(f"\n  Add this to your .env file:")
+                print(f"    HUE_BRIDGE_USERNAME={username}")
+                print(f"\n  Then Guardian One will control your lights automatically.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+                if "link button" in result.get("error", "").lower():
+                    print("  Press the physical button on top of the bridge, then retry within 30s.")
+            guardian.shutdown()
+            return
+
+        # All other hue commands need an API key
+        api_key = os.environ.get("HUE_BRIDGE_USERNAME", "")
+        if not api_key:
+            api_key = guardian.vault.retrieve("HUE_BRIDGE_USERNAME") or ""
+        if not api_key:
+            print("\n  Hue Bridge not registered. Run --hue-register first.")
+            print("  (Press the link button on the bridge, then run --hue-register)")
+            guardian.shutdown()
+            return
+
+        hue = HueDriver(bridge_ip=bridge_ip, api_key=api_key)
+
+        if args.hue_on:
+            result = hue.turn_on(light_id=args.hue_on)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_on} on"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_off:
+            result = hue.turn_off(light_id=args.hue_off)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_off} off"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_dim:
+            parts = args.hue_dim.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-dim LIGHT_ID:PERCENT (e.g. --hue-dim 1:50)")
+            else:
+                result = hue.set_brightness(int(parts[1]), light_id=parts[0])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}%"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_color:
+            parts = args.hue_color.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-color LIGHT_ID:COLOR (warm/daylight/red/green/blue)")
+            else:
+                result = hue.set_color(light_id=parts[0], color_name=parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_scene:
+            parts = args.hue_scene.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-scene GROUP_ID:SCENE_ID")
+            else:
+                result = hue.activate_scene(int(parts[0]), parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Scene {parts[1]} in group {parts[0]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        else:
+            # --hue: show all lights and groups
+            print(f"\n  H.O.M.E. L.I.N.K. — PHILIPS HUE (bridge: {bridge_ip})")
+            print("  " + "=" * 50)
+
+            lights_result = hue.get_lights()
+            if lights_result["success"] and lights_result.get("data"):
+                lights = lights_result["data"]
+                print(f"\n  LIGHTS ({len(lights)}):")
+                print(f"  {'ID':4s} {'Name':30s} {'State':6s} {'Bri':4s} {'Reachable':9s}")
+                print("  " + "-" * 55)
+                for lid, info in sorted(lights.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {})
+                    on = "ON" if state.get("on") else "OFF"
+                    bri = str(state.get("bri", "")) if state.get("on") else ""
+                    reach = "yes" if state.get("reachable") else "NO"
+                    name = info.get("name", "")
+                    print(f"  {lid:4s} {name:30s} {on:6s} {bri:4s} {reach:9s}")
+            else:
+                print(f"  Could not fetch lights: {lights_result.get('error', 'unknown')}")
+
+            groups_result = hue.get_groups()
+            if groups_result["success"] and groups_result.get("data"):
+                groups = groups_result["data"]
+                print(f"\n  GROUPS/ROOMS ({len(groups)}):")
+                print(f"  {'ID':4s} {'Name':25s} {'Type':10s} {'Lights':8s} {'All On':6s}")
+                print("  " + "-" * 55)
+                for gid, info in sorted(groups.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {}) if isinstance(info, dict) else {}
+                    name = info.get("name", "")
+                    gtype = info.get("type", "")
+                    light_count = str(len(info.get("lights", [])))
+                    all_on = "yes" if state.get("all_on") else "no"
+                    print(f"  {gid:4s} {name:25s} {gtype:10s} {light_count:8s} {all_on:6s}")
+
+            print()
+
         guardian.shutdown()
         return
 
@@ -614,6 +1068,91 @@ def main() -> None:
                     print(f"    [!!] {alert}")
         else:
             print(dev_agent.dashboard_text())
+
+    elif (args.sentinel or args.sentinel_scan or args.sentinel_monitor
+          or args.sentinel_approve is not None or args.sentinel_deny is not None):
+        from guardian_one.agents.iot_sentinel import IoTSentinel
+
+        sentinel_cfg = config.agents.get(
+            "iot_sentinel", AgentConfig(name="iot_sentinel", enabled=True,
+                                        allowed_resources=["network", "devices", "mqtt", "security"]))
+        sentinel = IoTSentinel(config=sentinel_cfg, audit=guardian.audit)
+        sentinel.initialize()
+
+        if args.sentinel_scan:
+            report = sentinel.run()
+            print(sentinel.dashboard_text())
+            if report.recommendations:
+                print("  Recommendations:")
+                for rec in report.recommendations:
+                    print(f"    - {rec}")
+            if report.alerts:
+                print("\n  Alerts:")
+                for alert in report.alerts:
+                    print(f"    [!!] {alert}")
+
+        elif args.sentinel_monitor:
+            print("\n  Starting continuous network monitoring...")
+            print(f"  Subnet: {sentinel.scanner.subnet}")
+            print(f"  Interval: {sentinel.monitor.scan_interval}s")
+            print("  Press Ctrl+C to stop.\n")
+            sentinel.start_monitoring()
+            try:
+                import signal
+                signal.pause()
+            except (KeyboardInterrupt, AttributeError):
+                # AttributeError: signal.pause not available on Windows
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+            sentinel.stop_monitoring()
+            print("\n  Monitoring stopped.")
+            print(sentinel.monitor.summary_text())
+
+        elif args.sentinel_approve is not None:
+            if sentinel.approve_recommendation(args.sentinel_approve):
+                print(f"\n  Recommendation #{args.sentinel_approve} approved.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_approve}")
+                pending = sentinel.pending_approvals()
+                if pending:
+                    print("  Pending approvals:")
+                    for i, p in enumerate(pending):
+                        print(f"    [{i}] {p['action']}: {p['description']}")
+                else:
+                    print("  No pending approvals.")
+
+        elif args.sentinel_deny is not None:
+            if sentinel.deny_recommendation(args.sentinel_deny):
+                print(f"\n  Recommendation #{args.sentinel_deny} denied.")
+            else:
+                print(f"\n  Invalid recommendation index: {args.sentinel_deny}")
+
+        else:
+            # --sentinel: show dashboard
+            sentinel.run()  # Run a scan to populate data
+            print(sentinel.dashboard_text())
+
+    elif args.network_audit:
+        from guardian_one.homelink.lan_security import LanSecurityAuditor
+        from guardian_one.homelink.devices import DeviceRegistry
+
+        registry = DeviceRegistry()
+        registry.load_defaults()
+        auditor = LanSecurityAuditor(registry)
+        print(auditor.audit_text())
+
+    elif args.vpn_status:
+        from guardian_one.homelink.tailscale import TailscaleClient
+        client = TailscaleClient(audit=guardian.audit)
+        print(client.summary_text())
+        health = client.health_check()
+        if health["issues"]:
+            print("  Issues:")
+            for issue in health["issues"]:
+                print(f"    - {issue}")
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
@@ -1041,6 +1580,58 @@ def main() -> None:
             services=services_data,
             deliverables=deliverables,
         ))
+
+    elif args.n8n_sync:
+        if not guardian.notion_sync:
+            print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+        else:
+            print("\n  Syncing n8n workflow status to Notion...")
+            result = guardian.sync_n8n_to_notion()
+            if result:
+                status = "OK" if result.success else "FAILED"
+                print(f"  [{status}] {result.pages_created} pages created, "
+                      f"{result.pages_updated} updated, "
+                      f"{result.blocks_written} blocks written "
+                      f"({result.duration_ms:.0f}ms)")
+                if result.errors:
+                    for err in result.errors:
+                        print(f"    [ERROR] {err}")
+
+    elif args.n8n_status:
+        from guardian_one.integrations.n8n_sync import N8nWorkflow
+        print("\n  n8n Workflow Engine Status")
+        print("  " + "=" * 40)
+
+        connected = False
+        if guardian.n8n_provider.has_credentials:
+            connected = guardian.n8n_provider.authenticate()
+
+        print(f"  Connection: {'Connected' if connected else 'Disconnected'}")
+        print(f"  Gateway service: {'registered' if guardian.n8n_provider.has_credentials else 'not found'}")
+
+        if connected:
+            workflows = guardian.n8n_provider.list_workflows()
+            active = sum(1 for w in workflows if w.active)
+            print(f"  Workflows: {len(workflows)} total, {active} active")
+            for wf in workflows:
+                icon = "[ON] " if wf.active else "[OFF]"
+                print(f"    {icon} {wf.name} (id: {wf.id})")
+        else:
+            print("  Set N8N_BASE_URL and N8N_API_KEY in .env to connect.")
+
+        # Show local workflows from WebArchitect if available
+        wa = guardian.get_agent("web_architect")
+        if wa and hasattr(wa, "list_workflows"):
+            local_wfs = wa.list_workflows()
+            if local_wfs:
+                print(f"\n  Local workflows (WebArchitect): {len(local_wfs)}")
+                for wf_id, wf in local_wfs.items():
+                    print(f"    [{wf_id}] {wf.name}")
+
+        print(f"\n  Notion sync: {'available' if guardian.notion_sync else 'not configured'}")
+        if guardian.notion_sync:
+            print("  Run --n8n-sync to push workflow status to Notion.")
+        print()
 
     elif args.connector_audit:
         audit_report = guardian.registry.connector_audit()

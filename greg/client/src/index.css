@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  h1 {
+    @apply text-4xl lg:text-5xl;
+  }
+
+  h2 {
+    @apply text-3xl lg:text-4xl;
+  }
+
+  h3 {
+    @apply text-2xl;
+  }
+
+  h4 {
+    @apply text-xl;
+  }
+}
+
+@layer components {
+  .card-shadow {
+    box-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 0.04),
+      0 1px 2px -1px rgb(0 0 0 / 0.06);
+  }
+
+  .card-shadow-md {
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.05),
+      0 2px 4px -2px rgb(0 0 0 / 0.05);
+  }
+
+  .card-shadow-lg {
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.05),
+      0 4px 6px -4px rgb(0 0 0 / 0.05);
+  }
+
+  .gradient-primary {
+    @apply bg-gradient-to-br from-primary-600 to-primary-800;
+  }
+
+  .gradient-accent {
+    @apply bg-gradient-to-br from-accent-500 to-accent-700;
+  }
+
+  .gradient-hero {
+    @apply bg-gradient-to-br from-primary-700 via-primary-800 to-primary-950;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
