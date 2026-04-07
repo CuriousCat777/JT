@@ -299,6 +299,10 @@ class InputStreamProcessor:
         if session is None or not session.blocks:
             return None
 
+        return self._write_session(session_id, session)
+
+    def _write_session(self, session_id: str, session: InputSession) -> Path | None:
+        """Finalize and write a session to disk + index (no lock needed)."""
         # Determine dominant category
         cat_counts: dict[str, int] = {}
         for b in session.blocks:
@@ -307,9 +311,7 @@ class InputStreamProcessor:
         session.total_words = sum(b.word_count for b in session.blocks)
         session.app_sequence = [b.app_label for b in session.blocks]
 
-        # Write session file. Sanitize session_id to prevent path traversal
-        # (session_id comes from phone payloads over HTTP and could contain
-        # "..", "/" or other path separators).
+        # Sanitize session_id to prevent path traversal.
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         safe_sid = re.sub(r"[^A-Za-z0-9_-]", "_", session_id[:8]) or "session"
         sid_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
@@ -339,16 +341,25 @@ class InputStreamProcessor:
         """Flush sessions idle longer than the configured timeout."""
         now = time.monotonic()
         cutoff = self._session_timeout
+        # Pop stale sessions under lock so a concurrent update can't
+        # revive a session between the staleness check and the flush.
+        stale: dict[str, InputSession] = {}
         with self._lock:
             stale_ids = [
                 sid for sid, last in self._session_last_update.items()
                 if now - last >= cutoff
             ]
+            for sid in stale_ids:
+                session = self._sessions.pop(sid, None)
+                self._session_last_update.pop(sid, None)
+                if session and session.blocks:
+                    stale[sid] = session
+        # Write to disk outside the lock
         paths = []
-        for sid in stale_ids:
-            p = self.flush_session(sid)
-            if p:
-                paths.append(p)
+        for sid, session in stale.items():
+            path = self._write_session(sid, session)
+            if path:
+                paths.append(path)
         return paths
 
     def flush_all(self) -> list[Path]:

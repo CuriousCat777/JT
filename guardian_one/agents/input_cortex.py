@@ -749,10 +749,13 @@ class InputCortex(BaseAgent):
                 # Load full session file
                 session_file = self._data_dir / entry.get("file", "")
                 if session_file.exists():
-                    with open(session_file) as sf:
-                        data = json.load(sf)
-                    data["status"] = "flushed"
-                    return data
+                    try:
+                        with open(session_file) as sf:
+                            data = json.load(sf)
+                        data["status"] = "flushed"
+                        return data
+                    except (json.JSONDecodeError, IOError):
+                        return {**entry, "status": "flushed_file_corrupt"}
                 return {**entry, "status": "flushed_file_missing"}
         return None
 

@@ -1125,6 +1125,7 @@ def main() -> None:
             except KeyboardInterrupt:
                 print("\n  Stopping daemon (flushing open sessions)...")
                 cortex.stop_daemon()
+                cortex.shutdown()  # flush open sessions to disk
 
         elif args.cortex_digest:
             date_arg = args.cortex_digest

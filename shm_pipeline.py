@@ -395,9 +395,18 @@ class OnlineCollector:
         results = []
         base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
+        # NCBI recommends tool + email so they can contact on issues
+        ncbi_id = {
+            "tool": os.environ.get("NCBI_TOOL", "guardian-one-shm-pipeline"),
+            "email": os.environ.get("NCBI_EMAIL", ""),
+        }
+        # Only include email if set (avoids sending empty param)
+        ncbi_id = {k: v for k, v in ncbi_id.items() if v}
+
         try:
             # Step 1: Search for PMIDs
             search_params = {
+                **ncbi_id,
                 "db": "pubmed",
                 "term": f"{query} AND hospital medicine[MeSH]",
                 "retmax": max_results,
@@ -416,6 +425,7 @@ class OnlineCollector:
             # Step 2: Fetch summaries
             time.sleep(0.34)  # Rate limit
             summary_params = {
+                **ncbi_id,
                 "db": "pubmed",
                 "id": ",".join(pmids),
                 "retmode": "json",
@@ -552,7 +562,10 @@ class OnlineCollector:
             for line in f:
                 line = line.strip()
                 if line:
-                    results.append(json.loads(line))
+                    try:
+                        results.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
                     if len(results) >= limit:
                         break
         return results
@@ -561,11 +574,15 @@ class OnlineCollector:
 # ─── Statistics ───────────────────────────────────────────────────────────────
 
 def load_stats() -> PipelineStats:
-    """Load pipeline stats from disk."""
+    """Load pipeline stats from disk. Returns empty stats on corrupt file."""
     if STATS_FILE.exists():
-        with open(STATS_FILE) as f:
-            data = json.load(f)
-        return PipelineStats(**data)
+        try:
+            with open(STATS_FILE) as f:
+                data = json.load(f)
+            return PipelineStats(**data)
+        except (json.JSONDecodeError, IOError, TypeError) as exc:
+            print(f"  [!] Corrupt pipeline_stats.json, using defaults: {exc}",
+                  file=sys.stderr)
     return PipelineStats()
 
 
