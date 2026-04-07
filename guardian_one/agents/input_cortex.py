@@ -460,7 +460,17 @@ class InputCortex(BaseAgent):
             def log_message(self, format, *args):
                 pass  # Suppress default logging
 
-        self._http_server = HTTPServer((bind, port), _Handler)
+        try:
+            self._http_server = HTTPServer((bind, port), _Handler)
+        except OSError as exc:
+            self.log(
+                "listener_bind_failed",
+                severity=Severity.ERROR,
+                details={"bind": bind, "port": port, "error": str(exc)},
+            )
+            # Signal stop so the daemon loop doesn't hang silently
+            self._stop_event.set()
+            return
         self._http_server.serve_forever()
 
     def _run_watcher(self) -> None:
@@ -707,7 +717,10 @@ class InputCortex(BaseAgent):
                 line = line.strip()
                 if not line:
                     continue
-                entry = json.loads(line)
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
                 if entry.get("session_id") != session_id:
                     continue
                 # Load full session file
