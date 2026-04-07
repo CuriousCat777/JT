@@ -545,16 +545,28 @@ class OnlineCollector:
 
             time.sleep(1)  # Rate limit between topics
 
-        # Append to results file
-        if all_results:
+        # Deduplicate against existing result IDs before appending
+        existing_ids: set[str] = set()
+        if self._results_file.exists():
+            with open(self._results_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            existing_ids.add(json.loads(line).get("result_id", ""))
+                        except json.JSONDecodeError:
+                            continue
+
+        new_results = [r for r in all_results if r.result_id not in existing_ids]
+        if new_results:
             with open(self._results_file, "a") as f:
-                for r in all_results:
+                for r in new_results:
                     f.write(json.dumps(r.to_dict()) + "\n")
 
-        return all_results
+        return new_results
 
     def get_all_results(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Read all collected online results."""
+        """Read collected online results. Pass limit=0 for unlimited."""
         if not self._results_file.exists():
             return []
         results = []
@@ -566,7 +578,7 @@ class OnlineCollector:
                         results.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-                    if len(results) >= limit:
+                    if limit and len(results) >= limit:
                         break
         return results
 
@@ -730,7 +742,7 @@ def export_pipeline_data() -> dict[str, Any]:
 
     # Load online results
     collector = OnlineCollector(OUTPUT_DIR)
-    online = collector.get_all_results(limit=200)
+    online = collector.get_all_results(limit=0)  # 0 = unlimited for full export
 
     return {
         "pipeline": "shm_pipeline",
@@ -807,9 +819,26 @@ def main():
                 print(f"    {r.snippet}")
             print()
 
-        # Update stats
+        # Persist results to JSONL so --export and stats stay consistent
+        results_file = OUTPUT_DIR / "online_results.jsonl"
+        existing_ids: set[str] = set()
+        if results_file.exists():
+            with open(results_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            existing_ids.add(json.loads(line).get("result_id", ""))
+                        except json.JSONDecodeError:
+                            continue
+        new_results = [r for r in results if r.result_id not in existing_ids]
+        if new_results:
+            with open(results_file, "a") as f:
+                for r in new_results:
+                    f.write(json.dumps(r.to_dict()) + "\n")
+
         stats = load_stats()
-        stats.total_online_results += len(results)
+        stats.total_online_results += len(new_results)
         stats.online_searches_run += 1
         stats.last_online_run = datetime.now(timezone.utc).isoformat()
         save_stats(stats)
