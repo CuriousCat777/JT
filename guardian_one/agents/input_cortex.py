@@ -22,7 +22,7 @@ Architecture:
                                                    └───────┬────────┘
                                                             │
                                               ┌─────────────┴──────────────┐
-                                              │ session_*.json (vault)     │
+                                              │ session_*.json             │
                                               │ cortex_index.jsonl         │
                                               │ daily_digest.json          │
                                               └────────────────────────────┘
@@ -109,7 +109,7 @@ class InputCortex(BaseAgent):
 
     @property
     def auth_token(self) -> str:
-        """Auth token required for HTTP listener (empty string when disabled)."""
+        """Auth token required for the HTTP listener, set from config/env or generated during initialization."""
         return self._auth_token
 
     # ── BaseAgent Lifecycle ───────────────────────────────────────────────
@@ -580,6 +580,19 @@ class InputCortex(BaseAgent):
                     severity=Severity.WARNING,
                     details={"file": path.name, "error": str(e)},
                 )
+                # Quarantine the bad file so it doesn't block the
+                # watcher loop with infinite retries / log spam.
+                try:
+                    import shutil as _shutil
+                    failed_dir = self._drop_dir / "failed"
+                    failed_dir.mkdir(exist_ok=True)
+                    fail_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+                    _shutil.move(
+                        str(path),
+                        str(failed_dir / f"{path.stem}__{fail_ts}{path.suffix}"),
+                    )
+                except OSError:
+                    pass  # best-effort quarantine
         return count
 
     def _flush_stale_sessions(self) -> list[Path]:
