@@ -84,6 +84,7 @@ class InputCortex(BaseAgent):
         self._daemon_thread: threading.Thread | None = None
         self._http_server: HTTPServer | None = None
         self._stop_event = threading.Event()
+        self._drop_lock = threading.Lock()  # guards _process_drop_dir
 
         # Stats
         self._batches_processed = 0
@@ -252,6 +253,12 @@ class InputCortex(BaseAgent):
                 "0.0.0.0" ONLY when you understand the exposure and have
                 a reverse proxy / firewall / auth token enforced.
         """
+        valid_modes = ("listener", "watcher", "both")
+        if mode not in valid_modes:
+            raise ValueError(
+                f"Invalid daemon mode {mode!r}; expected one of {valid_modes}"
+            )
+
         if self._daemon_thread and self._daemon_thread.is_alive():
             self.log("daemon_already_running", severity=Severity.WARNING)
             return
@@ -300,10 +307,11 @@ class InputCortex(BaseAgent):
         )
 
     def stop_daemon(self) -> None:
-        """Stop the background daemon."""
+        """Stop the background daemon and release the listening socket."""
         self._stop_event.set()
         if self._http_server:
             self._http_server.shutdown()
+            self._http_server.server_close()
         if self._daemon_thread:
             self._daemon_thread.join(timeout=10)
             self._daemon_thread = None
@@ -428,7 +436,7 @@ class InputCortex(BaseAgent):
                     limit_raw = params.get("limit", [None])[0]
                     if limit_raw is not None:
                         try:
-                            limit = int(limit_raw)
+                            limit = max(1, min(500, int(limit_raw)))
                         except (TypeError, ValueError):
                             self.send_response(400)
                             self.send_header("Content-Type", "application/json")
@@ -521,10 +529,18 @@ class InputCortex(BaseAgent):
         return block
 
     def _process_drop_dir(self) -> int:
-        """Process all JSON files in the drop directory."""
+        """Process all JSON files in the drop directory.
+
+        Thread-safe: guarded by _drop_lock so concurrent calls from
+        the watcher thread and periodic run() don't double-process.
+        """
         if not self._drop_dir.exists():
             return 0
 
+        with self._drop_lock:
+            return self._process_drop_dir_locked()
+
+    def _process_drop_dir_locked(self) -> int:
         count = 0
         for path in sorted(self._drop_dir.glob("*.json")):
             try:

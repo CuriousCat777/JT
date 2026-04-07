@@ -614,7 +614,8 @@ class SHMDaemon:
         print(f"  Press Ctrl+C to stop.\n")
 
         import signal
-        signal.signal(signal.SIGINT, lambda *_: self._stop_event.set())
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, lambda *_: self._stop_event.set())
 
         while not self._stop_event.is_set():
             self._cycle_count += 1

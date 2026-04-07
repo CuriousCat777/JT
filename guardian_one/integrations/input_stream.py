@@ -81,7 +81,7 @@ _PHI_PATTERNS = [
         r"(?i)(?:password|passwd|pwd|token|secret|api.?key|bearer)\s*[:=]\s*\S+"
     ), "[CREDENTIAL-REDACTED]"),
     (re.compile(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
     ), "[EMAIL-REDACTED]"),
     (re.compile(
         r"\b(?:DOB|date of birth|born)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
@@ -394,7 +394,10 @@ class InputStreamProcessor:
                 line = line.strip()
                 if not line:
                     continue
-                entry = json.loads(line)
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # skip corrupt lines
                 if category and entry.get("category") != category:
                     continue
                 if app and app.lower() not in [a.lower() for a in entry.get("apps", [])]:
