@@ -374,29 +374,36 @@ class AIEngine:
                 model="none",
             )
 
-        memory = self._get_memory(agent_name)
-
-        # Set system prompt if provided and not already set
-        if system and not any(m.role == "system" for m in memory.get_messages()):
-            memory.add(AIMessage(role="system", content=system))
-
         # Build the user message with optional context
         user_content = prompt
         if context:
             context_str = json.dumps(context, indent=2, default=str)
             user_content = f"{prompt}\n\nContext data:\n```json\n{context_str}\n```"
 
-        memory.add(AIMessage(role="user", content=user_content))
+        if self._config.enable_memory:
+            memory = self._get_memory(agent_name)
+
+            # Set system prompt if provided and not already set
+            if system and not any(m.role == "system" for m in memory.get_messages()):
+                memory.add(AIMessage(role="system", content=system))
+
+            memory.add(AIMessage(role="user", content=user_content))
+            messages = memory.get_messages()
+        else:
+            messages = []
+            if system:
+                messages.append(AIMessage(role="system", content=system))
+            messages.append(AIMessage(role="user", content=user_content))
 
         # Call the backend
         response = backend.generate(
-            messages=memory.get_messages(),
+            messages=messages,
             max_tokens=max_tokens or self._config.max_tokens,
             temperature=temperature or self._config.temperature,
         )
 
         # Store the response in memory
-        if response.success:
+        if self._config.enable_memory and response.success:
             memory.add(AIMessage(role="assistant", content=response.content))
 
         self._total_requests += 1

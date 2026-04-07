@@ -200,7 +200,14 @@ class PlaidLinkHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
     def _handle_exchange(self) -> None:
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            self._serve_json({"success": False, "error": "Invalid Content-Length"})
+            return
+        if length > 1_000_000:  # 1 MB max
+            self._serve_json({"success": False, "error": "Request body too large"})
+            return
         body = json.loads(self.rfile.read(length)) if length else {}
 
         public_token = body.get("public_token", "")
