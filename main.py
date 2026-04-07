@@ -383,6 +383,7 @@ def main() -> None:
     # The Archivist — Developer Coach commands
     # ------------------------------------------------------------------
     if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
+        from guardian_one.agents.dev_coach import DevCoach
         coach = guardian.get_agent("dev_coach")
         if coach and isinstance(coach, DevCoach):
             if args.archivist_tier:

@@ -631,7 +631,17 @@ class InputCortex(BaseAgent):
         if date is None:
             date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        entries = self.query_context(since=date, limit=500)
+        # Compute the next day so we only aggregate a single calendar day
+        from datetime import date as _date_type
+        parsed = _date_type.fromisoformat(date)
+        next_day = (parsed + timedelta(days=1)).isoformat()
+
+        # Fetch entries starting from `date`, then filter out anything
+        # on or after next_day so only the target date is included.
+        entries = [
+            e for e in self.query_context(since=date, limit=2000)
+            if e.get("started", "")[:10] <= date
+        ]
 
         # Aggregate
         app_words: dict[str, int] = {}
