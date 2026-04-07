@@ -354,12 +354,18 @@ class InputStreamProcessor:
                 self._session_last_update.pop(sid, None)
                 if session and session.blocks:
                     stale[sid] = session
-        # Write to disk outside the lock
+        # Write to disk outside the lock. On I/O failure, re-insert
+        # the session so transient errors don't permanently lose data.
         paths = []
         for sid, session in stale.items():
-            path = self._write_session(sid, session)
-            if path:
-                paths.append(path)
+            try:
+                path = self._write_session(sid, session)
+                if path:
+                    paths.append(path)
+            except OSError:
+                with self._lock:
+                    self._sessions[sid] = session
+                    self._session_last_update[sid] = time.monotonic()
         return paths
 
     def flush_all(self) -> list[Path]:
