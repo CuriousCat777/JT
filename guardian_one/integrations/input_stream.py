@@ -299,7 +299,14 @@ class InputStreamProcessor:
         if session is None or not session.blocks:
             return None
 
-        return self._write_session(session_id, session)
+        try:
+            return self._write_session(session_id, session)
+        except OSError:
+            # Re-insert so transient I/O errors don't lose data
+            with self._lock:
+                self._sessions[session_id] = session
+                self._session_last_update[session_id] = time.monotonic()
+            return None
 
     def _write_session(self, session_id: str, session: InputSession) -> Path | None:
         """Finalize and write a session to disk + index (no lock needed)."""
