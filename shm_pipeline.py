@@ -20,9 +20,7 @@ Daemon mode:
     Runs continuously, collecting SHM-related content from:
     - SHM conference abstracts and proceedings
     - PubMed/MEDLINE hospital medicine literature
-    - Clinical practice guidelines (AHA, IDSA, ATS, etc.)
-    - Quality improvement registries and measures
-    - CMS policy updates relevant to hospitalists
+    - SHM.org conference content and resources
 
 Skill interface:
     Other AI agents can invoke this pipeline via the dispatch protocol:
