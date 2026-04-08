@@ -425,7 +425,6 @@ def test_http_listener_rejects_without_token_and_accepts_with(tmp_path):
     verify that requests without a valid X-Cortex-Token get 401,
     and requests with the correct token get 200."""
     import http.client
-    import threading
 
     audit = AuditLog(log_dir=tmp_path / "logs")
     cfg = AgentConfig(

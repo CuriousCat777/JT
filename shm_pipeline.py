@@ -378,7 +378,7 @@ class OnlineCollector:
         self._cache_dir = output_dir / "search_cache"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._results_file = output_dir / "online_results.jsonl"
-        self._result_counter = 0
+
 
     def search_pubmed(self, query: str, max_results: int = 20) -> list[OnlineResult]:
         """Search PubMed for hospital medicine literature.

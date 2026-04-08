@@ -48,6 +48,7 @@ import threading
 import time
 from datetime import datetime, timezone, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from typing import Any
 
@@ -171,7 +172,7 @@ class InputCortex(BaseAgent):
             actions.append(f"Flushed {len(flushed)} stale session(s)")
             self._sessions_flushed += len(flushed)
 
-        # Generate daily digest if past midnight
+        # Attempt daily digest generation when one is due
         digest = self._maybe_generate_digest()
         if digest:
             actions.append("Generated daily digest")
@@ -460,8 +461,11 @@ class InputCortex(BaseAgent):
             def log_message(self, format, *args):
                 pass  # Suppress default logging
 
+        class _ThreadedServer(ThreadingMixIn, HTTPServer):
+            daemon_threads = True
+
         try:
-            self._http_server = HTTPServer((bind, port), _Handler)
+            self._http_server = _ThreadedServer((bind, port), _Handler)
         except OSError as exc:
             self.log(
                 "listener_bind_failed",
@@ -563,16 +567,20 @@ class InputCortex(BaseAgent):
                     self.ingest_payload(p)
                     count += 1
 
-                # Move processed file to archive. Use shutil.move to
-                # handle cross-filesystem moves; add a timestamp suffix
-                # to guarantee uniqueness (Windows rename fails when the
-                # destination already exists).
-                import shutil
+                # Delete the raw payload (may contain plaintext text)
+                # and write a metadata-only processing receipt instead.
                 processed_dir = self._drop_dir / "processed"
                 processed_dir.mkdir(exist_ok=True)
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-                dest = processed_dir / f"{path.stem}__{ts}{path.suffix}"
-                shutil.move(str(path), str(dest))
+                receipt = processed_dir / f"{path.stem}__{ts}.json"
+                with open(receipt, "w") as rf:
+                    json.dump({
+                        "original_file": path.name,
+                        "processed_at": datetime.now(timezone.utc).isoformat(),
+                        "payload_count": len(payloads),
+                        "status": "ingested",
+                    }, rf)
+                path.unlink()
 
             except Exception as e:
                 self.log(
@@ -631,16 +639,10 @@ class InputCortex(BaseAgent):
         if date is None:
             date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        # Compute the next day so we only aggregate a single calendar day
-        from datetime import date as _date_type
-        parsed = _date_type.fromisoformat(date)
-        next_day = (parsed + timedelta(days=1)).isoformat()
-
-        # Fetch entries starting from `date`, then filter out anything
-        # on or after next_day so only the target date is included.
+        # Fetch entries for the target calendar day only.
         entries = [
             e for e in self.query_context(since=date, limit=2000)
-            if e.get("started", "")[:10] <= date
+            if e.get("started", "")[:10] == date
         ]
 
         # Aggregate
@@ -654,8 +656,13 @@ class InputCortex(BaseAgent):
             total_words += words
             cat = e.get("category", "unknown")
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
-            for app_name in e.get("apps", []):
-                app_words[app_name] = app_words.get(app_name, 0) + words
+            # Sessions can span multiple apps. Split words evenly so
+            # app_usage doesn't double-count full session totals.
+            apps = list(dict.fromkeys(e.get("apps", [])))
+            if apps:
+                base, remainder = divmod(words, len(apps))
+                for idx, app_name in enumerate(apps):
+                    app_words[app_name] = app_words.get(app_name, 0) + base + (1 if idx < remainder else 0)
 
         digest = {
             "date": date,
