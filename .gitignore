@@ -47,6 +47,7 @@ data/rocket_money_transactions.csv
 
 # OAuth tokens & credentials (sensitive)
 config/gmail_token.json
+config/google_token.json
 config/google_credentials.json
 
 # Plaid access tokens (sensitive — bank connection credentials)
