@@ -302,9 +302,13 @@ class InputStreamProcessor:
         try:
             return self._write_session(session_id, session)
         except OSError:
-            # Re-insert so transient I/O errors don't lose data
+            # Re-insert (or merge) so transient I/O errors don't lose data
             with self._lock:
-                self._sessions[session_id] = session
+                existing = self._sessions.get(session_id)
+                if existing is not None:
+                    existing.blocks = session.blocks + existing.blocks
+                else:
+                    self._sessions[session_id] = session
                 self._session_last_update[session_id] = time.monotonic()
             return None
 
@@ -371,7 +375,14 @@ class InputStreamProcessor:
                     paths.append(path)
             except OSError:
                 with self._lock:
-                    self._sessions[sid] = session
+                    existing = self._sessions.get(sid)
+                    if existing is not None:
+                        # A new batch arrived while we were writing —
+                        # merge the stale blocks into the new session
+                        # so neither old nor new data is lost.
+                        existing.blocks = session.blocks + existing.blocks
+                    else:
+                        self._sessions[sid] = session
                     self._session_last_update[sid] = time.monotonic()
         return paths
 

@@ -349,7 +349,7 @@ class InputCortex(BaseAgent):
                 handler.end_headers()
                 handler.wfile.write(b"Content-Length required")
                 return None
-            if length > max_bytes:
+            if length < 0 or length > max_bytes:
                 handler.send_response(413)
                 handler.end_headers()
                 handler.wfile.write(
