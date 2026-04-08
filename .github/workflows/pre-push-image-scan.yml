@@ -24,7 +24,7 @@ jobs:
           tags: n8n-local:scan
 
       - name: Run Trivy on built image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: n8n-local:scan
           format: table
