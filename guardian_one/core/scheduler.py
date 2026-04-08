@@ -324,6 +324,7 @@ class Scheduler:
                 try:
                     cmd = input("guardian> ")
                 except EOFError:
+                    self._stop_event.set()
                     break
                 if not self._handle_command(cmd):
                     break
