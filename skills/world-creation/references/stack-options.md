@@ -1,6 +1,11 @@
 # World Creation Stack Options
 
-## 1) Product-first options available today
+## Recommended baseline (most likely to work quickly)
+- Unreal Engine + Cesium for Unreal + OpenXR
+- OSM for vectors + Copernicus/SRTM for terrain + Sentinel-2 for textures
+- Behavior-tree agents first; optional LLM planner as a bounded layer
+
+## Product-first options available today
 
 ### Cesium ecosystem
 - Cesium ion + Cesium for Unreal / Cesium for Unity
@@ -8,37 +13,37 @@
 - Best for: geolocated digital twins and large terrain
 
 ### NVIDIA Omniverse stack
-- Omniverse + OpenUSD + Isaac Sim (for robotics/simulation-heavy workflows)
+- Omniverse + OpenUSD + Isaac Sim (simulation-heavy workflows)
 - Strength: simulation workflows, USD interoperability, RTX visualization
-- Best for: enterprise simulation and multi-tool pipelines
+- Best for: enterprise simulation and robotics workflows
 
 ### Esri ArcGIS Maps SDKs (Unity/Unreal)
-- Strength: GIS-native workflows, authoritative enterprise geodata integration
-- Best for: orgs already invested in ArcGIS infrastructure
+- Strength: GIS-native workflows, enterprise geodata integration
+- Best for: teams already invested in ArcGIS infrastructure
 
-## 2) Open-source composable options
+## Open-source composable options
 
 ### Engine/runtime
 - Godot (open-source, flexible for custom gameplay + simulation)
-- Unreal Engine (source available, advanced rendering/physics)
-- Unity (widely used tooling; check current license terms per use case)
+- Unreal Engine (source-available, advanced rendering/physics)
+- Unity (widely used tooling; verify license fit before selection)
 
 ### Geospatial + processing
 - GDAL/rasterio (raster transforms)
 - pyproj/proj (coordinate transforms)
 - OSM tooling (Overpass, osm2pgsql, tile pipelines)
-- 3D Tiles tooling and OpenUSD toolchains
+- 3D Tiles and OpenUSD tooling for interchange
 
 ### Physics/simulation
-- Bullet/PhysX/in-engine physics
-- Custom domain solvers for weather/hydrology/traffic when needed
+- In-engine physics (Chaos/PhysX/Bullet depending on engine)
+- Domain-specific offline solvers for weather/hydrology/traffic
 
 ### Agent frameworks
-- Behavior trees + navmesh for deterministic NPCs
-- LLM-agent orchestration for high-level planning (bounded by rule-based action layer)
+- Behavior trees + navmesh for deterministic NPC behaviors
+- LLM orchestration for high-level planning with bounded action layer
 
-## 3) Hybrid recommendation template
+## Hybrid template
 - Bootstrap geospatial world with Cesium or ArcGIS SDK.
 - Export/bridge assets into Unreal or Unity for gameplay polish.
-- Keep simulation services separate (Python/C++ microservices) for scenario batch runs.
+- Keep heavy simulation as external Python/C++ services for batch scenarios.
 - Use OpenUSD or glTF contracts for asset interchange.
