@@ -73,6 +73,67 @@ docs/
     └── 03_GO_TO_MARKET.md          # Go-to-market strategy doc
 ```
 
+## Code Verification Protocol (MANDATORY)
+
+**NO task may be reported as complete without deterministic verification.**
+
+### Before Declaring Done — EVERY Time:
+1. **Run the full test suite**: `pytest tests/ --tb=short -q` — must show 0 failures
+2. **Run a 100-cycle validation loop** for any new/modified component:
+   ```bash
+   python -c "
+   import sys; failures = 0
+   for i in range(100):
+       try:
+           # Import and exercise the changed module
+           exec(open('test_script.py').read())
+       except Exception as e:
+           failures += 1; print(f'Cycle {i}: FAIL — {e}')
+   print(f'Results: {100-failures}/100 passed, {failures} failed')
+   sys.exit(1 if failures > 0 else 0)
+   "
+   ```
+3. **Verify imports resolve**: `python -c "import guardian_one"` — no ImportError
+4. **Check for regressions**: Compare test count before and after changes
+5. **Lint critical paths**: No syntax errors in modified files
+
+### What Gets Reported to User:
+- Test results (pass/fail count)
+- Any new failures introduced
+- Any modules with zero coverage that were touched
+- Honest assessment of what was NOT verified (e.g., "requires live API")
+
+### What Is NOT Acceptable:
+- "Merge successful" without running tests
+- "Code written" without verifying it imports and runs
+- Skipping validation because "it looks right"
+- Reporting aspirational code as functional
+
+## Target Architecture
+
+### Production Stack (Market-Ready)
+- **Frontend**: React 18 + TypeScript + Tailwind CSS (Vite build)
+- **Backend API**: Ruby on Rails 7 (API mode) — RESTful + ActionCable websockets
+- **Agent Engine**: Python 3.11+ (Guardian One core — stays Python)
+- **Database**: PostgreSQL 16 (primary) + Redis (cache/queues)
+- **Search**: Typesense (self-hosted)
+- **Platform**: Linux only (Ubuntu 22.04+ / Debian 12+)
+- **Containers**: Docker Compose (dev) → Kubernetes (prod)
+- **CI/CD**: GitHub Actions → staging → production
+
+### Rails ↔ Python Bridge
+- Rails handles HTTP, auth, sessions, admin, API endpoints
+- Python Guardian One agents run as background workers
+- Communication via PostgreSQL job queue or Redis pub/sub
+- Rails calls Python agents via subprocess or gRPC
+
+### Data Acquisition Agent
+- `guardian_one/agents/data_collector.py` — seeks, validates, and stores public datasets
+- Sources: data.gov, Kaggle, Census, HHS, CMS, PubMed, OpenData portals
+- Storage: PostgreSQL + local filesystem (`data/datasets/`)
+- Scheduling: Automated discovery and refresh cycles
+- Validation: Schema checks, row counts, integrity verification before storage
+
 ## Key Design Principles
 
 1. **Data sovereignty** — User owns all data, encrypted at rest and in transit
