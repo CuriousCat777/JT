@@ -59,6 +59,7 @@ data/dashboard.xlsx
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Test / Coverage
 .coverage
