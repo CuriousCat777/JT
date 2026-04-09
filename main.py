@@ -49,6 +49,12 @@ Usage:
     python main.py --gin-server PATH      # Start Gin dev server
     python main.py --rails-install        # Install Ruby on Rails via gem
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
+    python main.py --cortex               # InputCortex status — keystroke intelligence
+    python main.py --cortex-daemon        # Start InputCortex daemon (listener+watcher)
+    python main.py --cortex-daemon listener  # HTTP-only mode
+    python main.py --cortex-digest        # Today's behavioral digest
+    python main.py --cortex-query search  # Query context blocks by category
+    python main.py --cortex-pattern 7     # Behavioral pattern analysis (N days)
     python main.py --fleet               # Fleet command center (3-node dashboard)
     python main.py --fleet-health        # Health check all fleet nodes (A/B/C)
     python main.py --fleet-ssh NODE CMD  # Execute command on a fleet node via SSH
@@ -89,7 +95,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
-from guardian_one.agents.dev_coach import DevCoach
+from guardian_one.agents.input_cortex import InputCortex
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -118,8 +124,10 @@ def _build_agents(guardian: GuardianOne) -> None:
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
-    dc_cfg = config.agents.get("dev_coach", AgentConfig(name="dev_coach"))
-    guardian.register_agent(DevCoach(config=dc_cfg, audit=guardian.audit))
+    cortex_cfg = config.agents.get("input_cortex", AgentConfig(name="input_cortex"))
+    guardian.register_agent(InputCortex(
+        config=cortex_cfg, audit=guardian.audit, data_dir=config.data_dir,
+    ))
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -324,18 +332,26 @@ def main() -> None:
                         help="Push remediation status to Notion")
     parser.add_argument("--connector-audit", action="store_true",
                         help="Audit Claude connector/MCP attack surface")
+    parser.add_argument("--cortex", action="store_true",
+                        help="InputCortex status — keystroke intelligence agent")
+    parser.add_argument("--cortex-daemon", nargs="?", const="both", default=None,
+                        help="Start InputCortex daemon (listener|watcher|both)")
+    parser.add_argument("--cortex-port", type=int, default=9473,
+                        help="InputCortex listener port (default: 9473)")
+    parser.add_argument("--cortex-bind", type=str, default="127.0.0.1",
+                        help="InputCortex listener bind address (default: 127.0.0.1 loopback)")
+    parser.add_argument("--cortex-show-token", action="store_true",
+                        help="Print the InputCortex auth token on daemon start (default: hide)")
+    parser.add_argument("--cortex-digest", nargs="?", const="today", default=None,
+                        help="Generate InputCortex daily digest (date or 'today')")
+    parser.add_argument("--cortex-query", type=str, default=None,
+                        help="Query InputCortex context (category filter)")
+    parser.add_argument("--cortex-pattern", type=int, default=None,
+                        help="InputCortex behavioral pattern analysis (N days)")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
-    parser.add_argument("--sentinel", action="store_true",
-                        help="IoT Sentinel dashboard (network security + device control)")
-    parser.add_argument("--sentinel-scan", action="store_true",
-                        help="Run a one-time network scan and report anomalies")
-    parser.add_argument("--sentinel-monitor", action="store_true",
-                        help="Start continuous network monitoring")
-    parser.add_argument("--sentinel-approve", type=int, default=None,
-                        help="Approve a pending sentinel recommendation by index")
-    parser.add_argument("--sentinel-deny", type=int, default=None,
-                        help="Deny a pending sentinel recommendation by index")
+    # NOTE: --sentinel* flags are intentionally not exposed in this CLI.
+    # The sentinel agent module still exists for standalone use or future reintegration.
     parser.add_argument("--network-audit", action="store_true",
                         help="LAN security audit (VLAN, DNS blocking, credentials)")
     parser.add_argument("--vpn-status", action="store_true",
@@ -398,6 +414,7 @@ def main() -> None:
     # The Archivist — Developer Coach commands
     # ------------------------------------------------------------------
     if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
+        from guardian_one.agents.dev_coach import DevCoach
         coach = guardian.get_agent("dev_coach")
         if coach and isinstance(coach, DevCoach):
             if args.archivist_tier:
@@ -1087,90 +1104,120 @@ def main() -> None:
         else:
             print(dev_agent.dashboard_text())
 
-    elif (args.sentinel or args.sentinel_scan or args.sentinel_monitor
-          or args.sentinel_approve is not None or args.sentinel_deny is not None):
-        from guardian_one.agents.iot_sentinel import IoTSentinel
+    elif args.cortex or args.cortex_daemon or args.cortex_digest or args.cortex_query is not None or args.cortex_pattern is not None:
+        cortex = guardian.get_agent("input_cortex")
+        if not cortex or not isinstance(cortex, InputCortex):
+            print("InputCortex agent not available.")
+            guardian.shutdown()
+            return
+        # NOTE: guardian.register_agent() already called cortex.initialize().
+        # We do NOT call it again here to avoid resetting in-memory state.
 
-        sentinel_cfg = config.agents.get(
-            "iot_sentinel", AgentConfig(name="iot_sentinel", enabled=True,
-                                        allowed_resources=["network", "devices", "mqtt", "security"]))
-        sentinel = IoTSentinel(config=sentinel_cfg, audit=guardian.audit)
-        sentinel.initialize()
-
-        if args.sentinel_scan:
-            report = sentinel.run()
-            print(sentinel.dashboard_text())
-            if report.recommendations:
-                print("  Recommendations:")
-                for rec in report.recommendations:
-                    print(f"    - {rec}")
-            if report.alerts:
-                print("\n  Alerts:")
-                for alert in report.alerts:
-                    print(f"    [!!] {alert}")
-
-        elif args.sentinel_monitor:
-            print("\n  Starting continuous network monitoring...")
-            print(f"  Subnet: {sentinel.scanner.subnet}")
-            print(f"  Interval: {sentinel.monitor.scan_interval}s")
-            print("  Press Ctrl+C to stop.\n")
-            sentinel.start_monitoring()
+        if args.cortex_daemon:
+            # CLI args override config.custom defaults
+            cortex_custom = cortex.config.custom or {}
+            mode = args.cortex_daemon
+            if mode == "both" and "daemon_mode" in cortex_custom:
+                mode = cortex_custom["daemon_mode"]
+            port = args.cortex_port
+            if args.cortex_port == 9473 and "listener_port" in cortex_custom:
+                port = int(cortex_custom["listener_port"])
+            bind = args.cortex_bind
+            if args.cortex_bind == "127.0.0.1" and "listener_bind" in cortex_custom:
+                bind = str(cortex_custom["listener_bind"])
+            print(f"\n  InputCortex daemon starting (mode={mode}, bind={bind}:{port})")
+            if args.cortex_show_token:
+                print(f"  Auth token (X-Cortex-Token): {cortex.auth_token}")
+            else:
+                print("  Auth token (X-Cortex-Token): [hidden] — "
+                      "use --cortex-show-token to print, or set "
+                      "CORTEX_AUTH_TOKEN / listener_auth_token in config to rotate.")
+            print(f"  Endpoints:")
+            print(f"    POST http://{bind}:{port}/input   — single payload")
+            print(f"    POST http://{bind}:{port}/batch   — batch payloads")
+            print(f"    GET  http://{bind}:{port}/status  — agent status")
+            print(f"    GET  http://{bind}:{port}/query   — query context")
+            print(f"  Drop dir: {cortex.drop_dir}")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            cortex.start_daemon(mode=mode, port=port, bind=bind)
+            # Periodically trigger run() so stale sessions get flushed to
+            # disk and the cortex index stays current for queries/digests.
+            flush_interval = max(
+                1, cortex.config.schedule_interval_minutes
+            ) * 60
             try:
-                import signal
-                signal.pause()
-            except (KeyboardInterrupt, AttributeError):
-                # AttributeError: signal.pause not available on Windows
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    pass
-            sentinel.stop_monitoring()
-            print("\n  Monitoring stopped.")
-            print(sentinel.monitor.summary_text())
+                elapsed = 0
+                while True:
+                    time.sleep(1)
+                    elapsed += 1
+                    if elapsed >= flush_interval:
+                        cortex.run()
+                        elapsed = 0
+            except KeyboardInterrupt:
+                print("\n  Stopping daemon (flushing open sessions)...")
+                cortex.stop_daemon()
+                cortex.shutdown()  # flush open sessions to disk
 
-        elif args.sentinel_approve is not None:
-            if sentinel.approve_recommendation(args.sentinel_approve):
-                print(f"\n  Recommendation #{args.sentinel_approve} approved.")
-            else:
-                print(f"\n  Invalid recommendation index: {args.sentinel_approve}")
-                pending = sentinel.pending_approvals()
-                if pending:
-                    print("  Pending approvals:")
-                    for i, p in enumerate(pending):
-                        print(f"    [{i}] {p['action']}: {p['description']}")
-                else:
-                    print("  No pending approvals.")
+        elif args.cortex_digest:
+            date_arg = args.cortex_digest
+            date = None if date_arg == "today" else date_arg
+            digest = cortex.daily_digest(date)
+            print("\n  INPUT CORTEX — DAILY DIGEST")
+            print("  " + "=" * 40)
+            print(f"  Date: {digest['date']}")
+            print(f"  Sessions: {digest['total_sessions']}")
+            print(f"  Total words: {digest['total_words']}")
+            if digest.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in digest["category_distribution"].items():
+                    print(f"    {cat:<16} {count} sessions")
+            if digest.get("app_usage"):
+                print(f"\n  App usage (by words):")
+                for app, words in list(digest["app_usage"].items())[:10]:
+                    print(f"    {app:<24} {words:,} words")
+            print()
 
-        elif args.sentinel_deny is not None:
-            if sentinel.deny_recommendation(args.sentinel_deny):
-                print(f"\n  Recommendation #{args.sentinel_deny} denied.")
-            else:
-                print(f"\n  Invalid recommendation index: {args.sentinel_deny}")
+        elif args.cortex_query is not None:
+            results = cortex.query_context(category=args.cortex_query or None, limit=20)
+            print(f"\n  INPUT CORTEX — QUERY RESULTS ({len(results)} matches)")
+            print("  " + "=" * 50)
+            for e in results:
+                apps = ", ".join(e.get("apps", []))
+                print(f"  [{e.get('started', '?')[:16]}] {e.get('category', '?'):<12} "
+                      f"{e.get('words', 0):>5}w  {apps}")
+            print()
+
+        elif args.cortex_pattern is not None:
+            pattern = cortex.behavioral_pattern(days=args.cortex_pattern)
+            print(f"\n  INPUT CORTEX — BEHAVIORAL PATTERN ({pattern['period_days']} days)")
+            print("  " + "=" * 50)
+            print(f"  Avg words/day: {pattern['avg_words_per_day']:,}")
+            if pattern.get("top_apps"):
+                print(f"\n  Top apps:")
+                for app, freq in pattern["top_apps"].items():
+                    print(f"    {app:<24} {freq} sessions")
+            if pattern.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in pattern["category_distribution"].items():
+                    print(f"    {cat:<16} {count}")
+            print()
 
         else:
-            # --sentinel: show dashboard
-            sentinel.run()  # Run a scan to populate data
-            print(sentinel.dashboard_text())
-
-    elif args.network_audit:
-        from guardian_one.homelink.lan_security import LanSecurityAuditor
-        from guardian_one.homelink.devices import DeviceRegistry
-
-        registry = DeviceRegistry()
-        registry.load_defaults()
-        auditor = LanSecurityAuditor(registry)
-        print(auditor.audit_text())
-
-    elif args.vpn_status:
-        from guardian_one.homelink.tailscale import TailscaleClient
-        client = TailscaleClient(audit=guardian.audit)
-        print(client.summary_text())
-        health = client.health_check()
-        if health["issues"]:
-            print("  Issues:")
-            for issue in health["issues"]:
-                print(f"    - {issue}")
+            report = cortex.report()
+            print("\n  INPUT CORTEX — STATUS")
+            print("  " + "=" * 40)
+            print(f"  Status: {report.status}")
+            print(f"  {report.summary}")
+            if report.data.get("open_sessions"):
+                print(f"\n  Open sessions:")
+                for s in report.data["open_sessions"]:
+                    print(f"    {s['session_id'][:12]}  {s['blocks']} blocks  {s.get('words', 0)} words")
+            # Print skill manifest
+            manifest = InputCortex.skill_manifest()
+            print(f"\n  Available skills:")
+            for skill in manifest["skills"]:
+                print(f"    {skill['name']:<24} {skill['description']}")
+            print()
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())

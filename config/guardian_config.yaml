@@ -227,33 +227,28 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
-  dev_coach:
+  input_cortex:
     enabled: true
-    schedule_interval_minutes: 120
+    schedule_interval_minutes: 5
     allowed_resources:
-      - tech_registry
-      - code_snippets
-      - projects
-      - learning_paths
-      - system_inventory
-      - dev_sessions
-      - recommendations
+      - keystroke_stream
+      - context_index
+      - behavioral_digest
     custom:
-      persona: "the_archivist"
-      personality: "fireship"            # Fireship (Jeff Delaney) inspired voice
-      advisory_role: "developer_yoda"    # Strategic dev advisor alongside Varys
-      tier_list_enabled: true            # Opinionated S-F tech tier ratings
-      code_this_not_that: true           # Best practice pattern vault
-      system_discovery: true             # Auto-detect hardware/software
-      web_audit_enabled: true            # Web dev best practices checker
-      productivity_tracking: true        # Dev session analytics
-      wisdom_on_run: true                # Show Fireship wisdom tip on each run
-      databases:
-        sqlite: true                     # Local ACID-compliant relational store
-        neo4j: false                     # Knowledge graph (enable when Neo4j is running)
-        dgraph: false                    # Distributed graph (enable when Dgraph is running)
-      coordinate_with_archivist: true    # Data sovereignty handoff
-      coordinate_with_web_architect: true # Website tech stack advisory
+      # --- Currently consumed by the agent/processor ---
+      session_timeout_seconds: 300     # Flush session after 5 min idle
+      min_words_to_store: 3            # Skip very short input
+      daemon_mode: both                # listener + watcher
+      listener_port: 9473              # HTTP endpoint for phone payloads
+      listener_bind: "127.0.0.1"       # Loopback by default
+      # listener_auth_token: ""        # Override random token (optional)
+      # --- Forward-looking (not yet wired) ---
+      # phi_scrub_enabled and credential_redact are always ON at the code
+      # level; these keys are placeholders and do not currently toggle behavior.
+      phi_scrub_enabled: true
+      credential_redact: true
+      daily_digest_hour: 23            # Planned: scheduled digest generation
+      retention_days: 90               # Planned: retention sweep
 
   device_agent:
     enabled: true
