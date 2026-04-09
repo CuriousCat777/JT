@@ -87,13 +87,16 @@ class SecretStore:
         return Fernet(key)
 
     def _load(self) -> None:
-        raw = self._store_path.read_bytes()
-        if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
-            ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
-        else:
-            ciphertext = raw
-        plaintext = self._fernet.decrypt(ciphertext)
-        self._data = json.loads(plaintext)
+        try:
+            raw = self._store_path.read_bytes()
+            if raw[:len(self._SALT_MARKER)] == self._SALT_MARKER:
+                ciphertext = raw[len(self._SALT_MARKER) + self._SALT_LENGTH:]
+            else:
+                ciphertext = raw
+            plaintext = self._fernet.decrypt(ciphertext)
+            self._data = json.loads(plaintext)
+        except Exception as exc:
+            raise ValueError("Failed to unlock secret store") from exc
 
     def _save(self) -> None:
         plaintext = json.dumps(self._data).encode()

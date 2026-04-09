@@ -193,7 +193,7 @@ class TestProjects:
         project = coach.get_project("guardian_one")
         assert project is not None
         assert project.id == "guardian_one"
-        assert project.name == "guardian_one"
+        assert project.name == "Guardian One"
         assert project.status == ProjectStatus.ACTIVE
 
 
