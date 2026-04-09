@@ -428,7 +428,7 @@ def create_app(
         f = static_dir / "manifest.json"
         if f.exists():
             return Response(f.read_text(), mimetype="application/json")
-        return jsonify({"name": "Teleprompter"})
+        return jsonify({"name": "Teleprompter", "short_name": "TelePrompter"})
 
     @app.route("/sw.js")
     def service_worker():
@@ -441,14 +441,19 @@ def create_app(
     @app.route("/static/<path:filename>")
     def static_files(filename: str):
         static_dir = Path(__file__).parent / "static"
-        filepath = static_dir / filename
+        filepath = (static_dir / filename).resolve()
+        # Prevent path traversal — ensure resolved path stays inside static_dir
+        if not str(filepath).startswith(str(static_dir.resolve())):
+            return "Forbidden", 403
         if filepath.exists():
             mime = "text/css" if filename.endswith(".css") else \
                    "application/javascript" if filename.endswith(".js") else \
                    "application/json" if filename.endswith(".json") else \
                    "image/png" if filename.endswith(".png") else \
                    "text/html"
-            return Response(filepath.read_text(), mimetype=mime)
+            is_binary = filename.endswith((".png", ".ico", ".jpg", ".gif", ".woff", ".woff2"))
+            data = filepath.read_bytes() if is_binary else filepath.read_text()
+            return Response(data, mimetype=mime)
         return "Not found", 404
 
     return app
