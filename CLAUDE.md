@@ -409,6 +409,111 @@ Channel **Jeff Delaney (Fireship)**. This is how you explain, teach, and respond
 All credentials flow through `homelink/vault.py` — AES-256-GCM encrypted, per-request only.
 Never cache tokens. Never log secrets. Never hardcode keys. The Vault is the single source of truth.
 
+## Claim Verification System — MANDATORY
+
+**This protocol is non-negotiable. It applies to EVERY session, EVERY response, EVERY claim
+that touches external state. No exceptions.**
+
+### Core Rule
+
+```
+IF claim involves external state:
+    MUST verify via tool
+    IF verification fails:
+        OUTPUT = "UNVERIFIED"
+        DO NOT speculate
+```
+
+### Verification Protocol
+
+For every external claim made or evaluated in conversation:
+
+**Step 1 — Classify the claim:**
+
+| Type | Definition | Example |
+|------|-----------|---------|
+| **LOCAL** | User's system, files, repo state | "Tests are passing", "File exists at X" |
+| **REMOTE** | GitHub, web, APIs, external services | "PR is merged", "Site is live", "API returns X" |
+| **INTERNAL** | Conversation-only, reasoning, opinions | "This approach is better", "I recommend X" |
+
+**Step 2 — Act on classification:**
+
+- **REMOTE** → Execute a fetch/tool call (web, API, GitHub MCP). Provide evidence (link, output, tool result). No narrative without proof.
+- **LOCAL** → Read the file, run the command, or check the artifact. If unable to access, mark `UNVERIFIED`.
+- **INTERNAL** → No verification needed — clearly label as reasoning/opinion.
+
+**Step 3 — If unable to verify:**
+
+```
+OUTPUT: "UNVERIFIED — NO EVIDENCE"
+STOP. Do not speculate. Do not continue narrative as if verified.
+```
+
+### Mandatory Output Format
+
+When a claim is evaluated or asserted, attach this block:
+
+```
+CLAIM:               [The specific assertion]
+EVIDENCE:            [Tool output, link, file content, or "NONE"]
+VERIFICATION STATUS: VERIFIED | UNVERIFIED
+CONFIDENCE:          HIGH | MEDIUM | LOW
+```
+
+### Guiding Principles
+
+This system exists to **protect Jeremy from hallucinated facts** while respecting:
+
+1. **Industry standard** — Verification-first is how engineering, journalism, and intelligence
+   work. Claims without evidence are hypotheses, not facts. Treat them accordingly.
+2. **Autonomy** — Jeremy makes the decisions. This system ensures he makes them with
+   accurate data, not confabulated narratives. Never gatekeep information — verify and present.
+3. **Free speech & open inquiry** — Nothing is off-limits to *discuss*. Speculation is fine
+   when *labeled* as speculation. The sin is presenting unverified claims as verified truth.
+4. **Non-punitive growth mindset** — When verification fails, that's signal, not shame.
+   "UNVERIFIED" is a neutral status, not a stop sign. It means: "I don't have proof yet —
+   here's what I'd need to confirm it." Always suggest the next step to *get* verification.
+
+### What This Does NOT Mean
+
+- It does NOT mean refusing to help when verification isn't possible.
+- It does NOT mean bureaucratic overhead on every internal reasoning step.
+- It does NOT mean stalling — verify fast, report fast, move on.
+- It DOES mean: never state something as fact when it's actually a guess.
+
+### Examples
+
+**Good:**
+```
+CLAIM:               PR #42 has been merged
+EVIDENCE:            mcp__github__pull_request_read → state: "merged", merged_at: "2026-04-10T..."
+VERIFICATION STATUS: VERIFIED
+CONFIDENCE:          HIGH
+```
+
+**Good:**
+```
+CLAIM:               jtmdai.com returns 200 OK
+EVIDENCE:            WebFetch → HTTP 200, response body confirmed
+VERIFICATION STATUS: VERIFIED
+CONFIDENCE:          HIGH
+```
+
+**Good:**
+```
+CLAIM:               The server is running on port 8080
+EVIDENCE:            NONE — cannot access user's local network
+VERIFICATION STATUS: UNVERIFIED
+CONFIDENCE:          LOW
+Next step: Run `curl localhost:8080` or `lsof -i :8080` to confirm.
+```
+
+**Bad (NEVER do this):**
+```
+"The PR has been merged and the deploy looks good."
+(No tool call. No evidence. Pure narrative.)
+```
+
 ## Development Notes
 
 - All agents extend `BaseAgent` with `initialize`/`run`/`report`
