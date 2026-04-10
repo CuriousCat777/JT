@@ -38,6 +38,69 @@ from guardian_one.homelink.registry import IntegrationRegistry
 log = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Path resolution — privileged paths with user-writable fallback
+# ---------------------------------------------------------------------------
+#
+# In production, Varys runs as the `goos` systemd user and writes to
+# /var/lib/goos and /var/log/goos.  In CI, tests, and developer
+# workstations those paths are not writable, so we fall back to
+# XDG-style user-writable locations:
+#
+#   1. Explicit arg (data_dir / log_dir)
+#   2. Env var (GOOS_DATA_DIR / GOOS_LOG_DIR)
+#   3. Privileged default (/var/lib/goos, /var/log/goos) if writable
+#   4. User fallback ($XDG_DATA_HOME/goos, $XDG_STATE_HOME/goos/log)
+#
+# The resolver never raises — callers always get a writable path.
+
+_PRIVILEGED_DATA_DIR = "/var/lib/goos"
+_PRIVILEGED_LOG_DIR = "/var/log/goos"
+
+
+def _is_writable(path: str) -> bool:
+    """True if *path* exists and is writable, or its parent is writable."""
+    p = Path(path)
+    if p.exists():
+        return os.access(p, os.W_OK)
+    parent = p.parent
+    return parent.exists() and os.access(parent, os.W_OK)
+
+
+def _xdg_data_home() -> Path:
+    return Path(
+        os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    )
+
+
+def _xdg_state_home() -> Path:
+    return Path(
+        os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+    )
+
+
+def _resolve_data_dir(explicit: str | None) -> str:
+    if explicit is not None:
+        return explicit
+    env = os.environ.get("GOOS_DATA_DIR")
+    if env:
+        return env
+    if _is_writable(_PRIVILEGED_DATA_DIR):
+        return _PRIVILEGED_DATA_DIR
+    return str(_xdg_data_home() / "goos")
+
+
+def _resolve_log_dir(explicit: str | None) -> str:
+    if explicit is not None:
+        return explicit
+    env = os.environ.get("GOOS_LOG_DIR")
+    if env:
+        return env
+    if _is_writable(_PRIVILEGED_LOG_DIR):
+        return _PRIVILEGED_LOG_DIR
+    return str(_xdg_state_home() / "goos" / "log")
+
+
 @dataclass
 class SentinelStatus:
     """Current status of the Varys sentinel daemon."""
@@ -85,12 +148,12 @@ class VarysSentinel:
     def __init__(
         self,
         client_id: str,
-        data_dir: str = "/var/lib/goos",
-        log_dir: str = "/var/log/goos",
+        data_dir: str | None = None,
+        log_dir: str | None = None,
     ) -> None:
         self.client_id = client_id
-        self.data_dir = Path(data_dir)
-        self.log_dir = Path(log_dir)
+        self.data_dir = Path(_resolve_data_dir(data_dir))
+        self.log_dir = Path(_resolve_log_dir(log_dir))
         self._running = False
         self._start_time: float = 0
         self._hostname = os.uname().nodename

@@ -543,38 +543,86 @@ class TestGOOSDatabase:
 # ---------------------------------------------------------------------------
 
 class TestVarysSentinel:
-    def test_install_generates_service(self):
+    def test_install_generates_service(self, tmp_path):
         from guardian_one.goos.sentinel import VarysSentinel
-        sentinel = VarysSentinel(client_id="test-client", data_dir="/tmp/goos-test")
+        sentinel = VarysSentinel(
+            client_id="test-client",
+            data_dir=str(tmp_path / "data"),
+            log_dir=str(tmp_path / "log"),
+        )
         result = sentinel.install()
         assert result["client_id"] == "test-client"
         assert "GOOS Varys Sentinel" in result["service_content"]
         assert "goos-varys.service" in result["service_unit"]
 
-    def test_status_before_start(self):
+    def test_status_before_start(self, tmp_path):
         from guardian_one.goos.sentinel import VarysSentinel
-        sentinel = VarysSentinel(client_id="test", data_dir="/tmp/goos-test")
+        sentinel = VarysSentinel(
+            client_id="test",
+            data_dir=str(tmp_path / "data"),
+            log_dir=str(tmp_path / "log"),
+        )
         status = sentinel.status()
         assert not status.running
         assert status.client_id == "test"
 
-    def test_start_stop(self):
+    def test_start_stop(self, tmp_path):
         from guardian_one.goos.sentinel import VarysSentinel
-        sentinel = VarysSentinel(client_id="test", data_dir="/tmp/goos-test")
+        sentinel = VarysSentinel(
+            client_id="test",
+            data_dir=str(tmp_path / "data"),
+            log_dir=str(tmp_path / "log"),
+        )
         sentinel.start()
         assert sentinel.status().running
         sentinel.stop()
         assert not sentinel.status().running
 
-    def test_go_offline(self):
+    def test_go_offline(self, tmp_path):
         from guardian_one.goos.sentinel import VarysSentinel
-        sentinel = VarysSentinel(client_id="test", data_dir="/tmp/goos-test")
+        sentinel = VarysSentinel(
+            client_id="test",
+            data_dir=str(tmp_path / "data"),
+            log_dir=str(tmp_path / "log"),
+        )
         sentinel.start()
         sentinel.go_offline()
         assert sentinel.status().tunnel_status == "offline_mode"
 
-    def test_queue_for_sync(self):
+    def test_queue_for_sync(self, tmp_path):
         from guardian_one.goos.sentinel import VarysSentinel
-        sentinel = VarysSentinel(client_id="test", data_dir="/tmp/goos-test")
+        sentinel = VarysSentinel(
+            client_id="test",
+            data_dir=str(tmp_path / "data"),
+            log_dir=str(tmp_path / "log"),
+        )
         sentinel.queue_for_sync({"type": "alert", "data": "test"})
         assert len(sentinel._queued_sync) == 1
+
+    def test_defaults_fall_back_to_user_writable(self, monkeypatch, tmp_path):
+        """When privileged paths aren't writable, resolver uses XDG fallbacks."""
+        from guardian_one.goos import sentinel as sentinel_mod
+        # Force the privileged paths to point somewhere unwritable so the
+        # fallback branch is exercised even when the test runs as root.
+        unwritable = str(tmp_path / "nonexistent" / "parent" / "privileged")
+        monkeypatch.setattr(sentinel_mod, "_PRIVILEGED_DATA_DIR", unwritable)
+        monkeypatch.setattr(sentinel_mod, "_PRIVILEGED_LOG_DIR", unwritable)
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg_data"))
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg_state"))
+        monkeypatch.delenv("GOOS_DATA_DIR", raising=False)
+        monkeypatch.delenv("GOOS_LOG_DIR", raising=False)
+
+        sentinel = sentinel_mod.VarysSentinel(client_id="fallback-test")
+        # With privileged paths unwritable, resolver falls back to XDG dirs
+        assert str(sentinel.data_dir) == str(tmp_path / "xdg_data" / "goos")
+        assert str(sentinel.log_dir) == str(tmp_path / "xdg_state" / "goos" / "log")
+
+    def test_env_var_overrides_default(self, monkeypatch, tmp_path):
+        """GOOS_DATA_DIR / GOOS_LOG_DIR env vars override defaults."""
+        from guardian_one.goos.sentinel import VarysSentinel
+        monkeypatch.setenv("GOOS_DATA_DIR", str(tmp_path / "env_data"))
+        monkeypatch.setenv("GOOS_LOG_DIR", str(tmp_path / "env_log"))
+
+        sentinel = VarysSentinel(client_id="env-test")
+        assert str(sentinel.data_dir) == str(tmp_path / "env_data")
+        assert str(sentinel.log_dir) == str(tmp_path / "env_log")
