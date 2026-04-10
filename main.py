@@ -42,6 +42,12 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --power-tools          # Rails + Gin power tools status
+    python main.py --rails-new APP        # Scaffold a new Rails app
+    python main.py --gin-new APP          # Scaffold a new Gin app
+    python main.py --rails-server PATH    # Start Rails dev server
+    python main.py --gin-server PATH      # Start Gin dev server
+    python main.py --rails-install        # Install Ruby on Rails via gem
     python main.py --archivist            # Full Archivist report (sovereignty, feeds, platforms)
     python main.py --feeds               # Palantir intelligence briefing
     python main.py --sovereignty         # Data sovereignty score + cross-agent sweep
@@ -374,6 +380,18 @@ def main() -> None:
                         help="Palantir intelligence briefing (unread feeds)")
     parser.add_argument("--sovereignty", action="store_true",
                         help="Data sovereignty report (cross-agent sweep)")
+    parser.add_argument("--dev-coach", dest="dev_coach", action="store_true",
+                        help="Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--dev-coach-tier", dest="dev_coach_tier", action="store_true",
+                        help="Show the Developer Coach's opinionated tech tier list")
+    parser.add_argument("--dev-coach-wisdom", dest="dev_coach_wisdom", action="store_true",
+                        help="Get a Fireship-style developer wisdom tip")
+    parser.add_argument("--dev-coach-system", dest="dev_coach_system", action="store_true",
+                        help="Show system inventory (hardware/software)")
+    parser.add_argument("--dev-coach-stack", dest="dev_coach_stack", type=str, default=None,
+                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
+    parser.add_argument("--dev-coach-audit", dest="dev_coach_audit", type=str, default=None,
+                        help="Run web dev audit on a domain")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     # Fleet management (multi-device orchestration)
@@ -492,6 +510,72 @@ def main() -> None:
             print()
         else:
             print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    # ------------------------------------------------------------------
+    # The Archivist — Developer Coach commands
+    # ------------------------------------------------------------------
+    if args.dev_coach or args.dev_coach_tier or args.dev_coach_wisdom or args.dev_coach_system or args.dev_coach_stack or args.dev_coach_audit:
+        from guardian_one.agents.dev_coach import DevCoach
+        coach = guardian.get_agent("dev_coach")
+        if coach and isinstance(coach, DevCoach):
+            if args.dev_coach_tier:
+                tiers = coach.get_tier_list()
+                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
+                print("  " + "=" * 55)
+                for tier_name in ["S", "A", "B", "C", "D", "F"]:
+                    entries = tiers.get(tier_name, [])
+                    if entries:
+                        print(f"\n  [{tier_name}-TIER]")
+                        for e in entries:
+                            print(f"    {e['name']:<20} {e['notes']}")
+                print()
+            elif args.dev_coach_wisdom:
+                tip = coach.get_wisdom()
+                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
+            elif args.dev_coach_system:
+                inventory = coach.get_system_inventory()
+                print("\n  THE ARCHIVIST — System Inventory")
+                print("  " + "=" * 55)
+                for comp in inventory:
+                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
+                    for k, v in comp.get('specs', {}).items():
+                        print(f"    {k}: {v}")
+                print()
+            elif args.dev_coach_stack:
+                rec = coach.recommend_stack(args.dev_coach_stack)
+                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.dev_coach_stack}")
+                print("  " + "=" * 55)
+                for item in rec.get("stack", []):
+                    print(f"  {item['name']:<20} {item['reason']}")
+                print(f"\n  \"{rec.get('summary', '')}\"\n")
+            elif args.dev_coach_audit:
+                audit = coach.web_audit(args.dev_coach_audit)
+                print(f"\n  THE ARCHIVIST — Web Audit: {args.dev_coach_audit}")
+                print("  " + "=" * 55)
+                for check, info in audit.items():
+                    status = info.get("status", "needs_review")
+                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
+                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
+                print()
+            else:
+                report = guardian.run_agent("dev_coach")
+                print(f"\n  THE ARCHIVIST — Developer Coach Report")
+                print("  " + "=" * 55)
+                print(f"  Status: {report.status}")
+                print(f"  {report.summary}")
+                if report.recommendations:
+                    print("\n  Recommendations:")
+                    for r in report.recommendations:
+                        print(f"    - {r}")
+                if report.alerts:
+                    print("\n  Alerts:")
+                    for a in report.alerts:
+                        print(f"    [!] {a}")
+                print()
+        else:
+            print("DevCoach agent not available.")
         guardian.shutdown()
         return
 

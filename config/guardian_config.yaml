@@ -141,6 +141,7 @@ agents:
       - data_sources
       - privacy_tools
       - master_profile
+      - power_tools
       # Varys-level: read access across all agent domains
       - audit_log
       - agent_reports
