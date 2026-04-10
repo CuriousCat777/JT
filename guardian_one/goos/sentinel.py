@@ -120,12 +120,15 @@ class VarysSentinel:
         self._queued_sync: list[dict[str, Any]] = []  # Data to sync when reconnected
 
     def install(self) -> dict[str, Any]:
-        """Install Varys as a systemd service.
+        """Prepare Varys for installation as a systemd service.
 
         Creates:
         - /var/lib/goos/ (data directory)
         - /var/log/goos/ (log directory)
-        - /etc/systemd/system/goos-varys.service (systemd unit)
+
+        Returns:
+        - systemd unit metadata/content for callers to write and enable
+          separately
         """
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
