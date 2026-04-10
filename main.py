@@ -49,24 +49,12 @@ Usage:
     python main.py --gin-server PATH      # Start Gin dev server
     python main.py --rails-install        # Install Ruby on Rails via gem
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
-    python main.py --cortex               # InputCortex status — keystroke intelligence
-    python main.py --cortex-daemon        # Start InputCortex daemon (listener+watcher)
-    python main.py --cortex-daemon listener  # HTTP-only mode
-    python main.py --cortex-digest        # Today's behavioral digest
-    python main.py --cortex-query search  # Query context blocks by category
-    python main.py --cortex-pattern 7     # Behavioral pattern analysis (N days)
-    python main.py --fleet               # Fleet command center (3-node dashboard)
-    python main.py --fleet-health        # Health check all fleet nodes (A/B/C)
-    python main.py --fleet-ssh NODE CMD  # Execute command on a fleet node via SSH
-    python main.py --fleet-start NODE SVC # Start a service on a fleet node
-    python main.py --fleet-stop NODE SVC  # Stop a service on a fleet node
-    python main.py --fleet-services NODE  # List running services on a node
-    python main.py --fleet-displays      # Display topology (monitors + TVs layout)
-    python main.py --fleet-resources     # Resource optimization recommendations
-    python main.py --fleet-subs          # Subscription portfolio dashboard
-    python main.py --fleet-backup        # Backup strategy overview
-    python main.py --fleet-kernels       # Active kernels & daemons on all 3 nodes
-    python main.py --fleet-status        # Full status (fleet + displays + subs)
+    python main.py --autofill-server      # Start autofill bridge (localhost only)
+    python main.py --autofill-lan         # Start autofill bridge in LAN mode (MacBook access)
+    python main.py --autofill-pin         # Set/change LAN access PIN
+    python main.py --autofill-add card    # Add a payment card profile
+    python main.py --autofill-list        # List all autofill profiles
+    python main.py --autofill-bookmarklet # Get the browser bookmarklet
 """
 
 from __future__ import annotations
@@ -95,7 +83,7 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
-from guardian_one.agents.input_cortex import InputCortex
+from guardian_one.agents.autofill import AutofillAgent
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -124,10 +112,62 @@ def _build_agents(guardian: GuardianOne) -> None:
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
 
-    cortex_cfg = config.agents.get("input_cortex", AgentConfig(name="input_cortex"))
-    guardian.register_agent(InputCortex(
-        config=cortex_cfg, audit=guardian.audit, data_dir=config.data_dir,
-    ))
+    af_cfg = config.agents.get("autofill", AgentConfig(name="autofill"))
+    af_agent = AutofillAgent(config=af_cfg, audit=guardian.audit, vault=guardian.vault)
+    guardian.register_agent(af_agent)
+
+
+def _autofill_add_interactive(af: AutofillAgent, profile_type: str) -> None:
+    """Interactive prompt to add an autofill profile."""
+    print(f"\n  Add {profile_type} profile")
+    print("  " + "-" * 40)
+
+    def ask(prompt: str, required: bool = True) -> str:
+        while True:
+            val = input(f"  {prompt}: ").strip()
+            if val or not required:
+                return val
+            print(f"  (required)")
+
+    if profile_type == "card":
+        p = af.add_card(
+            label=ask("Label (e.g. Chase Sapphire)"),
+            cardholder_name=ask("Cardholder Name"),
+            card_number=ask("Card Number"),
+            exp_month=ask("Exp Month (MM)"),
+            exp_year=ask("Exp Year (YYYY)"),
+            cvv=ask("CVV"),
+            billing_address=ask("Billing Address", required=False),
+            billing_zip=ask("Billing Zip", required=False),
+        )
+        print(f"\n  Added card: {p.label} ({p.masked_number})")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "address":
+        p = af.add_address(
+            label=ask("Label (e.g. Home, Work)"),
+            full_name=ask("Full Name"),
+            street=ask("Street Address"),
+            city=ask("City"),
+            state=ask("State"),
+            zip_code=ask("Zip Code"),
+            country=ask("Country", required=False) or "US",
+            phone=ask("Phone", required=False),
+        )
+        print(f"\n  Added address: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "identity":
+        p = af.add_identity(
+            label=ask("Label (e.g. Personal, Work)"),
+            first_name=ask("First Name"),
+            last_name=ask("Last Name"),
+            email=ask("Email"),
+            phone=ask("Phone", required=False),
+            date_of_birth=ask("Date of Birth (YYYY-MM-DD)", required=False),
+        )
+        print(f"\n  Added identity: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -369,18 +409,21 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
-    parser.add_argument("--dev-coach", dest="archivist", action="store_true",
-                        help="Developer Coach (tier list, wisdom, system inventory)")
-    parser.add_argument("--dev-coach-tier", dest="archivist_tier", action="store_true",
-                        help="Show the Developer Coach's opinionated tech tier list")
-    parser.add_argument("--dev-coach-wisdom", dest="archivist_wisdom", action="store_true",
-                        help="Get a Fireship-style developer wisdom tip")
-    parser.add_argument("--dev-coach-system", dest="archivist_system", action="store_true",
-                        help="Show system inventory (hardware/software)")
-    parser.add_argument("--dev-coach-stack", dest="archivist_stack", type=str, default=None,
-                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
-    parser.add_argument("--dev-coach-audit", dest="archivist_audit", type=str, default=None,
-                        help="Run web dev audit on a domain")
+    parser.add_argument("--autofill-server", action="store_true",
+                        help="Start the autofill bridge local server")
+    parser.add_argument("--autofill-add", type=str, default=None,
+                        choices=["card", "address", "identity"],
+                        help="Add an autofill profile (card, address, or identity)")
+    parser.add_argument("--autofill-list", action="store_true",
+                        help="List all autofill profiles")
+    parser.add_argument("--autofill-remove", type=str, default=None,
+                        help="Remove an autofill profile by TYPE:ID (e.g. card:abc123)")
+    parser.add_argument("--autofill-bookmarklet", action="store_true",
+                        help="Print the bookmarklet JavaScript for browser autofill")
+    parser.add_argument("--autofill-lan", action="store_true",
+                        help="Start autofill server in LAN mode (accessible from MacBook/other devices)")
+    parser.add_argument("--autofill-pin", action="store_true",
+                        help="Set/change the PIN for LAN-mode access")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     # Fleet management (multi-device orchestration)
@@ -1850,42 +1893,106 @@ def main() -> None:
             # --websites: show status
             print(mgr.summary())
 
-    elif (args.fleet or args.fleet_health or args.fleet_ssh or args.fleet_start
-          or args.fleet_stop or args.fleet_services or args.fleet_displays
-          or args.fleet_resources or args.fleet_subs or args.fleet_backup
-          or args.fleet_kernels or args.fleet_status):
-        from guardian_one.fleet.commander import FleetCommander
+    elif (args.autofill_server or args.autofill_add or args.autofill_list
+          or args.autofill_remove or args.autofill_bookmarklet
+          or args.autofill_lan or args.autofill_pin):
+        af: AutofillAgent = guardian._agents.get("autofill")  # type: ignore[assignment]
+        if af is None:
+            print("Error: autofill agent not registered")
+            return
 
-        commander = FleetCommander(audit=guardian.audit)
-        commander.initialize()
+        if args.autofill_pin:
+            import getpass
+            pin = getpass.getpass("  Set autofill LAN PIN: ")
+            if len(pin) < 4:
+                print("  PIN must be at least 4 characters.")
+                return
+            confirm = getpass.getpass("  Confirm PIN: ")
+            if pin != confirm:
+                print("  PINs don't match.")
+                return
+            af.set_lan_pin(pin)
+            print("  PIN set. You can now use --autofill-lan to start in LAN mode.")
 
-        if args.fleet:
-            print(commander.cmd_fleet())
-        elif args.fleet_health:
-            print(commander.cmd_health())
-        elif args.fleet_ssh:
-            node_id, cmd = args.fleet_ssh
-            print(commander.cmd_ssh(node_id, cmd))
-        elif args.fleet_start:
-            node_id, service = args.fleet_start
-            print(commander.cmd_start_service(node_id, service))
-        elif args.fleet_stop:
-            node_id, service = args.fleet_stop
-            print(commander.cmd_stop_service(node_id, service))
-        elif args.fleet_services:
-            print(commander.cmd_list_services(args.fleet_services))
-        elif args.fleet_displays:
-            print(commander.cmd_displays())
-        elif args.fleet_resources:
-            print(commander.cmd_resources())
-        elif args.fleet_subs:
-            print(commander.cmd_subscriptions())
-        elif args.fleet_backup:
-            print(commander.cmd_backup())
-        elif args.fleet_kernels:
-            print(commander.cmd_kernels())
-        elif args.fleet_status:
-            print(commander.cmd_full_status())
+        elif args.autofill_list:
+            profiles = af.list_profiles()
+            if not profiles:
+                print("\n  No autofill profiles. Add one with --autofill-add card")
+            else:
+                print(f"\n  Autofill Profiles ({len(profiles)})")
+                print("  " + "-" * 50)
+                for p in profiles:
+                    extra = f" {p.get('masked_number', '')}" if p["type"] == "card" else ""
+                    print(f"  [{p['type'].upper():8s}] {p['label']}{extra}  (id: {p['profile_id']})")
+
+        elif args.autofill_remove:
+            parts = args.autofill_remove.split(":", 1)
+            if len(parts) != 2:
+                print("Usage: --autofill-remove TYPE:ID  (e.g. card:abc123)")
+                return
+            ptype, pid = parts
+            if af.remove_profile(ptype, pid):
+                print(f"  Removed {ptype} profile {pid}")
+            else:
+                print(f"  Profile not found: {ptype}:{pid}")
+
+        elif args.autofill_add:
+            _autofill_add_interactive(af, args.autofill_add)
+
+        elif args.autofill_bookmarklet:
+            from guardian_one.autofill.bridge import get_bookmarklet_js
+            js = get_bookmarklet_js(af._port)
+            print("\n  Copy this entire line as a bookmark URL:\n")
+            print(f"  javascript:{js}\n")
+            print("  Or start the server and visit:")
+            print(f"  http://127.0.0.1:{af._port}/api/autofill/bookmarklet\n")
+
+        elif args.autofill_lan:
+            import socket
+            # Get this machine's LAN IP
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                lan_ip = "0.0.0.0"
+
+            try:
+                af.enable_lan_mode(bind="0.0.0.0")
+            except ValueError as e:
+                print(f"\n  Error: {e}")
+                return
+
+            url = af.start_server(bind_override="0.0.0.0")
+            print(f"\n  Autofill Bridge — LAN MODE")
+            print(f"  " + "=" * 50)
+            print(f"  Server:      {url}")
+            print(f"  LAN address: http://{lan_ip}:{af._port}")
+            print(f"  Bookmarklet: http://{lan_ip}:{af._port}/api/autofill/bookmarklet")
+            print(f"  Health:      http://{lan_ip}:{af._port}/api/autofill/health")
+            print(f"\n  On your MacBook, open the bookmarklet URL above.")
+            print(f"  You'll be prompted for your PIN on first use.")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
+
+        elif args.autofill_server:
+            url = af.start_server()
+            print(f"\n  Autofill Bridge server running at {url}")
+            print(f"  Bookmarklet: {url}/api/autofill/bookmarklet")
+            print(f"  Health:      {url}/api/autofill/health")
+            print("\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
 
     elif args.summary:
         print(guardian.daily_summary())
