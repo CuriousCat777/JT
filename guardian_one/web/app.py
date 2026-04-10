@@ -82,8 +82,22 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     from guardian_one.goos.routes import goos_bp, init_goos
     app.register_blueprint(goos_bp)
-    init_goos()
 
+    goos_init_lock = threading.Lock()
+    app.extensions.setdefault("goos_initialized", False)
+
+    def _ensure_goos_initialized() -> None:
+        if app.extensions.get("goos_initialized"):
+            return
+        with goos_init_lock:
+            if not app.extensions.get("goos_initialized"):
+                init_goos()
+                app.extensions["goos_initialized"] = True
+
+    @app.before_request
+    def _initialize_goos_on_first_request():
+        if request.path.startswith("/goos"):
+            _ensure_goos_initialized()
     # Top-level health check (redirects to GOOS health)
     @app.route("/health")
     def health_check():
