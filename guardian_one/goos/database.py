@@ -86,9 +86,9 @@ class GOOSDatabase:
         registry = db.load_all_into_registry()
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
+    def __init__(self, db_path: Path | str | None = None) -> None:
         default_path = Path("data") / "goos.db"
-        self._db_path = db_path or default_path
+        self._db_path = Path(db_path) if db_path else default_path
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._db_path))
         self._conn.row_factory = sqlite3.Row
