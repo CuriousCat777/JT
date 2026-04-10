@@ -1,0 +1,339 @@
+{
+  "updated_at": "2026-04-10T00:54:52.845818+00:00",
+  "dataset_count": 11,
+  "datasets": [
+    {
+      "dataset_id": "datagov_cms-physician-compare",
+      "title": "Physician Compare National Downloadable File",
+      "source": "data.gov",
+      "source_url": "https://data.cms.gov/physician-compare.csv",
+      "description": "Physician Compare includes info about physicians and clinicians enrolled in Medicare.",
+      "keywords": [
+        "medicare",
+        "medicare",
+        "physician",
+        "cms"
+      ],
+      "local_path": "data/datasets/datagov_cms-physician-compare.json",
+      "sha256": "06c576ffc4f7073a473df68d0f18601cbb65c5f882164dcb28dbd776e97212cf",
+      "schema": {
+        "columns": [
+          "identifier",
+          "title",
+          "description",
+          "downloadURL"
+        ],
+        "column_types": {
+          "identifier": "str",
+          "title": "str",
+          "description": "str",
+          "downloadURL": "str"
+        },
+        "row_count": 2,
+        "file_format": "json",
+        "size_bytes": 412
+      },
+      "status": "validated",
+      "discovered_at": "2026-04-10T00:54:52.837566+00:00",
+      "downloaded_at": "2026-04-10T00:54:52.838929+00:00",
+      "last_checked": "2026-04-10T00:54:52.842950+00:00",
+      "refresh_interval_hours": 168,
+      "download_count": 1,
+      "errors": []
+    },
+    {
+      "dataset_id": "datagov_hospital-general-info",
+      "title": "Hospital General Information",
+      "source": "data.gov",
+      "source_url": "https://data.cms.gov/hospital-info.csv",
+      "description": "General information about all hospitals registered with Medicare.",
+      "keywords": [
+        "medicare",
+        "hospital",
+        "medicare"
+      ],
+      "local_path": "data/datasets/datagov_hospital-general-info.json",
+      "sha256": "06c576ffc4f7073a473df68d0f18601cbb65c5f882164dcb28dbd776e97212cf",
+      "schema": {
+        "columns": [
+          "identifier",
+          "title",
+          "description",
+          "downloadURL"
+        ],
+        "column_types": {
+          "identifier": "str",
+          "title": "str",
+          "description": "str",
+          "downloadURL": "str"
+        },
+        "row_count": 2,
+        "file_format": "json",
+        "size_bytes": 412
+      },
+      "status": "validated",
+      "discovered_at": "2026-04-10T00:54:52.837577+00:00",
+      "downloaded_at": "2026-04-10T00:54:52.839923+00:00",
+      "last_checked": "2026-04-10T00:54:52.843860+00:00",
+      "refresh_interval_hours": 168,
+      "download_count": 1,
+      "errors": []
+    },
+    {
+      "dataset_id": "datagov_medicare-spending",
+      "title": "Medicare Spending Per Beneficiary - National",
+      "source": "data.gov",
+      "source_url": "https://data.cms.gov/spending.csv",
+      "description": "Average spending per Medicare beneficiary by state.",
+      "keywords": [
+        "medicare",
+        "spending",
+        "medicare"
+      ],
+      "local_path": "data/datasets/datagov_medicare-spending.json",
+      "sha256": "06c576ffc4f7073a473df68d0f18601cbb65c5f882164dcb28dbd776e97212cf",
+      "schema": {
+        "columns": [
+          "identifier",
+          "title",
+          "description",
+          "downloadURL"
+        ],
+        "column_types": {
+          "identifier": "str",
+          "title": "str",
+          "description": "str",
+          "downloadURL": "str"
+        },
+        "row_count": 2,
+        "file_format": "json",
+        "size_bytes": 412
+      },
+      "status": "validated",
+      "discovered_at": "2026-04-10T00:54:52.837582+00:00",
+      "downloaded_at": "2026-04-10T00:54:52.840990+00:00",
+      "last_checked": "2026-04-10T00:54:52.844776+00:00",
+      "refresh_interval_hours": 168,
+      "download_count": 1,
+      "errors": []
+    },
+    {
+      "dataset_id": "cms_cms-payment-2024",
+      "title": "Medicare Physician Payment Data 2024",
+      "source": "cms",
+      "source_url": "https://data.cms.gov/payment-2024.csv",
+      "description": "Detailed payment info for all Medicare Part B services.",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "data/datasets/cms_cms-payment-2024.json",
+      "sha256": "06c576ffc4f7073a473df68d0f18601cbb65c5f882164dcb28dbd776e97212cf",
+      "schema": {
+        "columns": [
+          "identifier",
+          "title",
+          "description",
+          "downloadURL"
+        ],
+        "column_types": {
+          "identifier": "str",
+          "title": "str",
+          "description": "str",
+          "downloadURL": "str"
+        },
+        "row_count": 2,
+        "file_format": "json",
+        "size_bytes": 412
+      },
+      "status": "validated",
+      "discovered_at": "2026-04-10T00:54:52.837639+00:00",
+      "downloaded_at": "2026-04-10T00:54:52.842007+00:00",
+      "last_checked": "2026-04-10T00:54:52.845792+00:00",
+      "refresh_interval_hours": 168,
+      "download_count": 1,
+      "errors": []
+    },
+    {
+      "dataset_id": "cms_cms-hospital-quality",
+      "title": "Hospital Quality Star Ratings",
+      "source": "cms",
+      "source_url": "https://data.cms.gov/stars.csv",
+      "description": "Overall hospital quality star ratings from CMS.",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837645+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "hhs_hhs-covid-hospital",
+      "title": "COVID-19 Reported Patient Impact & Hospital Capacity",
+      "source": "hhs",
+      "source_url": "https://healthdata.gov/covid-hospital.csv",
+      "description": "Facility-level capacity and utilization data.",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837671+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "pubmed_38945123",
+      "title": "PubMed Article 38945123",
+      "source": "pubmed",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38945123/",
+      "description": "",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837784+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "pubmed_38921456",
+      "title": "PubMed Article 38921456",
+      "source": "pubmed",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38921456/",
+      "description": "",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837795+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "pubmed_38899012",
+      "title": "PubMed Article 38899012",
+      "source": "pubmed",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38899012/",
+      "description": "",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837800+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "pubmed_38876789",
+      "title": "PubMed Article 38876789",
+      "source": "pubmed",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38876789/",
+      "description": "",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837804+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    },
+    {
+      "dataset_id": "pubmed_38854321",
+      "title": "PubMed Article 38854321",
+      "source": "pubmed",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38854321/",
+      "description": "",
+      "keywords": [
+        "medicare"
+      ],
+      "local_path": "",
+      "sha256": "",
+      "schema": {
+        "columns": [],
+        "column_types": {},
+        "row_count": 0,
+        "file_format": "",
+        "size_bytes": 0
+      },
+      "status": "discovered",
+      "discovered_at": "2026-04-10T00:54:52.837807+00:00",
+      "downloaded_at": "",
+      "last_checked": "",
+      "refresh_interval_hours": 168,
+      "download_count": 0,
+      "errors": []
+    }
+  ]
+}
