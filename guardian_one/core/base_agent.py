@@ -23,6 +23,7 @@ from guardian_one.core.reasoning import (
 
 if TYPE_CHECKING:
     from guardian_one.core.ai_engine import AIEngine, AIResponse
+    from guardian_one.core.vop import VOPEngine, VOPResult
 
 
 class AgentStatus(Enum):
@@ -145,6 +146,7 @@ class BaseAgent(abc.ABC):
         self.status = AgentStatus.IDLE
         self._name = config.name
         self._ai: AIEngine | None = None
+        self._vop: VOPEngine | None = None
 
     @property
     def name(self) -> str:
@@ -158,6 +160,15 @@ class BaseAgent(abc.ABC):
     def set_ai_engine(self, engine: AIEngine) -> None:
         """Inject the AI engine (called by GuardianOne after registration)."""
         self._ai = engine
+
+    def set_vop_engine(self, vop: VOPEngine) -> None:
+        """Inject the VOP verification engine (called by GuardianOne)."""
+        self._vop = vop
+
+    @property
+    def vop_enabled(self) -> bool:
+        """Whether this agent has an active VOP engine."""
+        return self._vop is not None
 
     def think(
         self,
@@ -225,6 +236,59 @@ class BaseAgent(abc.ABC):
         """
         response = self.think(prompt, context=context)
         return response.content if response.success else ""
+
+    # ------------------------------------------------------------------
+    # VOP — Verification Operating Protocol (v2.1)
+    # ------------------------------------------------------------------
+
+    def think_verified(
+        self,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> VOPResult:
+        """AI reasoning gated through the Verification Operating Protocol.
+
+        Runs think() then extracts claims from the response, classifies them,
+        verifies each one, and returns a VOPResult with only evidence-gated
+        output.  Unverified claims are blocked (fail-closed).
+
+        Returns:
+            VOPResult with verified/blocked claims and compact output.
+        """
+        from guardian_one.core.vop import VOPResult, VOPEngine, extract_claims
+
+        # Get AI response first
+        ai_response = self.think(prompt, context=context,
+                                 temperature=temperature, max_tokens=max_tokens)
+
+        if not ai_response.success:
+            return VOPResult(claims=[], all_verified=False)
+
+        # Extract claims from the AI output
+        claims = extract_claims(ai_response.content)
+
+        if not claims:
+            return VOPResult(claims=[], all_verified=True)
+
+        # Use agent's VOP engine or create a transient one
+        vop = self._vop or VOPEngine(audit=self.audit)
+        result = vop.process(claims)
+
+        # Audit the VOP pass
+        self.log(
+            "vop_verification",
+            details={
+                "prompt_preview": prompt[:100],
+                "total_claims": len(claims),
+                "blocked": result.blocked_count,
+                "all_verified": result.all_verified,
+                "escalation": result.escalation,
+            },
+        )
+
+        return result
 
     # ------------------------------------------------------------------
     # PRETEXT — structured prompt engineering
@@ -375,6 +439,8 @@ class BaseAgent(abc.ABC):
         self.status = AgentStatus.IDLE
         if self._ai:
             self._ai.clear_memory(self._name)
+        if self._vop:
+            self._vop.clear_session()
         self.audit.record(
             agent=self.name,
             action="shutdown",
