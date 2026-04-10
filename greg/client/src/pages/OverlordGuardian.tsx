@@ -784,7 +784,7 @@ const TABS = [
   { id: 'legal', label: 'LEGAL' },
 ] as const;
 
-export default function App() {
+export default function OverlordGuardian() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]['id']>('dashboard');
   const [clock, setClock] = useState(new Date());
 

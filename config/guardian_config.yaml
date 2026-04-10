@@ -227,33 +227,28 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
-  dev_coach:
+  input_cortex:
     enabled: true
-    schedule_interval_minutes: 120
+    schedule_interval_minutes: 5
     allowed_resources:
-      - tech_registry
-      - code_snippets
-      - projects
-      - learning_paths
-      - system_inventory
-      - dev_sessions
-      - recommendations
+      - keystroke_stream
+      - context_index
+      - behavioral_digest
     custom:
-      persona: "the_archivist"
-      personality: "fireship"            # Fireship (Jeff Delaney) inspired voice
-      advisory_role: "developer_yoda"    # Strategic dev advisor alongside Varys
-      tier_list_enabled: true            # Opinionated S-F tech tier ratings
-      code_this_not_that: true           # Best practice pattern vault
-      system_discovery: true             # Auto-detect hardware/software
-      web_audit_enabled: true            # Web dev best practices checker
-      productivity_tracking: true        # Dev session analytics
-      wisdom_on_run: true                # Show Fireship wisdom tip on each run
-      databases:
-        sqlite: true                     # Local ACID-compliant relational store
-        neo4j: false                     # Knowledge graph (enable when Neo4j is running)
-        dgraph: false                    # Distributed graph (enable when Dgraph is running)
-      coordinate_with_archivist: true    # Data sovereignty handoff
-      coordinate_with_web_architect: true # Website tech stack advisory
+      # --- Currently consumed by the agent/processor ---
+      session_timeout_seconds: 300     # Flush session after 5 min idle
+      min_words_to_store: 3            # Skip very short input
+      daemon_mode: both                # listener + watcher
+      listener_port: 9473              # HTTP endpoint for phone payloads
+      listener_bind: "127.0.0.1"       # Loopback by default
+      # listener_auth_token: ""        # Override random token (optional)
+      # --- Forward-looking (not yet wired) ---
+      # phi_scrub_enabled and credential_redact are always ON at the code
+      # level; these keys are placeholders and do not currently toggle behavior.
+      phi_scrub_enabled: true
+      credential_redact: true
+      daily_digest_hour: 23            # Planned: scheduled digest generation
+      retention_days: 90               # Planned: retention sweep
 
   device_agent:
     enabled: true
@@ -297,137 +292,152 @@ agents:
           enabled: true
           authorized_testing_only: true # Legal compliance reminder
 
-  iot_sentinel:
-    enabled: true
-    schedule_interval_minutes: 5
-    allowed_resources:
-      - network
-      - devices
-      - mqtt
-      - security
-    custom:
-      # Network scanning
-      subnet: "192.168.1.0/24"
-      scan_interval_seconds: 300        # 5 min between scans
-      # Known/trusted MAC addresses (add your devices here)
-      known_macs: []
-      # MQTT broker (Mosquitto)
-      mqtt:
-        host: "localhost"
-        port: 1883
-        use_tls: false
-        username: ""
-        password: ""
-      # Network segmentation (VLAN IDs)
-      vlans:
-        core: 10
-        iot: 20
-        user: 30
-      # Firewall policy
-      firewall:
-        deny_all_outbound_iot: true
-        allow_iot_to_mqtt_only: true
-        vpn_only_external_access: true
-      # Home Assistant
-      home_assistant:
-        base_url: "http://homeassistant.local:8123"
-        access_token: ""                 # Store in Vault, not here
-        verify_ssl: false
-      # Tailscale VPN
-      tailscale:
-        enabled: true
-        accept_routes: true
-        accept_dns: true
-      # Node-RED
-      node_red:
-        base_url: "http://localhost:1880"
-        admin_auth_token: ""
-      # Core service stack (Docker)
-      services:
-        home_assistant: true
-        mosquitto_mqtt: true
-        node_red: true
-        zigbee2mqtt: false               # Enable when Zigbee coordinator attached
-        tailscale_vpn: true
-      # Maintenance schedule
-      maintenance:
-        daily: "health_summary"
-        weekly: "integrity_report"
-        monthly: "update_review"
-      # AI agents
-      ai_roles:
-        network_monitor: true
-        risk_summarizer: true
-        recommendation_engine: true
+# ======================================================================
+# Fleet Management — Multi-device orchestration
+# ======================================================================
+# Three compute nodes managed as a unified fleet:
+#   A = ASUS ROG Flow Z13 (Windows, 64GB) — Primary controller
+#   B = MacBook Pro 2024 (macOS, M3 Pro)  — Secondary workstation
+#   C = Mac Mini (macOS, M2)              — Always-on daemon
+fleet:
+  enabled: true
+  health_check_interval_minutes: 5
 
-  # Sovereign IoT Local Control — H.O.M.E. L.I.N.K. IoT stack
-  # Docker Compose stack: Home Assistant, Mosquitto, Node-RED, n8n, Zigbee2MQTT, Ollama, Tailscale
-  iot_stack:
-    enabled: true
-    custom:
-      stack_dir: "~/iot-stack"                   # Docker Compose root
-      subnet: "192.168.1.0/24"                   # LAN subnet for nmap scans
-      scan_interval_minutes: 5                   # Network scan frequency
-      zigbee_device: "/dev/ttyUSB0"              # Zigbee USB coordinator path
-      # VLAN segmentation
-      vlans:
-        core: 10        # Guardian host, NAS, router
-        iot: 20          # IoT devices (sensors, plugs, lights, cameras)
-        user: 30         # User devices (laptops, phones, tablets)
-      # Firewall policy
-      firewall:
-        deny_all_outbound_iot: true              # IoT VLAN blocked from internet
-        allow_iot_to_mqtt_only: true             # IoT can only reach MQTT broker
-        vpn_only_external_access: true           # Remote access via Tailscale only
-      # Services
+  nodes:
+    rog:
+      role: primary
+      os: windows
+      hostname: ROG-Z13
+      ram_gb: 64
       services:
-        home_assistant:
-          enabled: true
-          port: 8123
-        mosquitto:
-          enabled: true
-          port: 1883
-          tls_port: 8883                         # Enable after initial setup
-          anonymous_access: false                # MUST be false in production
-        node_red:
-          enabled: true
-          port: 1880
-        n8n:
-          enabled: true
-          port: 5678
-        zigbee2mqtt:
-          enabled: true                          # Requires USB coordinator
-          frontend_port: 8080
-        ollama:
-          enabled: true
-          port: 11434
-        tailscale:
-          enabled: true
-      # AI agent workflows
-      ai_agents:
-        network_monitor:
-          enabled: true
-          scan_interval_minutes: 5
-          alert_on_unknown_device: true
-        risk_summarizer:
-          enabled: true
-          llm_provider: ollama                   # "ollama" or "openai"
-          model: "llama3"
-        recommendation_engine:
-          enabled: true
-          confidence_threshold: 0.7
-          execution_policy: "user_approval_required"
-      # Maintenance
-      maintenance:
-        config_backup_daily: true
-        health_summary_daily: true
-        integrity_report_weekly: true
-        update_review_monthly: true
-      # Security hardening (track completion)
-      hardening:
-        mqtt_auth_enabled: false                 # TODO: enable after initial setup
-        mqtt_tls_enabled: false                  # TODO: generate certs
-        ha_https_enabled: false                  # TODO: configure SSL
-        ufw_configured: false                    # TODO: restrict ports
-        image_versions_pinned: false             # TODO: pin after stable
-        zigbee_persistent_path: false            # TODO: use /dev/serial/by-id/
+        - guardian_one
+        - ollama
+        - docker_desktop
+        - claude_code
+        - visual_studio_code
+        - chatgpt_desktop
+        - codex
+      displays:
+        - ultrawide-left
+        - alienware-25
+
+    macbook-pro:
+      role: workstation
+      os: macos
+      hostname: Jeremys-MacBook-Pro
+      ram_gb: 18
+      ssh_user: jeremy
+      ssh_key: ~/.ssh/id_ed25519_macbook
+      stationary: true
+      services:
+        - claude_code
+        - visual_studio_code
+        - xcode
+        - docker_desktop
+        - notion_app
+      displays:
+        - ultrawide-right
+
+    mac-mini:
+      role: daemon
+      os: macos
+      hostname: Mac-Mini
+      ram_gb: 16
+      ssh_user: jeremy
+      ssh_key: ~/.ssh/id_ed25519_macmini
+      stationary: true
+      always_on: true
+      services:
+        - homelink_gateway       # H.O.M.E. L.I.N.K. API gateway (24/7)
+        - homelink_monitor       # Health monitoring (24/7)
+        - n8n                    # Workflow automation (Docker, 24/7)
+        - notion_sync            # Periodic Notion dashboard sync
+        - zapier_webhooks        # Zapier webhook listener
+        - docker_daemon          # Docker containers
+        - backup_agent           # Automated backup scheduler
+      displays:
+        - samsung-frame-65
+
+  # Display topology
+  displays:
+    ultrawide-49:
+      type: monitor
+      size: 49
+      resolution: 5120x1440
+      split: true                # PBP mode: left=ROG, right=MacBook
+      split_left: rog
+      split_right: macbook-pro
+      position: center
+
+    alienware-25:
+      type: monitor
+      size: 25
+      resolution: 2560x1440
+      refresh_hz: 240
+      connected_to: rog
+      position: right
+
+    lg-nanocell-65:
+      type: tv
+      size: 65
+      resolution: 3840x2160
+      connected_to: ""           # Flexible — any node
+      position: wall_left
+      cec: true
+
+    samsung-frame-65:
+      type: tv
+      size: 65
+      resolution: 3840x2160
+      connected_to: mac-mini
+      position: wall_right
+      cec: true
+      art_mode: true
+
+  # Subscription portfolio mapped to nodes
+  subscriptions:
+    docker_ai:
+      primary: rog
+      nodes: [rog, macbook-pro]
+    chatgpt:
+      primary: rog
+      nodes: [rog]
+    codex:
+      primary: rog
+      nodes: [rog]
+    claude_code:
+      primary: rog
+      nodes: [rog, macbook-pro]
+    zapier:
+      primary: mac-mini
+      nodes: [mac-mini, rog]
+      always_on: true
+    notion:
+      primary: mac-mini
+      nodes: [rog, macbook-pro, mac-mini]
+      always_on: true
+    n8n:
+      primary: mac-mini
+      nodes: [mac-mini]
+      always_on: true
+      docker: true
+    visual_studio_code:
+      primary: rog
+      nodes: [rog, macbook-pro]
+
+  # Backup strategy
+  backup:
+    guardian_data:
+      runner: mac-mini
+      schedule: "0 3 * * *"     # 3 AM daily
+      target: /Volumes/Backup/guardian-one/
+      retention_days: 90
+    docker_volumes:
+      runner: mac-mini
+      schedule: "0 4 * * *"     # 4 AM daily
+      target: /Volumes/Backup/docker/
+      retention_days: 30
+    git_sync:
+      runner: rog
+      schedule: "*/30 * * * *"  # Every 30 min
+      target: github:curiouscat777/jt
