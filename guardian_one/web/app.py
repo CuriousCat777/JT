@@ -78,6 +78,38 @@ def create_app() -> Flask:
     )
 
     # ------------------------------------------------------------------
+    # GOOS Platform — registration, onboarding, health checks
+    # ------------------------------------------------------------------
+    from guardian_one.goos.routes import goos_bp, init_goos
+    app.register_blueprint(goos_bp)
+
+    goos_init_lock = threading.Lock()
+    app.extensions.setdefault("goos_initialized", False)
+
+    def _ensure_goos_initialized() -> None:
+        if app.extensions.get("goos_initialized"):
+            return
+        with goos_init_lock:
+            if not app.extensions.get("goos_initialized"):
+                init_goos()
+                app.extensions["goos_initialized"] = True
+
+    @app.before_request
+    def _initialize_goos_on_first_request():
+        if request.path.startswith("/goos"):
+            _ensure_goos_initialized()
+    # Top-level health check (redirects to GOOS health)
+    @app.route("/health")
+    def health_check():
+        from datetime import datetime, timezone
+        return jsonify({
+            "status": "ok",
+            "platform": "Guardian One Operating System",
+            "version": "1.0",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # ------------------------------------------------------------------
     # Search — document search routes
     # ------------------------------------------------------------------
     from guardian_one.web.search_routes import search_bp
