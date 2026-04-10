@@ -363,6 +363,103 @@ def test_archivist_cross_device_backup():
     assert agent.get_backup("nas:full_mirror").device == "nas_synology"
 
 
+def test_archivist_varys_mode_inactive_by_default():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    assert agent.varys_mode is False
+    intel = agent.gather_intelligence()
+    assert "error" in intel
+
+
+class _FakeGuardian:
+    """Lightweight stand-in for GuardianOne in Varys-mode tests."""
+
+    def __init__(self, agents: dict, audit: AuditLog):
+        self._agents = agents
+        self.audit = audit
+        # Minimal vault stub
+        self.vault = type("V", (), {
+            "health_report": staticmethod(lambda: {
+                "total_credentials": 3,
+                "due_for_rotation": 1,
+            })
+        })()
+        # Minimal gateway stub
+        self.gateway = type("G", (), {
+            "list_services": staticmethod(lambda: ["notion", "gmail"]),
+            "service_status": staticmethod(lambda svc: {
+                "circuit_state": "closed", "service": svc,
+            }),
+        })()
+
+    def list_agents(self) -> list[str]:
+        return list(self._agents.keys())
+
+    def get_agent(self, name: str):
+        return self._agents.get(name)
+
+
+def test_archivist_varys_mode_gather_intelligence():
+    audit = _make_audit()
+    # Create a sibling agent (Chronos) for the Archivist to read
+    from guardian_one.agents.chronos import Chronos
+    chronos = Chronos(AgentConfig(name="chronos"), audit)
+    chronos.initialize()
+
+    archivist = Archivist(AgentConfig(name="archivist"), audit)
+    archivist.initialize()
+
+    fake_guardian = _FakeGuardian(
+        agents={"chronos": chronos, "archivist": archivist},
+        audit=audit,
+    )
+    archivist.set_guardian(fake_guardian)
+
+    assert archivist.varys_mode is True
+    intel = archivist.gather_intelligence()
+    assert "agents" in intel
+    assert "chronos" in intel["agents"]
+    assert intel["agents"]["chronos"]["status"] == "idle"
+    assert intel["vault_health"]["total_credentials"] == 3
+    assert "notion" in intel["gateway"]
+
+
+def test_archivist_sovereignty_report():
+    audit = _make_audit()
+    archivist = Archivist(AgentConfig(name="archivist"), audit)
+    archivist.initialize()
+
+    fake_guardian = _FakeGuardian(
+        agents={"archivist": archivist},
+        audit=audit,
+    )
+    archivist.set_guardian(fake_guardian)
+
+    report = archivist.sovereignty_report()
+    assert "data_sovereignty_score" in report
+    assert report["data_sovereignty_score"] <= 100
+    assert "recommendations" in report
+    # Vault has 1 credential due for rotation — should surface
+    assert any("rotation" in r for r in report["recommendations"])
+
+
+def test_archivist_run_with_varys_mode():
+    audit = _make_audit()
+    archivist = Archivist(AgentConfig(name="archivist"), audit)
+    archivist.initialize()
+
+    fake_guardian = _FakeGuardian(
+        agents={"archivist": archivist},
+        audit=audit,
+    )
+    archivist.set_guardian(fake_guardian)
+
+    report = archivist.run()
+    assert report.agent_name == "archivist"
+    assert any("Varys sweep" in a for a in report.actions_taken)
+    assert "sovereignty" in report.data
+
+
 # ---- CFO ----
 
 def _make_cfo() -> CFO:

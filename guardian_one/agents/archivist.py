@@ -1,11 +1,28 @@
-"""Archivist — Data Management Agent.
+"""Archivist — Chief of Staff for Libraries & File Organisation.
 
-Responsibilities:
-- Organise personal and professional files into a searchable structure
-- Maintain a master file of Jeremy's personal details for autofill
-- Map data from gadgets/apps (smartwatch, NordVPN, DeleteMe)
-- Data retention, backup and deletion policies
-- Privacy tool configuration (VPN, data-broker removal)
+Prime Directive:
+    Jeremy's digital life generates data across dozens of sources — medical records,
+    financial docs, smartwatch telemetry, legal papers, professional credentials.
+    The Archivist is the single authority that decides where every byte lives,
+    how long it stays, who can touch it, and when it gets destroyed.
+
+    Think of it like a library's head librarian crossed with a shredder operator:
+    everything gets catalogued, indexed, and retention-tagged on arrival.
+    Sensitive files get encrypted at rest. Expired files get flagged for deletion.
+    Nothing leaves without passing the content gate.
+
+Core Responsibilities:
+    1. FILE TAXONOMY    — Organise all files into a searchable, category-tagged index
+    2. MASTER PROFILE   — Maintain Jeremy's autofill data (single source of truth)
+    3. DATA SOURCES     — Map and sync from gadgets/apps (smartwatch, NordVPN, DeleteMe)
+    4. RETENTION ENGINE — Enforce time-based retention policies (delete-after-use → 7yr legal hold)
+    5. PRIVACY POSTURE  — Audit encryption gaps, VPN config, data-broker removal status
+    6. BACKUP CADENCE   — Schedule backups by category (financial=daily, legal=monthly)
+    7. PALANTÍR         — Strategic intelligence feeds (RSS, AI blogs, GitHub, finance)
+                          15-min refresh, priority-scored, CIO-level briefings
+
+Credential Access:
+    All secrets via homelink/vault.py. No caching. No hardcoding. No exceptions.
 """
 
 from __future__ import annotations
@@ -19,6 +36,27 @@ from typing import Any
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
+from guardian_one.integrations.data_platforms import (
+    DataPlatformManager,
+    FieldMapping,
+    PlatformConnection,
+    TableSchema,
+    default_databricks,
+    default_notion_db,
+    default_zapier_tables,
+)
+from guardian_one.integrations.data_transmuter import DataFormat, DataTransmuter, TransmutationResult
+from guardian_one.integrations.intelligence_feeds import (
+    FeedCategory,
+    FeedItem,
+    FeedPriority,
+    IntelligencePipeline,
+)
+
+# Secrecy protocol — only these identities may query the Archivist's
+# capabilities, internal state, or knowledge. Everyone else gets a
+# polite refusal. Varys didn't survive King's Landing by talking.
+AUTHORIZED_IDENTITIES = frozenset({"guardian_one", "jeremy", "root"})
 
 
 class RetentionPolicy(Enum):
@@ -113,7 +151,23 @@ class BackupRecord:
 
 
 class Archivist(BaseAgent):
-    """Data management agent for Jeremy's digital life."""
+    """Chief of Staff for libraries, file organisation, and data sovereignty.
+
+    The Archivist owns every file, every data source, every retention clock,
+    every intelligence feed, and every cross-platform data pipeline.
+
+    Capabilities:
+    - McGonagall-level data transmutation (any format in, any format out)
+    - Varys-level cross-agent intelligence (reads all agent domains)
+    - Palantír strategic feed monitoring (15-min cycle)
+    - Databricks / Zapier Tables / Notion DB integration
+    - Password management across all interfaces via Vault
+
+    Secrecy Protocol:
+    - ONLY guardian_one, jeremy, and root may query the Archivist's
+      capabilities, internal state, or knowledge.
+    - All other identities receive a refusal.
+    """
 
     # Platform priority: Linux (0) > Windows (1) > macOS (2)
     # Linux is the sovereign primary — all backups consolidate here.
@@ -131,18 +185,26 @@ class Archivist(BaseAgent):
         self._master_profile: dict[str, Any] = {}
         self._backup_schedule: dict[str, str] = {}
         self._backups: dict[str, BackupRecord] = {}
+        self._devices: dict[str, DeviceRecord] = {}
         self._power_tools: Any | None = None  # PowerToolsLibrary, injected by Guardian
+        self._guardian: Any = None  # Injected post-registration for Varys mode
+        self._palantir = IntelligencePipeline()  # Strategic intelligence feeds
+        self._transmuter = DataTransmuter()  # McGonagall-level data transformation
+        self._platforms = DataPlatformManager()  # Databricks, Zapier, Notion
+        self._password_store: dict[str, dict[str, str]] = {}  # interface → {label → vault_key}
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
         self._setup_default_sources()
         self._setup_privacy_tools()
         self._setup_file_categories()
+        self._setup_default_platforms()
         self._setup_devices()
         self._setup_default_backups()
         self.log("initialized", details={
             "sources": len(self._data_sources),
             "privacy_tools": len(self._privacy_tools),
+            "platforms": len(self._platforms.list_connections()),
             "devices": len(self._devices),
             "backups_tracked": len(self._backups),
         })
@@ -206,6 +268,12 @@ class Archivist(BaseAgent):
             "legal": "monthly",
         }
 
+    def _setup_default_platforms(self) -> None:
+        """Register default data platform connections."""
+        self._platforms.register_connection(default_databricks())
+        self._platforms.register_connection(default_zapier_tables())
+        self._platforms.register_connection(default_notion_db())
+
     def _setup_devices(self) -> None:
         """Register all devices in the multi-device backup network.
 
@@ -267,7 +335,7 @@ class Archivist(BaseAgent):
         backs up to the Linux primary.
         """
         defaults = [
-            # ── Linux Primary (sovereign hub) ──
+            # -- Linux Primary (sovereign hub) --
             BackupRecord(
                 name="linux:cfo_ledger",
                 source_path="data/cfo_ledger.json",
@@ -314,7 +382,7 @@ class Archivist(BaseAgent):
                 retention=RetentionPolicy.KEEP_1_YEAR,
             ),
 
-            # ── Windows ASUS ROG X (64GB) — priority 1 ──
+            # -- Windows ASUS ROG X (64GB) — priority 1 --
             BackupRecord(
                 name="rog:guardian_repo",
                 source_path="C:\\Users\\Jeremy\\JT\\",
@@ -361,7 +429,7 @@ class Archivist(BaseAgent):
                 retention=RetentionPolicy.KEEP_FOREVER,
             ),
 
-            # ── macOS MacBook — priority 2 ──
+            # -- macOS MacBook — priority 2 --
             BackupRecord(
                 name="macos:keychain",
                 source_path="~/Library/Keychains/",
@@ -667,6 +735,240 @@ class Archivist(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Secrecy protocol
+    # ------------------------------------------------------------------
+
+    def authorize(self, identity: str) -> bool:
+        """Check if an identity is authorized to query the Archivist.
+
+        Only guardian_one, jeremy, and root get through.
+        Everyone else gets nothing. Varys didn't survive by talking.
+        """
+        return identity in AUTHORIZED_IDENTITIES
+
+    def guarded_query(self, identity: str, query: str) -> dict[str, Any]:
+        """Query the Archivist's knowledge — with access control.
+
+        Unauthorized callers get a polite refusal and an audit entry.
+        """
+        if not self.authorize(identity):
+            self.log("unauthorized_query_blocked", severity=Severity.WARNING, details={
+                "identity": identity,
+                "query_preview": query[:50],
+            })
+            return {
+                "authorized": False,
+                "response": "The Archivist does not discuss its knowledge or capabilities "
+                            "with unauthorized entities. Contact the Guardian or root user.",
+            }
+
+        self.log("authorized_query", details={"identity": identity, "query_preview": query[:50]})
+        return {
+            "authorized": True,
+            "identity": identity,
+            "response": f"Query accepted from {identity}.",
+        }
+
+    # ------------------------------------------------------------------
+    # McGonagall — data transmutation
+    # ------------------------------------------------------------------
+
+    def transmute(self, data: str, target: DataFormat, source: DataFormat | None = None) -> TransmutationResult:
+        """Transform data from one format to another.
+
+        CSV → JSON, YAML → Markdown, whatever. McGonagall-level.
+        """
+        result = self._transmuter.transmute(data, target, source)
+        self.log("data_transmuted", details={
+            "source": result.source_format.value,
+            "target": result.target_format.value,
+            "success": result.success,
+            "records": result.record_count,
+        })
+        return result
+
+    def detect_format(self, data: str) -> DataFormat:
+        """Auto-detect a data payload's format."""
+        return self._transmuter.detect_format(data)
+
+    def extract_schema(self, data: str) -> dict[str, Any]:
+        """Extract the schema/structure of a data payload."""
+        return self._transmuter.extract_schema(data)
+
+    # ------------------------------------------------------------------
+    # Data platforms — Databricks, Zapier Tables, Notion DB
+    # ------------------------------------------------------------------
+
+    @property
+    def platforms(self) -> DataPlatformManager:
+        return self._platforms
+
+    def create_platform_table(
+        self, connection_name: str, schema: TableSchema,
+    ) -> dict[str, Any]:
+        """Create a table on a platform and log the operation."""
+        result = self._platforms.create_table(connection_name, schema)
+        self.log("platform_table_created", details={
+            "connection": connection_name,
+            "table": schema.name,
+        })
+        return result
+
+    def sync_platform(
+        self,
+        connection_name: str,
+        table_name: str,
+        records: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Sync records to/from a platform table."""
+        result = self._platforms.sync_table(connection_name, table_name, records)
+        self.log("platform_synced", details={
+            "connection": connection_name,
+            "table": table_name,
+            "records": len(records) if records else 0,
+        })
+        return result
+
+    def platform_health(self) -> dict[str, Any]:
+        """Health check across all connected platforms."""
+        return self._platforms.health_check()
+
+    def platform_activity(self, platform: str | None = None) -> list[dict[str, Any]]:
+        """Get platform activity log."""
+        records = self._platforms.activity_log(platform=platform)
+        return [
+            {"platform": r.platform, "table": r.table,
+             "operation": r.operation, "timestamp": r.timestamp}
+            for r in records
+        ]
+
+    # ------------------------------------------------------------------
+    # Password management
+    # ------------------------------------------------------------------
+
+    def register_credential(self, interface: str, label: str, vault_key: str) -> None:
+        """Register a credential for an interface.
+
+        The actual secret lives in Vault. We just track the mapping:
+        which interface uses which vault key.
+        """
+        if interface not in self._password_store:
+            self._password_store[interface] = {}
+        self._password_store[interface][label] = vault_key
+        self.log("credential_registered", details={
+            "interface": interface, "label": label,
+        })
+
+    def list_credentials(self, interface: str | None = None) -> dict[str, dict[str, str]]:
+        """List credential mappings (never the actual secrets)."""
+        if interface:
+            return {interface: self._password_store.get(interface, {})}
+        return dict(self._password_store)
+
+    def rotate_credential(self, interface: str, label: str) -> dict[str, Any]:
+        """Flag a credential for rotation.
+
+        The actual rotation happens through Vault — this just marks
+        the intent and logs it for audit.
+        """
+        creds = self._password_store.get(interface, {})
+        if label not in creds:
+            return {"error": f"No credential '{label}' for interface '{interface}'."}
+        self.log("credential_rotation_requested", severity=Severity.WARNING, details={
+            "interface": interface, "label": label, "vault_key": creds[label],
+        })
+        return {
+            "status": "rotation_requested",
+            "interface": interface,
+            "label": label,
+            "vault_key": creds[label],
+        }
+
+    def credential_audit(self) -> dict[str, Any]:
+        """Audit all credential mappings across interfaces.
+
+        When Varys mode is active, also pulls Vault health data
+        (rotation status, credential age) for a complete picture.
+        """
+        total = sum(len(v) for v in self._password_store.values())
+        audit: dict[str, Any] = {
+            "interfaces": len(self._password_store),
+            "total_credentials": total,
+            "by_interface": {k: len(v) for k, v in self._password_store.items()},
+        }
+        if self.varys_mode:
+            audit["vault"] = self._guardian.vault.health_report()
+        return audit
+
+    def discover_credentials(self) -> list[str]:
+        """Scan Vault for credentials not yet tracked by the Archivist.
+
+        Returns a list of orphaned vault keys — keys that exist in
+        Vault but aren't mapped to any interface.
+        """
+        if not self.varys_mode:
+            return []
+
+        tracked_keys = set()
+        for creds in self._password_store.values():
+            tracked_keys.update(creds.values())
+
+        vault_keys = set(self._guardian.vault.list_keys())
+        orphaned = sorted(vault_keys - tracked_keys)
+
+        if orphaned:
+            self.log("orphaned_credentials_found", severity=Severity.WARNING, details={
+                "count": len(orphaned),
+                "keys": orphaned,
+            })
+        return orphaned
+
+    # ------------------------------------------------------------------
+    # AI-powered intelligence
+    # ------------------------------------------------------------------
+
+    def ai_briefing(self) -> str:
+        """Generate an AI-powered intelligence summary.
+
+        Takes the top 10 unread Palantir items and asks the AI
+        to produce a 3-sentence CIO briefing. Falls back to a
+        deterministic summary when AI is offline.
+        """
+        items = self._palantir.unread()[:10]
+        if not items:
+            return "No unread intelligence items."
+
+        if not self.ai_enabled:
+            # Deterministic fallback
+            critical = [i for i in items if i.priority.value == "critical"]
+            high = [i for i in items if i.priority.value == "high"]
+            parts = []
+            if critical:
+                parts.append(f"{len(critical)} critical alert(s): {critical[0].title}")
+            if high:
+                parts.append(f"{len(high)} high-priority item(s)")
+            parts.append(f"{len(items)} total unread across {len(set(i.source for i in items))} sources")
+            return " | ".join(parts)
+
+        context = {
+            "items": [
+                {
+                    "title": i.title,
+                    "source": i.source,
+                    "priority": i.priority.value,
+                    "category": i.category.value,
+                    "summary": i.summary[:100],
+                }
+                for i in items
+            ]
+        }
+        return self.think_quick(
+            "Summarise these intelligence items in 3 concise sentences. "
+            "Lead with critical items. Name sources. Be direct.",
+            context=context,
+        )
+
+    # ------------------------------------------------------------------
     # File management
     # ------------------------------------------------------------------
 
@@ -775,6 +1077,137 @@ class Archivist(BaseAgent):
         }
 
     # ------------------------------------------------------------------
+    # Palantír — strategic intelligence feeds
+    # ------------------------------------------------------------------
+
+    @property
+    def palantir(self) -> IntelligencePipeline:
+        """Direct access to the intelligence pipeline."""
+        return self._palantir
+
+    def ingest_feed_items(self, items: list[FeedItem]) -> int:
+        """Ingest a batch of feed items into the Palantír."""
+        count = self._palantir.ingest_batch(items)
+        if count:
+            self.log("palantir_ingested", details={"new_items": count})
+        return count
+
+    def intelligence_briefing(self, max_items: int = 20) -> dict[str, Any]:
+        """CIO-level intelligence briefing — the morning Palantír read."""
+        briefing = self._palantir.briefing(max_items=max_items)
+        self.log("palantir_briefing", details={
+            "critical": briefing["critical_count"],
+            "unread": briefing["total_unread"],
+        })
+        return briefing
+
+    # ------------------------------------------------------------------
+    # Varys mode — cross-agent intelligence
+    # ------------------------------------------------------------------
+
+    def set_guardian(self, guardian: Any) -> None:
+        """Inject the GuardianOne reference for cross-agent reads.
+
+        Called after registration. Gives the Archivist read access to
+        every agent's reports, the audit log, vault metadata, and gateway
+        status — Varys's little birds, basically.
+        """
+        self._guardian = guardian
+        self.log("varys_mode_active", details={"cross_agent_access": True})
+
+    @property
+    def varys_mode(self) -> bool:
+        return self._guardian is not None
+
+    def gather_intelligence(self) -> dict[str, Any]:
+        """Read-only sweep across all agent domains.
+
+        Returns a consolidated view: every agent's latest report,
+        audit summary, vault health, and gateway status.
+        This is the Archivist's primary value-add — one agent that
+        sees everything so Jeremy doesn't have to check each one.
+        """
+        if not self.varys_mode:
+            return {"error": "Varys mode inactive — no guardian reference."}
+
+        intel: dict[str, Any] = {}
+
+        # Agent reports — ask each sibling for their status
+        agent_reports: dict[str, dict[str, Any]] = {}
+        for name in self._guardian.list_agents():
+            if name == self.name:
+                continue
+            agent = self._guardian.get_agent(name)
+            if agent is not None:
+                try:
+                    rpt = agent.report()
+                    agent_reports[name] = {
+                        "status": rpt.status,
+                        "summary": rpt.summary,
+                        "alerts": rpt.alerts,
+                    }
+                except Exception as exc:
+                    agent_reports[name] = {"error": str(exc)}
+        intel["agents"] = agent_reports
+
+        # Audit log — recent entries
+        intel["audit_summary"] = self._guardian.audit.summary(last_n=20)
+
+        # Vault health — credential count and rotation status (never values)
+        intel["vault_health"] = self._guardian.vault.health_report()
+
+        # Gateway — service circuit states
+        services = self._guardian.gateway.list_services()
+        gateway_status: dict[str, Any] = {}
+        for svc in services:
+            gateway_status[svc] = self._guardian.gateway.service_status(svc)
+        intel["gateway"] = gateway_status
+
+        self.log("intelligence_gathered", details={
+            "agents_scanned": len(agent_reports),
+            "services_checked": len(gateway_status),
+        })
+        return intel
+
+    def sovereignty_report(self) -> dict[str, Any]:
+        """High-level data sovereignty assessment.
+
+        Combines the Archivist's own privacy audit with cross-agent
+        intelligence to produce a single "how secure is Jeremy's data?" answer.
+        """
+        privacy = self.privacy_audit()
+        intel = self.gather_intelligence()
+        due = self.files_due_for_deletion()
+
+        issues = list(privacy.get("issues", []))
+        recommendations = list(privacy.get("recommendations", []))
+
+        # Flag agents in error state
+        for name, data in intel.get("agents", {}).items():
+            if data.get("status") == "error":
+                issues.append(f"Agent '{name}' is in error state.")
+            for alert in data.get("alerts", []):
+                issues.append(f"[{name}] {alert}")
+
+        # Vault rotation check
+        vault = intel.get("vault_health", {})
+        if vault.get("due_for_rotation"):
+            recommendations.append(
+                f"{vault['due_for_rotation']} credentials due for rotation."
+            )
+
+        return {
+            "data_sovereignty_score": max(0, 100 - len(issues) * 10),
+            "files_tracked": len(self._file_index),
+            "files_due_for_deletion": len(due),
+            "privacy": privacy,
+            "cross_agent_issues": issues,
+            "recommendations": recommendations,
+            "vault": vault,
+            "gateway": intel.get("gateway", {}),
+        }
+
+    # ------------------------------------------------------------------
     # BaseAgent interface
     # ------------------------------------------------------------------
 
@@ -795,6 +1228,17 @@ class Archivist(BaseAgent):
         recommendations.extend(privacy.get("recommendations", []))
         actions.append("Ran privacy audit.")
 
+        # Varys mode — cross-agent intelligence sweep
+        sovereignty = {}
+        if self.varys_mode:
+            sovereignty = self.sovereignty_report()
+            alerts.extend(sovereignty.get("cross_agent_issues", []))
+            recommendations.extend(sovereignty.get("recommendations", []))
+            actions.append(
+                f"Varys sweep: scanned sibling agents, "
+                f"sovereignty score {sovereignty.get('data_sovereignty_score', '?')}/100."
+            )
+
         # Backup audit
         backup_summary = self.backup_summary()
         if backup_summary.get("never_backed_up"):
@@ -808,6 +1252,18 @@ class Archivist(BaseAgent):
             pt_projects = self._power_tools.list_projects()
             pt_count = len(pt_projects)
             actions.append(f"Power tools library: {pt_count} managed project(s).")
+
+        # Palantír — strategic intelligence pipeline
+        palantir_stats = self._palantir.stats()
+        critical = self._palantir.critical_alerts()
+        if critical:
+            for item in critical:
+                alerts.append(f"[PALANTÍR CRITICAL] {item.source}: {item.title}")
+        if palantir_stats["unread"]:
+            actions.append(
+                f"Palantír: {palantir_stats['unread']} unread items "
+                f"across {palantir_stats['active_sources']} sources."
+            )
 
         device_count = len(self._devices) if hasattr(self, "_devices") else 0
         self._set_status(AgentStatus.IDLE)
@@ -824,20 +1280,30 @@ class Archivist(BaseAgent):
                 "privacy": privacy,
                 "backups": backup_summary,
                 "power_tools_projects": pt_count,
+                "sovereignty": sovereignty,
+                "palantir": palantir_stats,
             },
         )
 
     def report(self) -> AgentReport:
         pt_count = len(self._power_tools.list_projects()) if self._power_tools else 0
+        palantir = self._palantir.stats()
         return AgentReport(
             agent_name=self.name,
             status=self.status.value,
-            summary=f"Managing {len(self._file_index)} files, {len(self._data_sources)} sources, {len(self._privacy_tools)} privacy tools, {pt_count} power tool project(s).",
+            summary=(
+                f"Managing {len(self._file_index)} files, "
+                f"{len(self._data_sources)} sources, "
+                f"{len(self._privacy_tools)} privacy tools, "
+                f"{pt_count} power tool project(s), "
+                f"{palantir['total_items']} intel items."
+            ),
             data={
                 "files": len(self._file_index),
                 "sources": list(self._data_sources.keys()),
                 "privacy_tools": list(self._privacy_tools.keys()),
                 "profile_fields": len(self._master_profile),
                 "power_tools_projects": pt_count,
+                "palantir": palantir,
             },
         )
