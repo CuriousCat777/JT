@@ -42,12 +42,9 @@ Usage:
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
-    python main.py --power-tools          # Rails + Gin power tools status
-    python main.py --rails-new APP        # Scaffold a new Rails app
-    python main.py --gin-new APP          # Scaffold a new Gin app
-    python main.py --rails-server PATH    # Start Rails dev server
-    python main.py --gin-server PATH      # Start Gin dev server
-    python main.py --rails-install        # Install Ruby on Rails via gem
+    python main.py --archivist            # Full Archivist report (sovereignty, feeds, platforms)
+    python main.py --feeds               # Palantir intelligence briefing
+    python main.py --sovereignty         # Data sovereignty score + cross-agent sweep
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
     python main.py --cortex               # InputCortex status — keystroke intelligence
     python main.py --cortex-daemon        # Start InputCortex daemon (listener+watcher)
@@ -106,7 +103,9 @@ def _build_agents(guardian: GuardianOne) -> None:
     guardian.register_agent(Chronos(config=chronos_cfg, audit=guardian.audit))
 
     archivist_cfg = config.agents.get("archivist", AgentConfig(name="archivist"))
-    guardian.register_agent(Archivist(config=archivist_cfg, audit=guardian.audit))
+    archivist = Archivist(config=archivist_cfg, audit=guardian.audit)
+    guardian.register_agent(archivist)
+    archivist.set_guardian(guardian)  # Varys mode — cross-agent read access
 
     cfo_cfg = config.agents.get("cfo", AgentConfig(name="cfo"))
     guardian.register_agent(CFO(config=cfo_cfg, audit=guardian.audit, data_dir=config.data_dir))
@@ -369,18 +368,12 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
-    parser.add_argument("--dev-coach", dest="archivist", action="store_true",
-                        help="Developer Coach (tier list, wisdom, system inventory)")
-    parser.add_argument("--dev-coach-tier", dest="archivist_tier", action="store_true",
-                        help="Show the Developer Coach's opinionated tech tier list")
-    parser.add_argument("--dev-coach-wisdom", dest="archivist_wisdom", action="store_true",
-                        help="Get a Fireship-style developer wisdom tip")
-    parser.add_argument("--dev-coach-system", dest="archivist_system", action="store_true",
-                        help="Show system inventory (hardware/software)")
-    parser.add_argument("--dev-coach-stack", dest="archivist_stack", type=str, default=None,
-                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
-    parser.add_argument("--dev-coach-audit", dest="archivist_audit", type=str, default=None,
-                        help="Run web dev audit on a domain")
+    parser.add_argument("--archivist", action="store_true",
+                        help="Run Archivist with full report (sovereignty, feeds, platforms)")
+    parser.add_argument("--feeds", action="store_true",
+                        help="Palantir intelligence briefing (unread feeds)")
+    parser.add_argument("--sovereignty", action="store_true",
+                        help="Data sovereignty report (cross-agent sweep)")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
     # Fleet management (multi-device orchestration)
@@ -411,68 +404,94 @@ def main() -> None:
     _build_agents(guardian)
 
     # ------------------------------------------------------------------
-    # The Archivist — Developer Coach commands
+    # Archivist commands
     # ------------------------------------------------------------------
-    if args.archivist or args.archivist_tier or args.archivist_wisdom or args.archivist_system or args.archivist_stack or args.archivist_audit:
-        from guardian_one.agents.dev_coach import DevCoach
-        coach = guardian.get_agent("dev_coach")
-        if coach and isinstance(coach, DevCoach):
-            if args.archivist_tier:
-                tiers = coach.get_tier_list()
-                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
-                print("  " + "=" * 55)
-                for tier_name in ["S", "A", "B", "C", "D", "F"]:
-                    entries = tiers.get(tier_name, [])
-                    if entries:
-                        print(f"\n  [{tier_name}-TIER]")
-                        for e in entries:
-                            print(f"    {e['name']:<20} {e['notes']}")
-                print()
-            elif args.archivist_wisdom:
-                tip = coach.get_wisdom()
-                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
-            elif args.archivist_system:
-                inventory = coach.get_system_inventory()
-                print("\n  THE ARCHIVIST — System Inventory")
-                print("  " + "=" * 55)
-                for comp in inventory:
-                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
-                    for k, v in comp.get('specs', {}).items():
-                        print(f"    {k}: {v}")
-                print()
-            elif args.archivist_stack:
-                rec = coach.recommend_stack(args.archivist_stack)
-                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.archivist_stack}")
-                print("  " + "=" * 55)
-                for item in rec.get("stack", []):
-                    print(f"  {item['name']:<20} {item['reason']}")
-                print(f"\n  \"{rec.get('summary', '')}\"\n")
-            elif args.archivist_audit:
-                audit = coach.web_audit(args.archivist_audit)
-                print(f"\n  THE ARCHIVIST — Web Audit: {args.archivist_audit}")
-                print("  " + "=" * 55)
-                for check, info in audit.items():
-                    status = info.get("status", "needs_review")
-                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
-                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
-                print()
-            else:
-                report = guardian.run_agent("dev_coach")
-                print(f"\n  THE ARCHIVIST — Developer Coach Report")
-                print("  " + "=" * 55)
-                print(f"  Status: {report.status}")
-                print(f"  {report.summary}")
-                if report.recommendations:
-                    print("\n  Recommendations:")
-                    for r in report.recommendations:
-                        print(f"    - {r}")
-                if report.alerts:
-                    print("\n  Alerts:")
-                    for a in report.alerts:
-                        print(f"    [!] {a}")
-                print()
+    if args.archivist:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = guardian.run_agent("archivist")
+            print("=" * 60)
+            print("  ARCHIVIST REPORT — Data Sovereignty Intelligence")
+            print("=" * 60)
+            print(f"  Status: {report.status}")
+            print(f"  Summary: {report.summary}")
+            if report.alerts:
+                print("\n  ALERTS:")
+                for a in report.alerts:
+                    print(f"    [!] {a}")
+            if report.recommendations:
+                print("\n  RECOMMENDATIONS:")
+                for r in report.recommendations:
+                    print(f"    - {r}")
+            if report.actions_taken:
+                print("\n  ACTIONS:")
+                for a in report.actions_taken:
+                    print(f"    > {a}")
+            sov = report.data.get("sovereignty", {})
+            if sov:
+                print(f"\n  SOVEREIGNTY SCORE: {sov.get('data_sovereignty_score', '?')}/100")
+            pal = report.data.get("palantir", {})
+            if pal:
+                print(f"  PALANTIR: {pal.get('unread', 0)} unread | {pal.get('critical', 0)} critical")
+            print()
         else:
-            print("DevCoach agent not available.")
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.feeds:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            briefing = archivist.intelligence_briefing()
+            print("=" * 60)
+            print("  PALANTIR INTELLIGENCE BRIEFING")
+            print("=" * 60)
+            print(f"  Generated: {briefing['generated_at']}")
+            print(f"  Sources: {briefing['sources_active']}/{briefing['sources_total']} active")
+            print(f"  Unread: {briefing['total_unread']} | Critical: {briefing['critical_count']} | High: {briefing['high_priority_count']}")
+            if briefing["critical_alerts"]:
+                print("\n  CRITICAL ALERTS:")
+                for a in briefing["critical_alerts"]:
+                    print(f"    [!!!] {a['source']}: {a['title']}")
+            for cat, items in briefing.get("by_category", {}).items():
+                print(f"\n  {cat.upper()}:")
+                for item in items[:5]:
+                    pri = f"[{item['priority'].upper()}]" if item["priority"] != "medium" else ""
+                    print(f"    {pri} {item['source']}: {item['title']}")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.sovereignty:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = archivist.sovereignty_report()
+            score = report["data_sovereignty_score"]
+            print("=" * 60)
+            print("  DATA SOVEREIGNTY REPORT")
+            print("=" * 60)
+            grade = "A+" if score >= 90 else "A" if score >= 80 else "B" if score >= 70 else "C" if score >= 60 else "F"
+            print(f"  Score: {score}/100 (Grade: {grade})")
+            print(f"  Files tracked: {report['files_tracked']}")
+            print(f"  Files due for deletion: {report['files_due_for_deletion']}")
+            if report["cross_agent_issues"]:
+                print("\n  ISSUES:")
+                for issue in report["cross_agent_issues"]:
+                    print(f"    [!] {issue}")
+            if report["recommendations"]:
+                print("\n  RECOMMENDATIONS:")
+                for rec in report["recommendations"]:
+                    print(f"    - {rec}")
+            vault = report.get("vault", {})
+            if vault:
+                print(f"\n  VAULT: {vault.get('total_credentials', 0)} credentials")
+                if vault.get("due_for_rotation"):
+                    print(f"    ** {vault['due_for_rotation']} due for rotation **")
+            print()
+        else:
+            print("Archivist agent not available.")
         guardian.shutdown()
         return
 
