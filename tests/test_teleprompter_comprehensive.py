@@ -699,6 +699,17 @@ class TestAPIDeep:
         resp = c.get("/api/health", headers={"Origin": "http://evil.com"})
         assert "Access-Control-Allow-Origin" not in resp.headers
 
+    def test_cors_rejects_subdomain_bypass(self):
+        # A prefix-match CORS check would incorrectly allow this host because
+        # "http://localhost.evil.com:5200".startswith("http://localhost") is True.
+        # The parsed-host check must reject it.
+        c, _ = _client()
+        resp = c.get(
+            "/api/health",
+            headers={"Origin": "http://localhost.evil.com:5200"},
+        )
+        assert "Access-Control-Allow-Origin" not in resp.headers
+
     def test_options_preflight(self):
         c, _ = _client()
         resp = c.options("/api/generate-script", headers={

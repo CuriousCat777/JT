@@ -69,17 +69,28 @@ def create_app(
     # ------------------------------------------------------------------
     # CORS middleware
     # ------------------------------------------------------------------
+    from urllib.parse import urlparse
+
+    _allowed_schemes = {"http", "https"}
+    _allowed_hosts = {"localhost", "127.0.0.1", "[::1]"}
+
     @app.after_request
     def _cors(response: Response) -> Response:
         origin = request.headers.get("Origin", "")
-        allowed_origins = [
-            "http://localhost",
-            "http://127.0.0.1",
-            "https://localhost",
-        ]
-        # Allow any localhost port
-        if any(origin.startswith(o) for o in allowed_origins):
-            response.headers["Access-Control-Allow-Origin"] = origin
+        # Parse the Origin and match host exactly — a prefix check like
+        # origin.startswith("http://localhost") would let "http://localhost.evil.com"
+        # through, since attackers can point that DNS name anywhere.
+        if origin:
+            try:
+                parsed = urlparse(origin)
+                if (
+                    parsed.scheme in _allowed_schemes
+                    and parsed.hostname in _allowed_hosts
+                ):
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Vary"] = "Origin"
+            except ValueError:
+                pass
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Max-Age"] = "3600"
@@ -442,8 +453,12 @@ def create_app(
     def static_files(filename: str):
         static_dir = Path(__file__).parent / "static"
         filepath = (static_dir / filename).resolve()
-        # Prevent path traversal — ensure resolved path stays inside static_dir
-        if not str(filepath).startswith(str(static_dir.resolve())):
+        # Prevent path traversal — ensure resolved path stays inside static_dir.
+        # Path.is_relative_to handles sibling-prefix bypasses that a bare
+        # str.startswith("/a/b/static") would miss (e.g. "/a/b/static-other").
+        try:
+            filepath.relative_to(static_dir.resolve())
+        except ValueError:
             return "Forbidden", 403
         if filepath.exists():
             mime = "text/css" if filename.endswith(".css") else \
@@ -467,11 +482,18 @@ def run_teleprompter_server(
     guardian: Any | None = None,
     port: int = 5200,
     api_token: str | None = None,
+    host: str = "127.0.0.1",
 ) -> None:
     """Start the teleprompter API server.
 
     If guardian is provided, extracts the teleprompter agent.
     Otherwise creates a standalone agent.
+
+    Defaults to binding on 127.0.0.1 so the API is not exposed to the
+    network. Pass host="0.0.0.0" (or use --allow-lan on the CLI) only
+    when an iPhone PWA or other LAN client needs to reach the server —
+    and only on trusted networks. The bearer token is the only line of
+    defense once the port is exposed.
     """
     from guardian_one.core.audit import AuditLog
     from guardian_one.core.config import AgentConfig
@@ -495,19 +517,32 @@ def run_teleprompter_server(
 
     print(f"\n  Teleprompter API Server")
     print(f"  " + "=" * 40)
-    print(f"  URL:     http://0.0.0.0:{port}")
+    print(f"  URL:     http://{host}:{port}")
     print(f"  PWA:     http://localhost:{port}/")
     print(f"  Health:  http://localhost:{port}/api/health")
     print(f"  Scripts: {len(agent.list_scripts())} loaded")
+    if host == "0.0.0.0":
+        print(f"  WARNING: exposed on all interfaces — bearer token is the")
+        print(f"           only gate. Use only on trusted LAN.")
     print(f"  " + "=" * 40)
     print()
 
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Teleprompter API Server")
     parser.add_argument("--port", type=int, default=5200)
     parser.add_argument("--token", type=str, default=None)
+    parser.add_argument(
+        "--allow-lan",
+        action="store_true",
+        help="Bind to 0.0.0.0 so iPhone PWA on the LAN can reach the server "
+             "(default: 127.0.0.1 only).",
+    )
     args = parser.parse_args()
-    run_teleprompter_server(port=args.port, api_token=args.token)
+    run_teleprompter_server(
+        port=args.port,
+        api_token=args.token,
+        host="0.0.0.0" if args.allow_lan else "127.0.0.1",
+    )
