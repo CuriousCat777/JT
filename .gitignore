@@ -68,4 +68,5 @@ token.json
 data/*.xlsx
 data/*.csv
 data/*.png
+data/*.db
 data/homelink-reference/
