@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  # ── Typesense ────────────────────────────────────────────────
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: guardian-typesense
+    restart: unless-stopped
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-guardian-search-key}
+      TYPESENSE_ENABLE_CORS: "true"
+    command: --data-dir /data --api-key=${TYPESENSE_API_KEY:-guardian-search-key} --enable-cors
+
+  # ── Meilisearch ──────────────────────────────────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: guardian-meilisearch
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili-data:/meili_data
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-guardian-meili-key}
+      MEILI_NO_ANALYTICS: "true"
+
+volumes:
+  typesense-data:
+  meili-data:

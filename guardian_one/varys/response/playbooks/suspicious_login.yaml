@@ -1,0 +1,13 @@
+name: Suspicious Login Response
+trigger: source == anomaly AND event_type == login
+steps:
+  - action: alert
+    channels:
+      - console
+    auto: true
+  - action: challenge_user
+    method: mfa_re_prompt
+    auto: false
+    requires_approval: true
+  - action: log_investigation
+    auto: true

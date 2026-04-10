@@ -1,0 +1,18 @@
+title: Suspicious Privilege Escalation
+id: varys-001
+description: Detects commands associated with privilege escalation attempts
+level: high
+tags:
+  - attack.privilege_escalation
+  - attack.t1548
+logsource:
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - "sudo su"
+      - "chmod 777"
+      - "chmod +s"
+      - "setuid"
+      - "pkexec"
+  condition: selection

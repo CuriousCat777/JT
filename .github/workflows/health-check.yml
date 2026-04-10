@@ -1,0 +1,38 @@
+name: Health Check Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check n8n health endpoint
+        id: health
+        run: |
+          MONITORING_URL="${{ secrets.MONITORING_URL }}"
+          if [ -z "$MONITORING_URL" ]; then
+            echo "MONITORING_URL not set, skipping"
+            exit 0
+          fi
+
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${MONITORING_URL}/healthz" 2>/dev/null || echo "000")
+          echo "status=$HTTP_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Service is healthy (HTTP $HTTP_CODE)"
+          else
+            echo "Service is unhealthy (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Alert on failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-type: application/json' \
+            -d '{"text":":rotating_light: *Health Check Failed* - n8n service is not responding. HTTP status: ${{ steps.health.outputs.status }}"}' \
+            2>/dev/null || true

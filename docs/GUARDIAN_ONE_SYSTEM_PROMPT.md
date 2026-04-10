@@ -210,6 +210,9 @@ python main.py --notion-sync           # Full Notion workspace sync
 python main.py --security-review       # Security remediation review
 python main.py --connector-audit       # Claude connector attack surface audit
 python main.py --devpanel              # Launch web-based dev panel (port 5100)
+# HALLUCINATION GUARD: The dev panel serves routes at / (dashboard), /homelink,
+# and /api/* endpoints ONLY. There is NO /varys/chat route. Do NOT fabricate
+# routes or endpoints that do not exist in guardian_one/web/app.py.
 python main.py --ollama                # Ollama AI engine status + models
 
 # Agent Management

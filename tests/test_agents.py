@@ -8,7 +8,10 @@ from guardian_one.core.audit import AuditLog
 from guardian_one.core.base_agent import AgentStatus
 from guardian_one.core.config import AgentConfig
 from guardian_one.agents.chronos import CalendarEvent, Chronos, SleepRecord
-from guardian_one.agents.archivist import Archivist, FileRecord, RetentionPolicy
+from guardian_one.agents.archivist import (
+    Archivist, FileRecord, RetentionPolicy, BackupRecord, BackupStatus,
+    DeviceRecord, DevicePlatform,
+)
 from guardian_one.agents.cfo import (
     Account,
     AccountType,
@@ -145,6 +148,219 @@ def test_archivist_run():
     agent.initialize()
     report = agent.run()
     assert report.agent_name == "archivist"
+    # Run cycle should include backup info
+    assert "backups" in report.data
+
+
+def test_archivist_default_backups_registered():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    backups = agent.list_backups()
+    # Per-device backup naming: device:target
+    assert "linux:cfo_ledger" in backups
+    assert "linux:vault" in backups
+    assert "linux:guardian_config" in backups
+    assert "linux:audit_log" in backups
+    assert "rog:guardian_repo" in backups
+    assert "macos:keychain" in backups
+    assert backups["linux:cfo_ledger"].schedule == "daily"
+    assert backups["linux:vault"].retention == RetentionPolicy.KEEP_FOREVER
+    assert backups["linux:cfo_ledger"].device == "linux_primary"
+    assert backups["rog:guardian_repo"].device == "windows_rog_x"
+    assert backups["macos:keychain"].device == "macos_macbook"
+
+
+def test_archivist_register_custom_backup():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    agent.register_backup(BackupRecord(
+        name="custom_db",
+        source_path="data/custom.db",
+        backup_path="data/backups/custom_db",
+        category="system",
+        schedule="weekly",
+    ))
+    assert agent.get_backup("custom_db") is not None
+    assert agent.get_backup("custom_db").schedule == "weekly"
+
+
+def test_archivist_record_and_verify_backup():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Record a successful backup
+    record = agent.record_backup("linux:cfo_ledger", size_bytes=1700000, checksum="abc123")
+    assert record is not None
+    assert record.backup_status == BackupStatus.OK
+    assert record.size_bytes == 1700000
+    assert len(record.history) == 1
+
+    # Verify it
+    assert agent.verify_backup("linux:cfo_ledger") is True
+    assert record.backup_status == BackupStatus.VERIFIED
+    assert len(record.history) == 2
+
+
+def test_archivist_verify_checksum_mismatch():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup("linux:cfo_ledger", checksum="correct_hash")
+    assert agent.verify_backup("linux:cfo_ledger", checksum="wrong_hash") is False
+    assert agent.get_backup("linux:cfo_ledger").backup_status == BackupStatus.FAILED
+
+
+def test_archivist_stale_backups_detected():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # All defaults are MISSING (never backed up) — should all be stale
+    stale = agent.stale_backups()
+    assert len(stale) == len(agent.list_backups())
+    assert all(r.backup_status == BackupStatus.MISSING for r in stale)
+
+
+def test_archivist_backup_not_stale_after_recording():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Record a fresh backup — should NOT be stale
+    agent.record_backup("linux:cfo_ledger", size_bytes=100)
+    stale = agent.stale_backups()
+    stale_names = [r.name for r in stale]
+    assert "linux:cfo_ledger" not in stale_names
+
+
+def test_archivist_backup_failure_tracked():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup_failure("linux:vault", error="Permission denied")
+    record = agent.get_backup("linux:vault")
+    assert record.backup_status == BackupStatus.FAILED
+    assert len(record.history) == 1
+    assert record.history[0]["error"] == "Permission denied"
+
+
+def test_archivist_backup_summary():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.record_backup("linux:cfo_ledger", size_bytes=1000)
+    summary = agent.backup_summary()
+    assert summary["total"] == 14  # 5 linux + 5 rog + 4 macos
+    assert summary["devices_registered"] == 3
+    # Check device grouping
+    assert "linux_primary" in summary["by_device"]
+    assert "windows_rog_x" in summary["by_device"]
+    assert "macos_macbook" in summary["by_device"]
+    # Check priority ordering (Linux=0 first)
+    device_ids = list(summary["by_device"].keys())
+    assert device_ids[0] == "linux_primary"
+    assert device_ids[1] == "windows_rog_x"
+    assert device_ids[2] == "macos_macbook"
+
+
+def test_archivist_run_alerts_on_missing_backups():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    report = agent.run()
+    # Should alert about missing backups (none have been run)
+    backup_alerts = [a for a in report.alerts if "NEVER been backed up" in a]
+    assert len(backup_alerts) > 0
+    # Summary should mention devices
+    assert "devices" in report.summary
+
+
+# ---- Archivist: Multi-device backup ----
+
+def test_archivist_devices_registered():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    devices = agent.list_devices()
+    assert len(devices) == 3
+    # Priority order: Linux (0), Windows (1), macOS (2)
+    assert devices[0].device_id == "linux_primary"
+    assert devices[0].platform == DevicePlatform.LINUX
+    assert devices[1].device_id == "windows_rog_x"
+    assert devices[1].platform == DevicePlatform.WINDOWS
+    assert devices[2].device_id == "macos_macbook"
+    assert devices[2].platform == DevicePlatform.MACOS
+
+
+def test_archivist_device_online_offline():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+    agent.mark_device_online("linux_primary")
+    device = agent.get_device("linux_primary")
+    assert device.online is True
+    assert device.last_seen is not None
+
+    agent.mark_device_offline("linux_primary")
+    assert device.online is False
+
+
+def test_archivist_backups_for_device():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    linux_backups = agent.backups_for_device("linux_primary")
+    rog_backups = agent.backups_for_device("windows_rog_x")
+    macos_backups = agent.backups_for_device("macos_macbook")
+
+    assert len(linux_backups) == 5  # cfo_ledger, vault, config, audit, repo
+    assert len(rog_backups) == 5    # repo, ollama, docs, wsl, vault
+    assert len(macos_backups) == 4  # keychain, docs, repo, imessage
+
+    # All linux backups should have device="linux_primary"
+    assert all(b.device == "linux_primary" for b in linux_backups)
+    assert all(b.device == "windows_rog_x" for b in rog_backups)
+
+
+def test_archivist_device_backup_status():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Record a backup for ROG
+    agent.record_backup("rog:guardian_repo", size_bytes=50000)
+
+    status = agent.device_backup_status("windows_rog_x")
+    assert status["device_name"] == "ASUS ROG X"
+    assert status["platform"] == "windows"
+    assert status["total_targets"] == 5
+    assert status["stale"] == 4  # 4 still missing, 1 just backed up
+
+
+def test_archivist_register_custom_device():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    agent.register_device(DeviceRecord(
+        device_id="nas_synology",
+        name="Synology NAS",
+        platform=DevicePlatform.LINUX,
+        priority=0,
+        storage_path="/volume1/backups",
+    ))
+    assert agent.get_device("nas_synology") is not None
+    assert len(agent.list_devices()) == 4
+
+
+def test_archivist_cross_device_backup():
+    agent = Archivist(AgentConfig(name="archivist"), _make_audit())
+    agent.initialize()
+
+    # Register a custom backup target for a new device
+    agent.register_backup(BackupRecord(
+        name="nas:full_mirror",
+        source_path="/home/user/JT/",
+        backup_path="/volume1/backups/guardian",
+        category="system",
+        schedule="daily",
+        device="nas_synology",
+    ))
+    assert agent.get_backup("nas:full_mirror").device == "nas_synology"
 
 
 # ---- CFO ----

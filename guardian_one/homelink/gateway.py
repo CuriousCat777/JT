@@ -274,7 +274,10 @@ class Gateway:
                 return result
 
             except Exception as exc:
-                last_error = str(exc)
+                # Sanitize error — strip potential credentials from URLs/headers
+                raw_error = str(exc)
+                last_error = raw_error.split("Authorization")[0].rstrip() if "Authorization" in raw_error else raw_error
+                last_error = type(exc).__name__ + ": " + last_error[:200]
                 latency = (time.time() - start) * 1000
                 with self._history_lock:
                     self._history.append(RequestRecord(
