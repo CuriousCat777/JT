@@ -413,6 +413,11 @@ def main() -> None:
                         help="Active kernels and daemons across all 3 nodes")
     parser.add_argument("--fleet-status", action="store_true",
                         help="Full fleet status (nodes + displays + subscriptions)")
+    # VOP v2.1 — Verification Operating Protocol
+    parser.add_argument("--vop", action="store_true",
+                        help="VOP v2.1 status (ORaCLE verification engine)")
+    parser.add_argument("--vop-verify", type=str, default=None,
+                        help="Verify a claim through VOP pipeline (e.g., --vop-verify 'Python 3.13 released')")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -1989,6 +1994,49 @@ def main() -> None:
             print(commander.cmd_kernels())
         elif args.fleet_status:
             print(commander.cmd_full_status())
+
+    # ------------------------------------------------------------------
+    # VOP v2.1 — Verification Operating Protocol
+    # ------------------------------------------------------------------
+    elif args.vop:
+        vop_info = guardian.vop_status()
+        print("=" * 60)
+        print("  VOP v2.1 — VERIFICATION OPERATING PROTOCOL (ORaCLE)")
+        print("=" * 60)
+        print(f"  Protocol:        {vop_info['protocol']}")
+        print(f"  Fail-closed:     {vop_info['fail_closed']}")
+        print(f"  Performance:     {vop_info['performance_mode']}")
+        print(f"  Verifiers:       {', '.join(vop_info['verifiers']) or 'none registered'}")
+        print(f"  Session claims:  {vop_info['session_claims']}")
+        stats = vop_info["stats"]
+        print(f"\n  STATS")
+        print(f"  {'─' * 30}")
+        print(f"  Processed:       {stats['total_processed']}")
+        print(f"  Verified:        {stats['total_verified']}")
+        print(f"  Blocked:         {stats['total_blocked']}")
+        print(f"  Verification %:  {stats['verification_rate']}%")
+        if vop_info["consecutive_failures"] > 0:
+            print(f"\n  ** {vop_info['consecutive_failures']} consecutive failures "
+                  f"(escalation at {vop_info['escalation_threshold']}) **")
+        print("=" * 60)
+        guardian.shutdown()
+        return
+
+    elif args.vop_verify:
+        from guardian_one.core.vop import Claim, classify_claim
+        claim_text = args.vop_verify
+        claim_type = classify_claim(claim_text)
+        claim = Claim(text=claim_text, claim_type=claim_type)
+        result = guardian.verify_claims([claim])
+        print("=" * 60)
+        print("  VOP v2.1 — CLAIM VERIFICATION")
+        print("=" * 60)
+        print(f"\n{result.to_compact()}")
+        if result.escalation:
+            print(f"\n  {result.escalation_message}")
+        print("\n" + "=" * 60)
+        guardian.shutdown()
+        return
 
     elif args.summary:
         print(guardian.daily_summary())

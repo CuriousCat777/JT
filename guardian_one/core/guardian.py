@@ -25,6 +25,7 @@ from guardian_one.core.security import (
     AccessPolicy,
     SecretStore,
 )
+from guardian_one.core.vop import VOPEngine
 from guardian_one.homelink.gateway import Gateway, ServiceConfig, RateLimitConfig
 from guardian_one.homelink.vault import Vault
 from guardian_one.homelink.registry import IntegrationRegistry
@@ -54,6 +55,9 @@ class GuardianOne:
 
         # AI Engine — the sovereign brain
         self.ai_engine = AIEngine(ai_config or self._load_ai_config())
+
+        # VOP v2.1 — ORaCLE arbiter (verification operating protocol)
+        self.vop = VOPEngine(audit=self.audit, fail_closed=True)
 
         # H.O.M.E. L.I.N.K. subsystems
         self.gateway = Gateway(audit=self.audit)
@@ -233,6 +237,9 @@ class GuardianOne:
         # Inject AI engine into the agent
         agent.set_ai_engine(self.ai_engine)
 
+        # Inject VOP engine into the agent (ORaCLE verification)
+        agent.set_vop_engine(self.vop)
+
         # Inject Power Tools Library if the agent has access
         if "power_tools" in agent.config.allowed_resources:
             if hasattr(agent, "set_power_tools"):
@@ -374,6 +381,20 @@ class GuardianOne:
         lines.append(f"  Agents with memory: {', '.join(ai_info['agents_with_memory']) or 'none'}")
         lines.append("")
 
+        # VOP v2.1 — ORaCLE status
+        lines.append("--- VOP v2.1 (ORaCLE) ---")
+        vop_info = self.vop.status()
+        lines.append(f"  Protocol: {vop_info['protocol']}")
+        lines.append(f"  Fail-closed: {vop_info['fail_closed']}")
+        lines.append(f"  Verifiers: {', '.join(vop_info['verifiers']) or 'none'}")
+        stats = vop_info["stats"]
+        lines.append(f"  Claims processed: {stats['total_processed']}")
+        lines.append(f"  Verification rate: {stats['verification_rate']}%")
+        lines.append(f"  Blocked: {stats['total_blocked']}")
+        if vop_info["consecutive_failures"] >= 2:
+            lines.append(f"  ** {vop_info['consecutive_failures']} consecutive failures — approaching escalation **")
+        lines.append("")
+
         # Pending reviews
         pending = self.audit.pending_reviews()
         if pending:
@@ -410,6 +431,25 @@ class GuardianOne:
             context=context,
         )
         return response.content
+
+    # ------------------------------------------------------------------
+    # VOP v2.1 — Verification Operating Protocol
+    # ------------------------------------------------------------------
+
+    def verify_claims(self, claims: list) -> Any:
+        """Run claims through the VOP verification pipeline.
+
+        Args:
+            claims: List of Claim objects to verify.
+
+        Returns:
+            VOPResult with verified/blocked claims.
+        """
+        return self.vop.process(claims)
+
+    def vop_status(self) -> dict[str, Any]:
+        """Get VOP engine status."""
+        return self.vop.status()
 
     # ------------------------------------------------------------------
     # Notion + n8n integration
