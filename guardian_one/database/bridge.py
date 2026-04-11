@@ -51,6 +51,32 @@ def _s(d: dict[str, Any], key: str, default: str = "") -> str:
 _NUMERIC_EXTRACT = re.compile(r"-?\d+(?:\.\d+)?")
 
 
+def _first_nonempty_id(d: dict[str, Any], *keys: str) -> str:
+    """Return the first non-empty id-like field, coerced to ``str``.
+
+    ``_s`` treats an empty string as a valid value and does not fall
+    through to a secondary default, so ``_s(t, "reference_id", _s(t,
+    "id"))`` fails to recover when an upstream payload sets
+    ``reference_id: ""`` alongside a real ``id``. The empty
+    reference_id then bypasses dedup entirely (the partial unique
+    index only covers ``reference_id != ''``), so re-syncing the
+    same payload would produce duplicate rows.
+
+    This helper walks the provided keys in order and returns the
+    first value that is both present and non-empty after string
+    coercion. ``None`` / missing / empty-string are all treated as
+    "missing" for dedup purposes.
+    """
+    for key in keys:
+        value = d.get(key)
+        if value is None:
+            continue
+        text = value if isinstance(value, str) else str(value)
+        if text:
+            return text
+    return ""
+
+
 def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     """Get a float field, parsing strings and coercing bad values → default.
 
@@ -180,7 +206,13 @@ class DatabaseBridge:
                 institution=_s(t, "institution"),
                 transaction_type=_s(t, "transaction_type"),
                 source=source,
-                reference_id=_s(t, "reference_id", _s(t, "id")),
+                # ``_first_nonempty_id`` treats "" the same as a
+                # missing key so a payload like
+                # ``{"reference_id": "", "id": "abc"}`` still gets
+                # a stable dedup key instead of silently becoming
+                # "" (which would bypass the UNIQUE index and
+                # duplicate on re-sync).
+                reference_id=_first_nonempty_id(t, "reference_id", "id"),
                 notes=_s(t, "notes"),
             )
             for t in transactions

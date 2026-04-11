@@ -16,9 +16,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from guardian_one.core.audit import AuditLog, Severity
+
+if TYPE_CHECKING:
+    from guardian_one.database.bridge import DatabaseBridge
 from guardian_one.core.base_agent import AgentReport, AgentStatus, BaseAgent
 from guardian_one.core.config import AgentConfig
 from guardian_one.integrations.financial_sync import (
@@ -122,6 +125,7 @@ class CFO(BaseAgent):
         data_dir: Path | str = "data",
         rocket_money: RocketMoneyProvider | None = None,
         plaid: PlaidProvider | None = None,
+        db_bridge: "DatabaseBridge | None" = None,
     ) -> None:
         super().__init__(config, audit)
         self._accounts: dict[str, Account] = {}
@@ -141,6 +145,10 @@ class CFO(BaseAgent):
         )
         self._plaid_connected = False
         self._last_sync: str = ""
+        # Optional database bridge — when set, save_ledger() mirrors
+        # every account + transaction into the SQLite repository so
+        # --db-* queries return live data, not stale first-run imports.
+        self._db_bridge = db_bridge
 
     def initialize(self) -> None:
         self._set_status(AgentStatus.IDLE)
@@ -327,6 +335,40 @@ class CFO(BaseAgent):
             "transactions": len(self._transactions),
             "bills": len(self._bills),
         })
+
+        # Mirror the ledger into the SQLite repository so --db-*
+        # queries return live data, not the stale snapshot that
+        # --db-init imported on first run. Best-effort: DB errors
+        # never block the authoritative JSON write above.
+        if self._db_bridge is not None:
+            try:
+                self._db_bridge.sync_accounts(
+                    data["accounts"], source="cfo_ledger"
+                )
+                self._db_bridge.sync_transactions(
+                    [
+                        {
+                            "date": tx["date"],
+                            "description": tx["description"],
+                            "amount": tx["amount"],
+                            "category": tx["category"],
+                            "account": tx["account"],
+                            # Use a deterministic reference so re-syncs
+                            # are idempotent: (account, date, amount,
+                            # description) is stable per transaction.
+                            "reference_id": (
+                                f"{tx['account']}|{tx['date']}|"
+                                f"{tx['amount']}|{tx['description']}"
+                            ),
+                        }
+                        for tx in data["transactions"]
+                    ],
+                    source="cfo_ledger",
+                )
+            except Exception:  # noqa: BLE001
+                # The JSON ledger is authoritative — a DB mirror
+                # failure should never break the live sync path.
+                pass
 
     def add_account(self, account: Account, persist: bool = True) -> None:
         self._accounts[account.name] = account

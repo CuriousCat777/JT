@@ -1011,6 +1011,43 @@ class TestDatabaseBridge:
         stored = bridge.db.query_transactions()
         assert len(stored) == 2
 
+    def test_sync_transactions_empty_reference_id_falls_back_to_id(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: upstream payloads like
+        ``{"reference_id": "", "id": "abc"}`` must use ``id`` as the
+        dedup key. Before the fix, ``_s`` returned ``""`` unchanged
+        and the row bypassed the partial unique index, so re-sync
+        silently duplicated the row."""
+        txns = [
+            {"date": "2026-03-01", "description": "first",
+             "amount": -10.0, "reference_id": "", "id": "A1"},
+            {"date": "2026-03-02", "description": "second",
+             "amount": -20.0, "reference_id": None, "id": "B2"},
+        ]
+        # First sync: both land.
+        assert bridge.sync_transactions(txns) == 2
+        stored = bridge.db.query_transactions()
+        refs = {t.reference_id for t in stored}
+        assert refs == {"A1", "B2"}
+        # Re-sync: dedup must catch them via the fallback id.
+        assert bridge.sync_transactions(txns) == 0
+        assert len(bridge.db.query_transactions()) == 2
+
+    def test_sync_transactions_both_empty_ids_are_missing_keys(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """When both reference_id and id are empty/None/missing,
+        the row gets an empty dedup key (same as before) and the
+        caller accepts duplicate risk."""
+        txns = [
+            {"date": "2026-03-01", "description": "no key",
+             "amount": -5.0, "reference_id": "", "id": None},
+        ]
+        assert bridge.sync_transactions(txns) == 1
+        stored = bridge.db.query_transactions()
+        assert stored[0].reference_id == ""
+
     def test_sync_transactions_numeric_reference_id_resyncs(
         self, bridge: DatabaseBridge
     ) -> None:

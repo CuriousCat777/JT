@@ -12,7 +12,10 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from guardian_one.database.bridge import DatabaseBridge
 
 from guardian_one.core.ai_engine import AIConfig, AIEngine, AIProvider
 from guardian_one.core.audit import AuditLog, Severity
@@ -45,7 +48,16 @@ class GuardianOne:
         ai_config: AIConfig | None = None,
     ) -> None:
         self.config = config or load_config()
-        self.audit = AuditLog(log_dir=Path(self.config.log_dir))
+        # Database bridge — single point of persistence for live
+        # audit events, sync snapshots, and CLI queries. Constructed
+        # before AuditLog so it can be wired into the logger.
+        # Failures are swallowed here so an unavailable DB never
+        # blocks Guardian One startup — the bridge becomes a no-op.
+        self.db_bridge = self._build_db_bridge()
+        self.audit = AuditLog(
+            log_dir=Path(self.config.log_dir),
+            db_bridge=self.db_bridge,
+        )
         self.mediator = Mediator(audit=self.audit)
         self.access = AccessController()
         self._agents: dict[str, BaseAgent] = {}
@@ -96,6 +108,32 @@ class GuardianOne:
                 "ai_anthropic": ai_status["anthropic"]["available"],
             },
         )
+
+    # ------------------------------------------------------------------
+    # Database bridge
+    # ------------------------------------------------------------------
+
+    def _build_db_bridge(self) -> "DatabaseBridge | None":
+        """Construct the DB bridge used for live audit/sync persistence.
+
+        The bridge writes to ``${GUARDIAN_DATA_DIR}/guardian.db`` (or
+        the configured ``data_dir``) so every ``AuditLog.record()``
+        call and every CFO sync mirrors into the SQLite repository
+        in real time.  ``--db-init`` is no longer the only way to
+        populate the database.
+
+        Returns ``None`` if the import or schema initialization
+        fails, so a missing / broken DB never blocks Guardian One
+        startup — the rest of the system still runs on the
+        JSONL + JSON stores.
+        """
+        try:
+            from guardian_one.database.bridge import DatabaseBridge
+
+            db_path = Path(self.config.data_dir) / "guardian.db"
+            return DatabaseBridge(db_path=db_path)
+        except Exception:  # noqa: BLE001
+            return None
 
     # ------------------------------------------------------------------
     # AI configuration

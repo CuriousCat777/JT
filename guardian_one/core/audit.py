@@ -16,7 +16,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from guardian_one.database.bridge import DatabaseBridge
 
 
 class Severity(Enum):
@@ -67,6 +70,7 @@ class AuditLog:
         max_memory_entries: int = _DEFAULT_MAX_MEMORY,
         max_file_bytes: int = _DEFAULT_MAX_FILE_BYTES,
         max_rotated_files: int = _DEFAULT_MAX_ROTATED,
+        db_bridge: "DatabaseBridge | None" = None,
     ) -> None:
         self._log_dir = log_dir or Path("logs")
         self._log_dir.mkdir(parents=True, exist_ok=True)
@@ -77,6 +81,11 @@ class AuditLog:
         self._max_rotated = max_rotated_files
         self._entries: deque[AuditEntry] = deque(maxlen=max_memory_entries)
         self._total_recorded: int = 0
+        # Optional database bridge — when set, every record() call
+        # also writes the entry to ``system_logs``. Best-effort:
+        # failures are caught so an unavailable DB never blocks the
+        # canonical JSONL write.
+        self._db_bridge = db_bridge
 
     def record(
         self,
@@ -100,6 +109,21 @@ class AuditLog:
             with open(self._log_file, "a") as f:
                 f.write(json.dumps(entry.to_dict()) + "\n")
             self._maybe_rotate()
+        # Mirror to the database outside the lock so a slow DB write
+        # can't block concurrent JSONL writers. Any failure is
+        # swallowed — the canonical JSONL file is still authoritative.
+        if self._db_bridge is not None:
+            try:
+                self._db_bridge.log_audit_entry(
+                    agent=agent,
+                    action=action,
+                    severity=severity.value,
+                    details=details,
+                    component="audit",
+                    source="audit_runtime",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return entry
 
     def _maybe_rotate(self) -> None:
