@@ -482,6 +482,21 @@ class TestMaintenance:
         rows = db.execute_raw("SELECT COUNT(*) AS n FROM system_logs")
         assert rows[0]["n"] == 1
 
+    def test_execute_raw_propagates_real_query_errors(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: a SELECT against a missing table must raise
+        ``sqlite3.OperationalError`` — not be silently remapped as a
+        "refused mutating statement"."""
+        with pytest.raises(sqlite3.OperationalError) as exc_info:
+            db.execute_raw("SELECT * FROM definitely_not_a_table")
+        assert "no such table" in str(exc_info.value).lower()
+        # Also check that a syntax error is not remapped either. The
+        # prefix check lets "SELECT garbage syntax" through, then the
+        # engine returns OperationalError which must propagate.
+        with pytest.raises(sqlite3.OperationalError):
+            db.execute_raw("SELECT FROM WHERE broken")
+
     def test_vacuum(self, db: GuardianDatabase) -> None:
         db.insert_log(SystemLog(agent="test", action="hello"))
         db.vacuum()  # should not raise

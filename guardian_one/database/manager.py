@@ -738,9 +738,15 @@ class GuardianDatabase:
             rows = conn.execute(sql, params).fetchall()
             return [dict(r) for r in rows]
         except sqlite3.OperationalError as exc:
-            raise ValueError(
-                f"execute_raw() refused mutating statement: {exc}"
-            ) from exc
+            # Only remap *readonly-attempt* errors into ValueError. Other
+            # OperationalError cases (missing table, syntax error, …)
+            # are real query problems and should propagate unchanged so
+            # callers can handle them properly.
+            if "readonly" in str(exc).lower():
+                raise ValueError(
+                    f"execute_raw() refused mutating statement: {exc}"
+                ) from exc
+            raise
         finally:
             conn.close()
 

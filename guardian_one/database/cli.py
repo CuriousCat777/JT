@@ -7,6 +7,7 @@ so database commands work in minimal environments and Docker containers.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from guardian_one.database import GuardianDatabase
@@ -34,31 +35,48 @@ def db_main() -> None:
     _handle_db_commands(args)
 
 
+def _resolve_log_dir() -> Path:
+    """Resolve the log directory.
+
+    Honors ``GUARDIAN_LOG_DIR`` (same env var the rest of the codebase
+    uses) and falls back to ``logs`` relative to CWD.
+    """
+    return Path(os.environ.get("GUARDIAN_LOG_DIR", "logs"))
+
+
 def _handle_db_commands(args: argparse.Namespace) -> None:
     """Handle all --db-* CLI commands."""
     # If --db-path is given, honor it; otherwise let GuardianDatabase
     # resolve the default via GUARDIAN_DATA_DIR (or fall back to ./data).
     db_path = Path(args.db_path) if args.db_path else None
     db = GuardianDatabase(db_path)
-    resolved_db_path = db.stats()["db_path"]
+    resolved_db_path = Path(db.stats()["db_path"])
+    # The data directory is always the directory containing the DB
+    # file, so --db-path and GUARDIAN_DATA_DIR both stay consistent
+    # with where ``cfo_ledger.json`` is imported from.
+    data_dir = resolved_db_path.parent
+    log_dir = _resolve_log_dir()
 
     if args.db_init:
         print("=" * 60)
         print("  GUARDIAN ONE DATABASE — INITIALIZATION")
         print("=" * 60)
         print(f"  Database: {resolved_db_path}")
+        print(f"  Data dir: {data_dir}")
+        print(f"  Log dir:  {log_dir}")
         print()
 
-        # Import existing audit logs
-        audit_path = Path("logs/audit.jsonl")
+        # Import existing audit logs from the configured log dir.
+        audit_path = log_dir / "audit.jsonl"
         if audit_path.exists():
             count = db.import_audit_jsonl(audit_path)
             print(f"  Imported {count} audit log entries from {audit_path}")
         else:
             print(f"  No audit log found at {audit_path} (skipped)")
 
-        # Import existing CFO ledger
-        ledger_path = Path("data/cfo_ledger.json")
+        # Import existing CFO ledger from the same directory as the DB
+        # so --db-path and GUARDIAN_DATA_DIR both stay in sync.
+        ledger_path = data_dir / "cfo_ledger.json"
         if ledger_path.exists():
             count = db.import_cfo_ledger(ledger_path)
             print(f"  Imported {count} financial accounts from {ledger_path}")

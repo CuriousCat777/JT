@@ -1,19 +1,37 @@
 # Guardian One — Docker Compose
 # ================================
+# Three kinds of services live here:
+#
+#   guardian (default) — CLI-only DB access. One-shot by design: each
+#     command (--db, --db-init, --db-logs, --db-accounts, …) prints
+#     output and exits. Invoked on demand via `docker compose run`,
+#     not `docker compose up`. No restart policy, no default command.
+#
+#   db-init (profile: setup) — one-shot helper for first-time DB
+#     initialization from existing audit.jsonl + cfo_ledger.json.
+#
+#   sync / scheduler / devpanel (profiles: full, web) — genuinely
+#     long-running services backed by the full Guardian One agent
+#     runtime. These keep `restart: unless-stopped`.
+#
 # Usage:
-#   docker compose up -d              # Start Guardian One
-#   docker compose run guardian --db   # Check database status
-#   docker compose run guardian --db-init  # Initialize and import data
-#   docker compose run guardian --db-logs  # Query logs
-#   docker compose exec guardian python main.py --sync  # Live sync
+#   docker compose run --rm guardian --db-init         # first run
+#   docker compose run --rm guardian --db              # status
+#   docker compose run --rm guardian --db-logs cfo     # filtered logs
+#   docker compose run --rm guardian --db-accounts
+#   docker compose --profile setup up db-init          # bootstrap
+#   docker compose --profile full up -d                # sync + scheduler
+#   docker compose --profile web up -d devpanel        # Flask panel
 #
 # Data persists across container restarts via named volumes.
 
 services:
   guardian:
     build: .
-    container_name: guardian-one
-    restart: unless-stopped
+    # No container_name (conflicts with `docker compose run`).
+    # No restart policy and no default command: this container is
+    # invoked on demand via `docker compose run --rm guardian <args>`,
+    # runs a single CLI command, and exits cleanly.
     env_file:
       - .env
     environment:
@@ -25,15 +43,6 @@ services:
       - guardian-data:/app/data          # SQLite database + CFO ledger
       - guardian-logs:/app/logs          # Audit logs (JSONL)
       - guardian-config:/app/config      # Config files, tokens, credentials
-    ports:
-      - "5100:5100"     # Dev panel (--devpanel)
-    # Default command: run all agents once
-    command: ["--db"]
-    healthcheck:
-      test: ["CMD", "python", "-c", "from guardian_one.database import GuardianDatabase; db = GuardianDatabase(); print(db.stats())"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
 
   # One-shot service to initialize the database on first deploy
   db-init:
@@ -51,7 +60,7 @@ services:
     profiles:
       - setup
 
-  # Scheduled sync service — runs financial sync on loop
+  # Scheduled sync service — genuinely long-running: --sync loops forever
   sync:
     build: .
     container_name: guardian-sync
@@ -67,10 +76,17 @@ services:
       - guardian-logs:/app/logs
       - guardian-config:/app/config
     command: ["--sync"]
+    # Non-mutating healthcheck: only verifies the DB file is reachable
+    # read-only; it does not create or initialize the schema.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sqlite3, sys; p = os.path.join(os.environ.get('GUARDIAN_DATA_DIR', 'data'), 'guardian.db'); sys.exit(1) if not os.path.exists(p) else sqlite3.connect(f'file:{p}?mode=ro', uri=True).execute('SELECT 1').fetchone()"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
     profiles:
       - full
 
-  # Scheduled agent runner
+  # Scheduled agent runner — genuinely long-running: --schedule loops forever
   scheduler:
     build: .
     container_name: guardian-scheduler
@@ -86,10 +102,15 @@ services:
       - guardian-logs:/app/logs
       - guardian-config:/app/config
     command: ["--schedule"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sqlite3, sys; p = os.path.join(os.environ.get('GUARDIAN_DATA_DIR', 'data'), 'guardian.db'); sys.exit(1) if not os.path.exists(p) else sqlite3.connect(f'file:{p}?mode=ro', uri=True).execute('SELECT 1').fetchone()"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
     profiles:
       - full
 
-  # Web dev panel
+  # Web dev panel — genuinely long-running: Flask HTTP server
   devpanel:
     build: .
     container_name: guardian-devpanel
@@ -107,6 +128,11 @@ services:
     ports:
       - "5100:5100"
     command: ["--devpanel", "--devpanel-port", "5100"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sqlite3, sys; p = os.path.join(os.environ.get('GUARDIAN_DATA_DIR', 'data'), 'guardian.db'); sys.exit(1) if not os.path.exists(p) else sqlite3.connect(f'file:{p}?mode=ro', uri=True).execute('SELECT 1').fetchone()"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
     profiles:
       - web
 
