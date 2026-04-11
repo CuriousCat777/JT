@@ -11,6 +11,44 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+def _format_canonical(dt: datetime) -> str:
+    """Format a datetime as the canonical DB schema timestamp.
+
+    Produces ISO-8601 with *millisecond* precision and a literal
+    ``Z`` suffix — e.g. ``2026-04-11T05:57:27.320Z`` — matching the
+    ``strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`` default used in the
+    schema.  Input datetimes without a ``tzinfo`` are treated as UTC;
+    aware datetimes are converted to UTC first.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return f"{dt:%Y-%m-%dT%H:%M:%S}.{dt.microsecond // 1000:03d}Z"
+
+
+def normalize_iso_timestamp(value: str) -> str:
+    """Normalize any ISO-8601 timestamp to the canonical ms-``Z`` format.
+
+    Accepts the shapes we actually see in the wild:
+      * Python ``datetime.isoformat()``: ``...27.320955+00:00``
+      * DB-native: ``...27.320Z``
+      * Legacy audit logs: ``...27Z`` or ``...27+00:00``
+
+    Garbage / unparseable values are returned unchanged so the caller
+    can fall back to its own default handling (``_coerce_str``).
+    """
+    if not value or not isinstance(value, str):
+        return value or ""
+    try:
+        # ``fromisoformat`` on recent Python accepts the ``Z`` suffix
+        # directly, but we replace it for broader compatibility.
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return _format_canonical(parsed)
+
+
 def _now_iso() -> str:
     """Return an ISO-8601 UTC timestamp matching the SQLite schema default.
 
@@ -29,8 +67,7 @@ def _now_iso() -> str:
     To stay consistent with the schema we emit millisecond precision
     and a literal ``Z`` suffix.
     """
-    now = datetime.now(timezone.utc)
-    return f"{now:%Y-%m-%dT%H:%M:%S}.{now.microsecond // 1000:03d}Z"
+    return _format_canonical(datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------------------------

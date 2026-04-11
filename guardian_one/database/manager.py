@@ -29,6 +29,7 @@ from guardian_one.database.models import (
     FinancialTransaction,
     SystemCode,
     SystemLog,
+    normalize_iso_timestamp,
 )
 
 
@@ -759,8 +760,13 @@ class GuardianDatabase:
                         data = json.loads(line)
                         if not isinstance(data, dict):
                             continue
+                        # Normalize the imported timestamp to the
+                        # DB's canonical millisecond-``Z`` format so
+                        # legacy rows (``...+00:00``) remain lex-
+                        # comparable with new ``_now_iso()`` rows.
+                        raw_ts = _coerce_str(data, "timestamp")
                         logs.append(SystemLog(
-                            timestamp=_coerce_str(data, "timestamp"),
+                            timestamp=normalize_iso_timestamp(raw_ts),
                             agent=_coerce_str(data, "agent"),
                             action=_coerce_str(data, "action"),
                             severity=_coerce_str(data, "severity", "info"),

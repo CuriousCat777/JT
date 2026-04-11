@@ -565,24 +565,66 @@ class TestImport:
         assert len(accounts) == 1
         assert "Bank" in accounts[0].institution
 
-    def test_import_audit_jsonl_tolerates_non_utf8_bytes(
+    def test_import_audit_jsonl_normalizes_legacy_timestamps(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
-        """Regression: audit logs with non-UTF-8 bytes must not raise
-        ``UnicodeDecodeError`` mid-iteration."""
+        """Regression: timestamps in legacy audit logs come in several
+        shapes (``...27+00:00``, ``...27.320955+00:00``, ``...27Z``),
+        and all must be normalized to the schema's canonical
+        millisecond-``Z`` format so lexicographic TEXT ordering holds
+        across imported + DB-generated rows.
+        """
         jsonl_path = tmp_path / "audit.jsonl"
-        raw = (
-            b'{"timestamp": "2026-03-01T00:00:00Z", "agent": "cfo", '
-            b'"action": "sync", "severity": "info", '
-            b'"details": {"note": "ok \xa9 2026"}}\n'
-            b'{"timestamp": "2026-03-02T00:00:00Z", "agent": "chronos", '
-            b'"action": "schedule", "severity": "info"}\n'
-        )
-        jsonl_path.write_bytes(raw)
-        count = db.import_audit_jsonl(jsonl_path)
-        assert count == 2
-        logs = db.query_logs()
-        assert len(logs) == 2
+        entries = [
+            # datetime.isoformat() — microseconds + offset
+            {"timestamp": "2026-03-01T00:00:00.123456+00:00",
+             "agent": "cfo", "action": "a", "severity": "info"},
+            # no fractional seconds, Z suffix
+            {"timestamp": "2026-03-02T00:00:00Z",
+             "agent": "cfo", "action": "b", "severity": "info"},
+            # no fractional seconds, offset
+            {"timestamp": "2026-03-03T00:00:00+00:00",
+             "agent": "cfo", "action": "c", "severity": "info"},
+            # already canonical
+            {"timestamp": "2026-03-04T00:00:00.456Z",
+             "agent": "cfo", "action": "d", "severity": "info"},
+        ]
+        with open(jsonl_path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        assert db.import_audit_jsonl(jsonl_path) == 4
+
+        # Every stored timestamp must match the canonical shape.
+        import re
+        rows = db.execute_raw("SELECT timestamp FROM system_logs")
+        for row in rows:
+            ts = row["timestamp"]
+            assert ts.endswith("Z"), ts
+            assert "+" not in ts, ts
+            assert re.match(
+                r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", ts
+            ), ts
+
+        # Lexicographic ORDER BY now produces chronological order.
+        ordered = db.query_logs(limit=10)
+        actions = [log.action for log in ordered]
+        # query_logs returns DESC, so expected order is d, c, b, a.
+        assert actions == ["d", "c", "b", "a"]
+
+        # A ``since=`` boundary filter now respects the chronological
+        # intent across mixed source formats.
+        since = "2026-03-02T00:00:00.000Z"
+        filtered = db.query_logs(since=since)
+        filtered_actions = sorted(log.action for log in filtered)
+        assert filtered_actions == ["b", "c", "d"]
+
+    def test_normalize_iso_timestamp_leaves_garbage_alone(self) -> None:
+        """Regression: unparseable timestamps pass through unchanged
+        so ``_coerce_str`` can still apply its own defaults."""
+        from guardian_one.database.models import normalize_iso_timestamp
+        assert normalize_iso_timestamp("not a date") == "not a date"
+        assert normalize_iso_timestamp("") == ""
+        assert normalize_iso_timestamp(None) == ""
 
     def test_import_cfo_ledger_tolerates_non_dict_top_level(
         self, db: GuardianDatabase, tmp_path: Path

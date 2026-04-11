@@ -359,6 +359,11 @@ def main() -> None:
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    # Accepted here (but consumed by the --db fast-path / docker-entrypoint
+    # parser) so mixed invocations like ``--sync --db-path foo.db`` don't
+    # hard-fail with ``unrecognized arguments`` in main().
+    parser.add_argument("--db-path", type=str, default=None,
+                        help="Custom database path (used by --db* commands)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
