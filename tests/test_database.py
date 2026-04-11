@@ -343,18 +343,28 @@ class TestFinancialTransactions:
         # still present.
         assert descs == ["manual A", "plaid C", "plaid D"]
 
-    def test_replace_transactions_empty_input_does_not_wipe(
+    def test_replace_transactions_empty_input_wipes_the_slice(
         self, db: GuardianDatabase
     ) -> None:
-        """Empty-input guard: calling with an empty list must NOT
-        silently wipe the existing slice. An accidental no-op
-        (broken iterator, upstream failure clearing the in-memory
-        list) shouldn't become a delete-all."""
+        """Legitimate empty-snapshot semantics: passing an empty
+        ``txns`` list is treated as "the caller has zero rows for
+        this source" and the slice is cleared. This is required
+        for CFO's ``save_ledger`` to converge to an empty mirror
+        after ``clean_ledger`` or a user-initiated truncation.
+        Previous revisions short-circuited on empty input and
+        left stale rows behind.
+
+        Rows with other source tags are still untouched."""
         db.insert_transaction(FinancialTransaction(
             date="2026-03-01", source="plaid", reference_id="p1",
         ))
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-02", source="manual", reference_id="m1",
+        ))
         assert db.replace_transactions_for_source("plaid", []) == 0
-        assert len(db.query_transactions()) == 1
+        remaining = db.query_transactions()
+        assert len(remaining) == 1
+        assert remaining[0].source == "manual"
 
     def test_batch_insert(self, db: GuardianDatabase) -> None:
         txns = [
@@ -555,6 +565,101 @@ class TestImport:
         severities = {log.severity for log in logs}
         assert None not in severities
 
+    def test_import_cfo_ledger_imports_transactions(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: ``cfo_ledger.json`` contains both
+        ``accounts`` and ``transactions`` sections. The importer
+        must populate ``financial_transactions`` as well so
+        --db-transactions / --db-search / --db-spending return
+        pre-existing history after --db-init (before any runtime
+        sync rewrites it)."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        data = {
+            "saved_at": "2026-03-22T00:00:00Z",
+            "accounts": [
+                {"name": "Checking", "account_type": "checking",
+                 "balance": 1000.0, "institution": "Chase"},
+            ],
+            "transactions": [
+                {"date": "2026-03-01", "description": "Amazon",
+                 "amount": -45.99, "category": "other",
+                 "account": "Checking"},
+                {"date": "2026-03-02", "description": "Paycheck",
+                 "amount": 2500.00, "category": "income",
+                 "account": "Checking"},
+                # Two same-day, same-amount charges — both should
+                # land thanks to the occurrence-counter in the
+                # synthesized ref.
+                {"date": "2026-03-03", "description": "Starbucks",
+                 "amount": -4.99, "category": "food",
+                 "account": "Checking"},
+                {"date": "2026-03-03", "description": "Starbucks",
+                 "amount": -4.99, "category": "food",
+                 "account": "Checking"},
+            ],
+        }
+        with open(ledger_path, "w") as f:
+            json.dump(data, f)
+        db.import_cfo_ledger(ledger_path)
+
+        stored = db.query_transactions()
+        assert len(stored) == 4
+        descs = sorted(t.description for t in stored)
+        assert descs == ["Amazon", "Paycheck", "Starbucks", "Starbucks"]
+        # All tagged with the cfo_ledger source.
+        assert {t.source for t in stored} == {"cfo_ledger"}
+
+        # Re-importing the same ledger is idempotent: the
+        # replace_transactions path deletes the cfo_ledger slice
+        # and re-inserts, converging to the same 4 rows.
+        db.import_cfo_ledger(ledger_path)
+        assert len(db.query_transactions()) == 4
+
+    def test_import_cfo_ledger_without_transactions_key_leaves_slice(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """An old-format ledger with only ``accounts`` (no
+        ``transactions`` key) must NOT wipe the existing
+        cfo_ledger transaction slice — we can't distinguish
+        "old format" from "zero transactions" otherwise."""
+        # Pre-seed a cfo_ledger row via the bridge path so we can
+        # verify it survives.
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="existing",
+            amount=-10.0, source="cfo_ledger", reference_id="x1",
+        ))
+        ledger_path = tmp_path / "cfo_ledger.json"
+        with open(ledger_path, "w") as f:
+            json.dump({
+                "saved_at": "2026-03-22T00:00:00Z",
+                "accounts": [{"name": "Checking"}],
+                # Note: no "transactions" key at all.
+            }, f)
+        db.import_cfo_ledger(ledger_path)
+        # Existing row still present.
+        assert len(db.query_transactions()) == 1
+
+    def test_import_cfo_ledger_empty_transactions_wipes_slice(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """An explicit ``"transactions": []`` IS a meaningful
+        "the ledger has zero transactions" snapshot and must
+        replace the slice accordingly."""
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="stale",
+            amount=-10.0, source="cfo_ledger", reference_id="x1",
+        ))
+        ledger_path = tmp_path / "cfo_ledger.json"
+        with open(ledger_path, "w") as f:
+            json.dump({
+                "saved_at": "2026-03-22T00:00:00Z",
+                "accounts": [{"name": "Checking"}],
+                "transactions": [],
+            }, f)
+        db.import_cfo_ledger(ledger_path)
+        assert db.query_transactions() == []
+
     def test_import_cfo_ledger_coerces_null_fields(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -737,6 +842,43 @@ class TestImport:
         filtered = db.query_logs(since="2026-01-01T00:00:00Z", limit=20)
         filtered_actions = sorted(log.action for log in filtered)
         assert filtered_actions == ["good"]
+
+    def test_import_audit_jsonl_rejects_lookalike_bad_timestamps(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a string that *looks* canonical
+        (``len == 24``, ends in ``Z``, has a ``.`` at position 19)
+        but represents an impossible datetime
+        (``2026-13-40T25:61:61.999Z``) must still be rewritten
+        to the epoch sentinel. The previous shape-only check
+        happily accepted such lookalike garbage."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        entries = [
+            {"timestamp": "2026-03-01T00:00:00Z",
+             "agent": "cfo", "action": "good", "severity": "info"},
+            # Shape matches canonical but values are impossible.
+            {"timestamp": "2026-13-40T25:61:61.999Z",
+             "agent": "cfo", "action": "lookalike", "severity": "info"},
+            # Month 00 is also invalid.
+            {"timestamp": "2026-00-15T12:00:00.000Z",
+             "agent": "cfo", "action": "zero_month", "severity": "info"},
+        ]
+        with open(jsonl_path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        assert db.import_audit_jsonl(jsonl_path) == 3
+
+        rows = db.execute_raw("SELECT action, timestamp FROM system_logs")
+        by_action = {r["action"]: r["timestamp"] for r in rows}
+        assert by_action["good"] == "2026-03-01T00:00:00.000Z"
+        assert by_action["lookalike"] == "1970-01-01T00:00:00.000Z"
+        assert by_action["zero_month"] == "1970-01-01T00:00:00.000Z"
+
+        # Lookalike/zero_month must not leak into a real ``since=``
+        # time window — they sort to epoch-zero.
+        filtered = db.query_logs(since="2026-01-01T00:00:00Z", limit=20)
+        actions = sorted(log.action for log in filtered)
+        assert actions == ["good"]
 
     def test_import_audit_jsonl_is_idempotent(
         self, db: GuardianDatabase, tmp_path: Path

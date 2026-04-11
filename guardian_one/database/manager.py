@@ -643,25 +643,26 @@ class GuardianDatabase:
         reference_ids that survive reorder/delete, which is
         effectively impossible without a persistent row UUID.
 
-        Instead we delete everything carrying the caller's
-        ``source`` tag and bulk-insert the current snapshot in the
-        same transaction. Rows with other ``source`` values (manual
-        inserts, audit-mirrored rows, other provider mirrors) are
-        untouched.
+        Delete-and-insert semantics are unconditional: passing an
+        empty ``txns`` is a legitimate "the caller has zero rows
+        for this source" snapshot and the slice is cleared
+        accordingly. This is important because CFO's
+        ``save_ledger`` must be able to converge the mirror to an
+        empty state after ``clean_ledger`` or a user-initiated
+        truncation; a previous version of this method short-
+        circuited on empty input and left stale rows behind. Rows
+        with other ``source`` values (manual inserts, audit
+        mirror, other provider syncs) are untouched.
 
-        **Empty-input guard:** when ``txns`` is empty, this is
-        treated as "caller has nothing to mirror right now" and the
-        existing rows are left alone. This prevents a broken
-        mirror call (e.g. a bad iterator, an upstream failure that
-        cleared the in-memory list) from silently wiping history.
-        Callers that legitimately want to erase the mirror slice
-        should call with a non-empty placeholder or use a
-        dedicated truncate method.
+        **Caller responsibility:** callers with risky upstream
+        paths (broken iterators, provider failures) must add their
+        own empty-input guard at the call site so an unintended
+        no-op doesn't wipe the slice. The manager intentionally
+        does not second-guess its callers here.
 
-        Returns the number of rows inserted.
+        Returns the number of rows inserted (0 for an empty
+        snapshot, which still runs the DELETE).
         """
-        if not txns:
-            return 0
         with self._lock:
             conn = self._connect()
             try:
@@ -669,18 +670,19 @@ class GuardianDatabase:
                     "DELETE FROM financial_transactions WHERE source = ?",
                     (source,),
                 )
-                conn.executemany(
-                    """INSERT INTO financial_transactions
-                       (date, description, amount, category, account, institution,
-                        transaction_type, source, reference_id, notes, recorded_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    [
-                        (t.date, t.description, t.amount, t.category,
-                         t.account, t.institution, t.transaction_type,
-                         source, t.reference_id, t.notes, t.recorded_at)
-                        for t in txns
-                    ],
-                )
+                if txns:
+                    conn.executemany(
+                        """INSERT INTO financial_transactions
+                           (date, description, amount, category, account, institution,
+                            transaction_type, source, reference_id, notes, recorded_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        [
+                            (t.date, t.description, t.amount, t.category,
+                             t.account, t.institution, t.transaction_type,
+                             source, t.reference_id, t.notes, t.recorded_at)
+                            for t in txns
+                        ],
+                    )
                 conn.commit()
                 return len(txns)
             finally:
@@ -884,8 +886,29 @@ class GuardianDatabase:
                             continue
                         raw_ts = _coerce_str(data, "timestamp")
                         canonical = normalize_iso_timestamp(raw_ts)
-                        if len(canonical) != 24 or not canonical.endswith("Z") \
-                                or canonical[19] != ".":
+                        # Shape check AND a real datetime round-trip.
+                        # A naive ``len == 24 and endswith('Z')``
+                        # check would accept lookalike garbage like
+                        # ``2026-13-40T25:61:61.999Z`` (impossible
+                        # month/day/hour/minute/second). We verify
+                        # the canonical string actually parses back
+                        # into a ``datetime`` before trusting it;
+                        # anything that fails is rewritten to the
+                        # epoch sentinel so bad rows never pollute
+                        # lex-ordered TEXT comparisons.
+                        valid = (
+                            len(canonical) == 24
+                            and canonical.endswith("Z")
+                            and canonical[19] == "."
+                        )
+                        if valid:
+                            try:
+                                datetime.fromisoformat(
+                                    canonical.replace("Z", "+00:00")
+                                )
+                            except ValueError:
+                                valid = False
+                        if not valid:
                             canonical = self._EPOCH_ZERO
                         logs.append(SystemLog(
                             timestamp=canonical,
@@ -1010,7 +1033,8 @@ class GuardianDatabase:
                 conn.close()
 
     def import_cfo_ledger(self, ledger_path: Path | str) -> int:
-        """Import existing cfo_ledger.json accounts into financial_accounts.
+        """Import existing cfo_ledger.json into financial_accounts AND
+        financial_transactions.
 
         Fields are coerced via ``_coerce_str`` / ``_coerce_float`` so
         ledger entries with explicit ``null`` values don't propagate
@@ -1023,27 +1047,37 @@ class GuardianDatabase:
         raising ``json.JSONDecodeError``. This matters during Docker
         first-run initialization, where a corrupt optional seed file
         should not take down ``--db-init`` entirely.
+
+        Transaction import semantics:
+
+        * If the ledger dict contains a ``transactions`` key, its
+          value is used to *replace* the ``cfo_ledger`` slice of
+          ``financial_transactions`` (via
+          ``replace_transactions_for_source``). This preserves
+          existing transaction history on re-init and converges
+          cleanly to any explicit truncation in the ledger.
+        * If ``transactions`` is absent (old format), the
+          transactions table is left alone.
+
+        Returns the number of *accounts* imported (the historical
+        meaning of this method). Transaction counts are logged via
+        the standard replace path.
         """
         path = Path(ledger_path)
         if not path.exists():
             return 0
         try:
-            # errors="replace" so non-UTF-8 bytes in a third-party
-            # ledger export don't raise UnicodeDecodeError and abort
-            # --db-init entirely. A ledger that's not valid JSON after
-            # replacement will still fall through to the JSONDecodeError
-            # branch below and be skipped cleanly.
             with open(path, encoding="utf-8", errors="replace") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
-            # Mirror the per-line tolerance in import_audit_jsonl:
-            # skip the import, keep going. The caller still gets 0.
             print(
                 f"  [WARN] Skipping {path}: malformed or unreadable JSON ({exc})"
             )
             return 0
         if not isinstance(data, dict):
             return 0
+
+        # --- Accounts -------------------------------------------------
         count = 0
         for acct in data.get("accounts", []) or []:
             if not isinstance(acct, dict):
@@ -1057,6 +1091,53 @@ class GuardianDatabase:
                 last_synced=_coerce_str(acct, "last_synced"),
             ))
             count += 1
+
+        # --- Transactions ---------------------------------------------
+        # Only touch the transactions slice when the key is actually
+        # present; old-format ledgers (accounts only) are left alone.
+        if "transactions" in data:
+            raw_txns = data.get("transactions") or []
+            if isinstance(raw_txns, list):
+                parsed: list[FinancialTransaction] = []
+                occurrence: dict[tuple[str, str, float, str], int] = {}
+                for tx in raw_txns:
+                    if not isinstance(tx, dict):
+                        continue
+                    meta = tx.get("metadata") or {}
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    provider_id = (
+                        meta.get("id")
+                        or meta.get("provider_id")
+                        or meta.get("plaid_id")
+                        or meta.get("transaction_id")
+                    )
+                    date = _coerce_str(tx, "date")
+                    description = _coerce_str(tx, "description")
+                    amount = _coerce_float(tx, "amount")
+                    category = _coerce_str(tx, "category")
+                    account = _coerce_str(tx, "account")
+                    if provider_id:
+                        ref = str(provider_id)
+                    else:
+                        key = (account, date, amount, description)
+                        n = occurrence.get(key, 0)
+                        occurrence[key] = n + 1
+                        ref = (
+                            f"cfo_ledger:{account}|{date}|"
+                            f"{amount}|{description}#{n}"
+                        )
+                    parsed.append(FinancialTransaction(
+                        date=date,
+                        description=description,
+                        amount=amount,
+                        category=category,
+                        account=account,
+                        source="cfo_ledger",
+                        reference_id=ref,
+                    ))
+                self.replace_transactions_for_source("cfo_ledger", parsed)
+
         return count
 
     # =======================================================================
