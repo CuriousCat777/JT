@@ -12,14 +12,25 @@ from typing import Any
 
 
 def _now_iso() -> str:
-    """Return an ISO-8601 UTC timestamp with a canonical 'Z' suffix.
+    """Return an ISO-8601 UTC timestamp matching the SQLite schema default.
 
-    The SQLite schema defaults use ``strftime('%Y-%m-%dT%H:%M:%fZ', 'now')``,
-    which always ends in ``Z``.  ``datetime.isoformat()`` produces ``+00:00``
-    instead, so we normalize here to keep all timestamps lexicographically
-    comparable across Python-generated and DB-generated rows.
+    The schema uses ``strftime('%Y-%m-%dT%H:%M:%fZ', 'now')``. In SQLite
+    ``%f`` is *fractional seconds with millisecond precision*, so a DB
+    default looks like ``2026-04-11T05:57:27.320Z``.
+
+    ``datetime.isoformat()`` uses microsecond precision
+    (``...27.320955+00:00``).  Mixing those with millisecond defaults
+    breaks lexicographic ``TEXT`` ordering: ``'...320Z'`` (len 24) and
+    ``'...320955Z'`` (len 27) differ at position 23 where ``'Z' (0x5A)``
+    > ``'4' (0x34)``, so ``'...320Z'`` sorts *after* ``'...320955Z'``
+    even though they represent later and earlier moments. That would
+    break boundary filters like ``query_logs(since='...320Z')``.
+
+    To stay consistent with the schema we emit millisecond precision
+    and a literal ``Z`` suffix.
     """
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(timezone.utc)
+    return f"{now:%Y-%m-%dT%H:%M:%S}.{now.microsecond // 1000:03d}Z"
 
 
 # ---------------------------------------------------------------------------

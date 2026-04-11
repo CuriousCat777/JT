@@ -708,10 +708,17 @@ class GuardianDatabase:
     def execute_raw(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         """Execute a raw read-only SQL query. For advanced queries.
 
-        Only ``SELECT`` and ``WITH`` (CTE) statements are permitted; any
-        statement that could mutate the database (INSERT/UPDATE/DELETE/DDL)
-        is rejected with a ``ValueError``. Comments are stripped before the
-        check so they cannot be used to bypass the gate.
+        Enforcement is layered:
+
+        1. Fast prefix check rejects obviously mutating statements before
+           they even reach SQLite (INSERT/UPDATE/DELETE/DROP/ALTER/…).
+        2. The SQL is executed on a connection opened with
+           ``file:...?mode=ro``, so the SQLite engine itself refuses any
+           write.  This blocks constructs like
+           ``WITH x AS (SELECT 1) DELETE FROM system_logs`` that begin
+           with a harmless keyword but still mutate state.
+
+        Any write attempt is converted to ``ValueError``.
         """
         stripped = re.sub(r"--[^\n]*", "", sql)
         stripped = re.sub(r"/\*.*?\*/", "", stripped, flags=re.DOTALL)
@@ -721,10 +728,19 @@ class GuardianDatabase:
                 "execute_raw() is read-only; only SELECT or WITH statements "
                 "are permitted. Use the typed helper methods for mutations."
             )
-        conn = self._connect()
+        # Open a *read-only* connection so the SQLite engine refuses any
+        # mutating statement even if it sneaks past the prefix check
+        # (e.g. ``WITH x AS (SELECT 1) DELETE ...``).
+        uri = f"file:{self._db_path.as_posix()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=10)
+        conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(sql, params).fetchall()
             return [dict(r) for r in rows]
+        except sqlite3.OperationalError as exc:
+            raise ValueError(
+                f"execute_raw() refused mutating statement: {exc}"
+            ) from exc
         finally:
             conn.close()
 

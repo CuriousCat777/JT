@@ -133,6 +133,24 @@ class TestSystemLogs:
         for row in rows:
             assert row["timestamp"].endswith("Z"), row["timestamp"]
 
+    def test_timestamps_millisecond_precision(self) -> None:
+        """Python timestamps must match the schema's millisecond precision.
+
+        Regression: if ``_now_iso()`` uses microseconds but schema defaults
+        use milliseconds, lexicographic TEXT ordering on the ``timestamp``
+        column is wrong, breaking ``since=`` / ``until=`` filters.
+        """
+        import re
+        from guardian_one.database.models import _now_iso
+
+        ts = _now_iso()
+        # Exactly 3 fractional digits followed by Z
+        assert re.match(
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", ts
+        ), ts
+        # Total length must match the schema default: 23 chars + Z = 24
+        assert len(ts) == 24, (len(ts), ts)
+
 
 # -----------------------------------------------------------------------
 # System Codes
@@ -439,6 +457,24 @@ class TestMaintenance:
             "DROP TABLE system_logs",
             "INSERT INTO system_logs(agent) VALUES ('x')",
             "-- comment\nDELETE FROM system_logs",
+        ):
+            with pytest.raises(ValueError):
+                db.execute_raw(stmt)
+        # Data was not touched.
+        rows = db.execute_raw("SELECT COUNT(*) AS n FROM system_logs")
+        assert rows[0]["n"] == 1
+
+    def test_execute_raw_rejects_with_cte_mutation(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: ``WITH x AS (SELECT 1) DELETE FROM ...`` must not
+        slip past the prefix check — the read-only SQLite connection
+        should refuse it at the engine level."""
+        db.insert_log(SystemLog(agent="target", action="keep"))
+        for stmt in (
+            "WITH x AS (SELECT 1) DELETE FROM system_logs",
+            "WITH x AS (SELECT 1) UPDATE system_logs SET agent='x'",
+            "WITH x AS (SELECT 1) INSERT INTO system_logs(agent) VALUES ('x')",
         ):
             with pytest.raises(ValueError):
                 db.execute_raw(stmt)
