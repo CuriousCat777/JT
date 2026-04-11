@@ -739,32 +739,41 @@ class GuardianDatabase:
         ``null`` values (e.g. ``"severity": null``) don't propagate
         as Python ``None`` into ``NOT NULL`` columns and abort the
         whole batch.
+
+        The file is opened with ``errors="replace"`` so non-UTF-8
+        bytes don't raise ``UnicodeDecodeError`` mid-iteration. Each
+        JSONL line is still validated individually, so a corrupt
+        line is skipped instead of tanking the whole import.
         """
         path = Path(jsonl_path)
         if not path.exists():
             return 0
         logs: list[SystemLog] = []
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    if not isinstance(data, dict):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
                         continue
-                    logs.append(SystemLog(
-                        timestamp=_coerce_str(data, "timestamp"),
-                        agent=_coerce_str(data, "agent"),
-                        action=_coerce_str(data, "action"),
-                        severity=_coerce_str(data, "severity", "info"),
-                        component="audit",
-                        message=_coerce_str(data, "action"),
-                        details=json.dumps(_coerce_dict(data, "details")),
-                        source="audit.jsonl",
-                    ))
-                except (json.JSONDecodeError, TypeError):
-                    continue
+                    try:
+                        data = json.loads(line)
+                        if not isinstance(data, dict):
+                            continue
+                        logs.append(SystemLog(
+                            timestamp=_coerce_str(data, "timestamp"),
+                            agent=_coerce_str(data, "agent"),
+                            action=_coerce_str(data, "action"),
+                            severity=_coerce_str(data, "severity", "info"),
+                            component="audit",
+                            message=_coerce_str(data, "action"),
+                            details=json.dumps(_coerce_dict(data, "details")),
+                            source="audit.jsonl",
+                        ))
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+        except OSError as exc:
+            print(f"  [WARN] Skipping {path}: unreadable ({exc})")
+            return 0
         return self.insert_logs_batch(logs)
 
     def import_cfo_ledger(self, ledger_path: Path | str) -> int:
@@ -786,9 +795,14 @@ class GuardianDatabase:
         if not path.exists():
             return 0
         try:
-            with open(path) as f:
+            # errors="replace" so non-UTF-8 bytes in a third-party
+            # ledger export don't raise UnicodeDecodeError and abort
+            # --db-init entirely. A ledger that's not valid JSON after
+            # replacement will still fall through to the JSONDecodeError
+            # branch below and be skipped cleanly.
+            with open(path, encoding="utf-8", errors="replace") as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
             # Mirror the per-line tolerance in import_audit_jsonl:
             # skip the import, keep going. The caller still gets 0.
             print(

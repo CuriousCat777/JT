@@ -483,6 +483,50 @@ class TestImport:
             assert a.institution is not None
             assert a.balance is not None
 
+    def test_import_cfo_ledger_tolerates_non_utf8_bytes(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a ledger file exported with a non-UTF-8 codec
+        (e.g. Windows-1252) must not raise ``UnicodeDecodeError`` and
+        abort ``--db-init``. The import should either succeed with
+        replacement chars in the text fields or skip gracefully."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        # Valid JSON skeleton with a non-UTF-8 byte (0xA9 = ©
+        # in latin-1) in the institution string.
+        raw = (
+            b'{"accounts": [{"name": "Checking", "account_type": '
+            b'"checking", "balance": 100.0, '
+            b'"institution": "Bank \xa9 2026"}]}'
+        )
+        ledger_path.write_bytes(raw)
+        # Must not raise, must not crash the process.
+        count = db.import_cfo_ledger(ledger_path)
+        # Import succeeded via errors="replace" — the one account
+        # landed with the replacement char in place of the 0xA9 byte.
+        assert count == 1
+        accounts = db.get_accounts()
+        assert len(accounts) == 1
+        assert "Bank" in accounts[0].institution
+
+    def test_import_audit_jsonl_tolerates_non_utf8_bytes(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: an audit log file with non-UTF-8 bytes must
+        not raise ``UnicodeDecodeError`` during line iteration."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        raw = (
+            b'{"timestamp": "2026-03-01T00:00:00Z", "agent": "cfo", '
+            b'"action": "sync", "severity": "info", '
+            b'"details": {"note": "ok \xa9 2026"}}\n'
+            b'{"timestamp": "2026-03-02T00:00:00Z", "agent": "chronos", '
+            b'"action": "schedule", "severity": "info"}\n'
+        )
+        jsonl_path.write_bytes(raw)
+        count = db.import_audit_jsonl(jsonl_path)
+        assert count == 2
+        logs = db.query_logs()
+        assert len(logs) == 2
+
     def test_import_cfo_ledger_tolerates_malformed_json(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -497,6 +541,48 @@ class TestImport:
         assert count == 0
         # The database is still usable and the accounts table empty.
         assert db.get_accounts() == []
+
+    def test_import_cfo_ledger_tolerates_non_utf8_bytes(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a ledger file exported with a non-UTF-8 codec
+        (e.g. Windows-1252) must not raise ``UnicodeDecodeError`` and
+        abort ``--db-init``. The import should succeed (with
+        replacement chars) thanks to ``errors="replace"``."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        # Valid JSON skeleton with a non-UTF-8 byte (0xA9 = © in
+        # latin-1) in the institution string.
+        raw = (
+            b'{"accounts": [{"name": "Checking", "account_type": '
+            b'"checking", "balance": 100.0, '
+            b'"institution": "Bank \xa9 2026"}]}'
+        )
+        ledger_path.write_bytes(raw)
+        # Must not raise.
+        count = db.import_cfo_ledger(ledger_path)
+        assert count == 1
+        accounts = db.get_accounts()
+        assert len(accounts) == 1
+        assert "Bank" in accounts[0].institution
+
+    def test_import_audit_jsonl_tolerates_non_utf8_bytes(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: audit logs with non-UTF-8 bytes must not raise
+        ``UnicodeDecodeError`` mid-iteration."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        raw = (
+            b'{"timestamp": "2026-03-01T00:00:00Z", "agent": "cfo", '
+            b'"action": "sync", "severity": "info", '
+            b'"details": {"note": "ok \xa9 2026"}}\n'
+            b'{"timestamp": "2026-03-02T00:00:00Z", "agent": "chronos", '
+            b'"action": "schedule", "severity": "info"}\n'
+        )
+        jsonl_path.write_bytes(raw)
+        count = db.import_audit_jsonl(jsonl_path)
+        assert count == 2
+        logs = db.query_logs()
+        assert len(logs) == 2
 
     def test_import_cfo_ledger_tolerates_non_dict_top_level(
         self, db: GuardianDatabase, tmp_path: Path

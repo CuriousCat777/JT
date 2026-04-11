@@ -81,7 +81,26 @@ except ImportError:
 
 # Fast path: database commands need only stdlib + guardian_one.database.
 # This lets --db-* work without cryptography or other heavy deps.
-if any(a.startswith("--db") for a in sys.argv[1:]):
+#
+# NOTE: we only match on the *actual* DB-command flags, not any
+# argument that happens to start with ``--db``. ``--db-path`` is a
+# shared path override and may legitimately appear alongside a
+# non-DB command (e.g. ``python main.py --sync --db-path foo.db``);
+# misrouting that to db_main() would crash with
+# "unrecognized arguments: --sync".
+_DB_COMMAND_FLAGS = {
+    "--db",
+    "--db-init",
+    "--db-logs",
+    "--db-crawls",
+    "--db-transactions",
+    "--db-accounts",
+    "--db-codes",
+    "--db-search",
+    "--db-spending",
+    "--db-net-worth",
+}
+if any(a.split("=", 1)[0] in _DB_COMMAND_FLAGS for a in sys.argv[1:]):
     from guardian_one.database.cli import db_main
     db_main()
     sys.exit(0)
