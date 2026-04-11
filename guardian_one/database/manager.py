@@ -629,6 +629,63 @@ class GuardianDatabase:
             finally:
                 conn.close()
 
+    def replace_transactions_for_source(
+        self,
+        source: str,
+        txns: list[FinancialTransaction],
+    ) -> int:
+        """Atomically replace all rows where ``source = <source>``.
+
+        This is the right primitive for mirroring a mutable in-memory
+        ledger (such as CFO's ``self._transactions``) where rows can
+        be added, removed, and reordered between calls. A plain
+        ``insert_transactions_batch`` would rely on stable
+        reference_ids that survive reorder/delete, which is
+        effectively impossible without a persistent row UUID.
+
+        Instead we delete everything carrying the caller's
+        ``source`` tag and bulk-insert the current snapshot in the
+        same transaction. Rows with other ``source`` values (manual
+        inserts, audit-mirrored rows, other provider mirrors) are
+        untouched.
+
+        **Empty-input guard:** when ``txns`` is empty, this is
+        treated as "caller has nothing to mirror right now" and the
+        existing rows are left alone. This prevents a broken
+        mirror call (e.g. a bad iterator, an upstream failure that
+        cleared the in-memory list) from silently wiping history.
+        Callers that legitimately want to erase the mirror slice
+        should call with a non-empty placeholder or use a
+        dedicated truncate method.
+
+        Returns the number of rows inserted.
+        """
+        if not txns:
+            return 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM financial_transactions WHERE source = ?",
+                    (source,),
+                )
+                conn.executemany(
+                    """INSERT INTO financial_transactions
+                       (date, description, amount, category, account, institution,
+                        transaction_type, source, reference_id, notes, recorded_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [
+                        (t.date, t.description, t.amount, t.category,
+                         t.account, t.institution, t.transaction_type,
+                         source, t.reference_id, t.notes, t.recorded_at)
+                        for t in txns
+                    ],
+                )
+                conn.commit()
+                return len(txns)
+            finally:
+                conn.close()
+
     def query_transactions(
         self,
         category: str | None = None,

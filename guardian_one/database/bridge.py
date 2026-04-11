@@ -209,7 +209,29 @@ class DatabaseBridge:
         element does not raise ``AttributeError`` and abort the
         whole sync.
         """
-        txns = [
+        txns = self._build_txn_objects(transactions, source)
+        return self.db.insert_transactions_batch(txns)
+
+    def replace_transactions(
+        self, transactions: list[dict[str, Any]], source: str = "sync"
+    ) -> int:
+        """Replace all rows tagged with ``source`` in one transaction.
+
+        Use this when mirroring a mutable in-memory ledger where
+        rows may be reordered or removed between calls — e.g.
+        CFO's ``save_ledger``. ``sync_transactions``' dedup pre-
+        check assumes stable reference_ids across calls, which
+        falls apart for freshly-synthesized composite keys whose
+        position in the list can drift.
+        """
+        txns = self._build_txn_objects(transactions, source)
+        return self.db.replace_transactions_for_source(source, txns)
+
+    def _build_txn_objects(
+        self, transactions: list[dict[str, Any]], source: str
+    ) -> list[FinancialTransaction]:
+        """Shared payload normalization for sync/replace paths."""
+        return [
             FinancialTransaction(
                 date=_s(t, "date"),
                 description=_s(t, "description"),
@@ -231,7 +253,6 @@ class DatabaseBridge:
             for t in transactions
             if isinstance(t, dict)
         ]
-        return self.db.insert_transactions_batch(txns)
 
     def store_crawl(
         self,

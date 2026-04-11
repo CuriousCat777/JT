@@ -305,6 +305,57 @@ class TestFinancialTransactions:
         pairs = {(t.source, t.reference_id) for t in stored}
         assert pairs == {("plaid", "X"), ("rocket_money", "X")}
 
+    def test_replace_transactions_for_source_delete_and_replace(
+        self, db: GuardianDatabase
+    ) -> None:
+        """``replace_transactions_for_source`` wipes the slice
+        tagged with the caller's ``source`` and bulk-inserts the
+        new snapshot atomically, leaving rows with other sources
+        untouched."""
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="plaid A",
+            amount=-10.0, source="plaid", reference_id="p1",
+        ))
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-02", description="plaid B",
+            amount=-20.0, source="plaid", reference_id="p2",
+        ))
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-03", description="manual A",
+            amount=-5.0, source="manual", reference_id="m1",
+        ))
+
+        snapshot = [
+            FinancialTransaction(
+                date="2026-03-04", description="plaid C",
+                amount=-30.0, reference_id="p3",
+            ),
+            FinancialTransaction(
+                date="2026-03-05", description="plaid D",
+                amount=-40.0, reference_id="p4",
+            ),
+        ]
+        assert db.replace_transactions_for_source("plaid", snapshot) == 2
+
+        stored = db.query_transactions()
+        descs = sorted(t.description for t in stored)
+        # Old plaid rows gone, new plaid rows present, manual row
+        # still present.
+        assert descs == ["manual A", "plaid C", "plaid D"]
+
+    def test_replace_transactions_empty_input_does_not_wipe(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Empty-input guard: calling with an empty list must NOT
+        silently wipe the existing slice. An accidental no-op
+        (broken iterator, upstream failure clearing the in-memory
+        list) shouldn't become a delete-all."""
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", source="plaid", reference_id="p1",
+        ))
+        assert db.replace_transactions_for_source("plaid", []) == 0
+        assert len(db.query_transactions()) == 1
+
     def test_batch_insert(self, db: GuardianDatabase) -> None:
         txns = [
             FinancialTransaction(date=f"2026-03-{i:02d}", description=f"txn_{i}",

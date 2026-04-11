@@ -338,14 +338,30 @@ class CFO(BaseAgent):
 
         # Mirror the ledger into the SQLite repository so --db-*
         # queries return live data, not the stale snapshot that
-        # --db-init imported on first run. Best-effort: DB errors
-        # never block the authoritative JSON write above.
+        # --db-init imported on first run.
+        #
+        # We use the bridge's *replace* path (not ``sync``) for
+        # transactions because the CFO ledger is mutable: rows can
+        # be added, removed (e.g. ``clean_ledger``), and reordered
+        # between calls. ``sync_transactions``' dedup pre-check
+        # assumes stable ``reference_id`` values across calls,
+        # which is effectively impossible without a persistent
+        # per-row UUID. Delete-and-replace keyed on
+        # ``source='cfo_ledger'`` is idempotent by construction:
+        # every call produces the same end state, repeated
+        # same-day charges are preserved, and reorders/deletes
+        # are reflected cleanly. Rows with other ``source`` tags
+        # (audit mirror, manual inserts, other provider syncs)
+        # are untouched.
+        #
+        # Best-effort: DB errors never block the authoritative
+        # JSON write above.
         if self._db_bridge is not None:
             try:
                 self._db_bridge.sync_accounts(
                     data["accounts"], source="cfo_ledger"
                 )
-                self._db_bridge.sync_transactions(
+                self._db_bridge.replace_transactions(
                     self._build_ledger_txn_mirror(data["transactions"]),
                     source="cfo_ledger",
                 )
@@ -360,32 +376,25 @@ class CFO(BaseAgent):
     ) -> list[dict[str, Any]]:
         """Build the per-transaction payload for the DB mirror.
 
-        Selecting a stable, collision-safe ``reference_id`` is
-        subtle: the same account can legitimately see two
-        same-day, same-amount charges at the same merchant (e.g.
-        two $4.99 coffees). A naive
-        ``account|date|amount|description`` key would treat the
-        second one as a duplicate and silently drop it.
+        Since the bridge performs a delete-and-replace on the
+        ``cfo_ledger`` slice, the ``reference_id`` choice here is
+        only used for human-readable debugging (``--db-search``)
+        and doesn't need to be stable across calls.
 
-        Priority order for the dedup key:
+        Priority order:
 
-          1. If the upstream provider gave us an explicit id in
-             the transaction metadata (``metadata['id']`` or
-             ``metadata['provider_id']`` or ``metadata['plaid_id']``),
-             use that — it's unique by construction.
-          2. Otherwise, synthesize a composite key that includes
-             the positional *index* of the transaction within the
-             ledger snapshot. Index is stable across re-mirrors as
-             long as the ledger's serialization order is stable,
-             which it is because ``save_ledger`` always iterates
-             ``self._transactions`` in insertion order.
-
-        The composite fallback is namespaced with ``cfo_ledger:`` so
-        it can never collide with a real provider id that happens
-        to follow the same shape.
+          1. A provider-supplied id from ``metadata`` when present
+             (``id`` / ``provider_id`` / ``plaid_id`` /
+             ``transaction_id``).
+          2. A synthesized ``cfo_ledger:`` composite with the
+             content-derived key plus an occurrence counter so
+             legitimate repeats (two same-day, same-amount
+             Starbucks charges) get distinct keys in the same
+             snapshot.
         """
         out: list[dict[str, Any]] = []
-        for idx, tx in enumerate(transactions):
+        occurrence: dict[tuple, int] = {}
+        for tx in transactions:
             meta = tx.get("metadata") or {}
             provider_id = (
                 meta.get("id")
@@ -396,9 +405,15 @@ class CFO(BaseAgent):
             if provider_id:
                 ref = str(provider_id)
             else:
+                key = (
+                    tx["account"], tx["date"],
+                    tx["amount"], tx["description"],
+                )
+                n = occurrence.get(key, 0)
+                occurrence[key] = n + 1
                 ref = (
-                    f"cfo_ledger:{idx}|{tx['account']}|{tx['date']}|"
-                    f"{tx['amount']}|{tx['description']}"
+                    f"cfo_ledger:{tx['account']}|{tx['date']}|"
+                    f"{tx['amount']}|{tx['description']}#{n}"
                 )
             out.append(
                 {

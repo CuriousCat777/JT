@@ -136,12 +136,114 @@ class TestCFOSaveLedgerBridgeMirror:
         descs = {t.description for t in txns}
         assert descs == {"Amazon order", "Paycheck"}
 
-        # Re-running save_ledger must be idempotent on the dedup
-        # path: the mirror builds a positional reference_id that
-        # stays stable across runs, so a second mirror does not
-        # duplicate rows.
+        # Re-running save_ledger is idempotent because the bridge
+        # uses replace_transactions (delete-and-replace) — every
+        # call produces the same end state for the cfo_ledger
+        # slice without depending on stable reference_ids.
         cfo.save_ledger()
         assert len(bridge.db.query_transactions()) == 2
+
+    def test_save_ledger_reflects_deletions_and_reorders(
+        self, tmp_path: Path, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: ``clean_ledger`` (or any other edit that
+        removes / reorders transactions) must be reflected in the
+        DB mirror on the next ``save_ledger`` without leaving
+        orphaned rows. The bridge uses delete-and-replace keyed
+        on ``source='cfo_ledger'`` so the slice always converges
+        to the current in-memory state."""
+        from guardian_one.agents.cfo import (
+            CFO, Account, AccountType, Transaction, TransactionCategory,
+        )
+        from guardian_one.core.config import AgentConfig
+
+        audit = AuditLog(log_dir=tmp_path / "logs")
+        cfo = CFO(
+            config=AgentConfig(name="cfo"),
+            audit=audit,
+            data_dir=tmp_path / "data",
+            db_bridge=bridge,
+        )
+        cfo._accounts["Checking"] = Account(
+            name="Checking",
+            account_type=AccountType.CHECKING,
+            balance=100.0,
+            institution="Chase",
+        )
+        # Start with 3 transactions.
+        for desc, amt in [("A", -10.0), ("B", -20.0), ("C", -30.0)]:
+            cfo._transactions.append(Transaction(
+                date="2026-03-01", description=desc, amount=amt,
+                category=TransactionCategory.FOOD, account="Checking",
+            ))
+        cfo.save_ledger()
+        first = sorted(t.description for t in bridge.db.query_transactions())
+        assert first == ["A", "B", "C"]
+
+        # Delete the middle one (simulates clean_ledger).
+        cfo._transactions.pop(1)
+        cfo.save_ledger()
+        after_delete = sorted(
+            t.description for t in bridge.db.query_transactions()
+        )
+        # B is gone, A and C survive — no orphaned B row.
+        assert after_delete == ["A", "C"]
+
+        # Reorder: swap A and C.
+        cfo._transactions[0], cfo._transactions[1] = (
+            cfo._transactions[1], cfo._transactions[0]
+        )
+        cfo.save_ledger()
+        after_reorder = sorted(
+            t.description for t in bridge.db.query_transactions()
+        )
+        # Same set, still no duplicates.
+        assert after_reorder == ["A", "C"]
+        assert len(bridge.db.query_transactions()) == 2
+
+    def test_save_ledger_preserves_other_source_rows(
+        self, tmp_path: Path, bridge: DatabaseBridge
+    ) -> None:
+        """The CFO mirror must only touch rows tagged with
+        ``source='cfo_ledger'``. Manual inserts and
+        audit-mirrored rows with other source tags must survive
+        every save_ledger call."""
+        from guardian_one.agents.cfo import (
+            CFO, Account, AccountType, Transaction, TransactionCategory,
+        )
+        from guardian_one.core.config import AgentConfig
+        from guardian_one.database.models import FinancialTransaction
+
+        # Seed a manual row with a different source tag.
+        bridge.db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="manual test",
+            amount=-5.0, source="manual_entry", reference_id="m1",
+        ))
+
+        audit = AuditLog(log_dir=tmp_path / "logs")
+        cfo = CFO(
+            config=AgentConfig(name="cfo"),
+            audit=audit,
+            data_dir=tmp_path / "data",
+            db_bridge=bridge,
+        )
+        cfo._accounts["Checking"] = Account(
+            name="Checking",
+            account_type=AccountType.CHECKING,
+            balance=100.0,
+            institution="Chase",
+        )
+        cfo._transactions.append(Transaction(
+            date="2026-03-02", description="cfo ledger row",
+            amount=-10.0, category=TransactionCategory.FOOD,
+            account="Checking",
+        ))
+        cfo.save_ledger()
+
+        stored = bridge.db.query_transactions()
+        sources = {t.source for t in stored}
+        assert sources == {"manual_entry", "cfo_ledger"}
+        assert len(stored) == 2
 
     def test_save_ledger_preserves_repeated_same_day_charges(
         self, tmp_path: Path, bridge: DatabaseBridge
