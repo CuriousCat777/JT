@@ -47,6 +47,7 @@ COPY main.py .
 COPY pyproject.toml .
 COPY config/ config/
 COPY docker-entrypoint.sh .
+COPY docker-healthcheck.py .
 
 # Create data and log directories (will be mounted as volumes)
 RUN mkdir -p data logs && \
@@ -55,9 +56,13 @@ RUN mkdir -p data logs && \
 # Switch to non-root user
 USER guardian
 
-# Health check — verify the database is accessible
+# Non-mutating healthcheck: reads the resolved DB path written by
+# docker-entrypoint.sh to /tmp/.guardian_db_path (so --db-path is
+# honored), then opens the file via ``file:...?mode=ro`` and runs a
+# trivial SELECT. Does NOT instantiate GuardianDatabase() — that
+# would call _initialize_schema and mutate state on every probe.
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
-    CMD python -c "from guardian_one.database import GuardianDatabase; db = GuardianDatabase(); print(db.stats())" || exit 1
+    CMD python docker-healthcheck.py || exit 1
 
 # Entrypoint auto-initializes DB on first run
 ENTRYPOINT ["bash", "docker-entrypoint.sh"]

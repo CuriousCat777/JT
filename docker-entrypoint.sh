@@ -57,6 +57,13 @@ else
 fi
 INIT_SENTINEL="${DB_PATH}.init_complete"
 
+# Persist the resolved DB path so the Docker HEALTHCHECK probe can
+# verify the *same* file the main process is actually using, even
+# when the container was started with a custom --db-path. The file
+# lives in /tmp so it's container-local and doesn't need to be
+# mounted. Best-effort; failure is non-fatal.
+printf '%s' "$DB_PATH" > /tmp/.guardian_db_path 2>/dev/null || true
+
 # If the user's command IS --db-init, run it directly (no exec) so we
 # can touch the sentinel on success. This keeps re-runs of --db-init
 # idempotent for the sentinel tracking.

@@ -53,26 +53,46 @@ def _coerce_str(d: dict[str, Any], key: str, default: str = "") -> str:
     return value if isinstance(value, str) else str(value)
 
 
+_NUMERIC_EXTRACT = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     """Get a float field from a dict, parsing strings and falling back.
 
-    Imported ledger files sometimes contain amounts as strings (e.g.
-    ``"1238.93"`` or even ``"1,238.93 USD"``).  Passing those through
-    unchanged corrupts REAL columns via SQLite's type affinity, which
-    then breaks numeric comparisons (``amount < 0``) and format
-    specifiers (``:,.2f``). Parse to ``float`` where possible; fall
-    back to the default when the value is missing, ``None``, or not
-    convertible.
+    Imported ledger files frequently contain amounts as strings with
+    thousand separators (``"1,238.93"``), currency suffixes
+    (``"1,238.93 USD"``, ``"$500.00"``), or as garbage (``"N/A"``).
+    Silently returning 0.0 for ``"1,238.93"`` would corrupt balance
+    totals, so we:
+
+      1. fast-path ``int``/``float`` values,
+      2. strip commas (thousand separators) and try ``float()``,
+      3. regex-extract the first signed numeric token as a last
+         resort for currency-prefixed / -suffixed strings,
+      4. fall back to ``default`` only if no numeric token is found.
     """
     value = d.get(key, default)
     if value is None:
         return default
     if isinstance(value, (int, float)):
         return float(value)
+    if not isinstance(value, str):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+    cleaned = value.replace(",", "").strip()
     try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+        return float(cleaned)
+    except ValueError:
+        pass
+    match = _NUMERIC_EXTRACT.search(cleaned)
+    if match:
+        try:
+            return float(match.group())
+        except ValueError:
+            pass
+    return default
 
 
 def _coerce_dict(d: dict[str, Any], key: str) -> dict[str, Any]:
@@ -759,6 +779,13 @@ class GuardianDatabase:
     # Import helpers — ingest existing Guardian One data
     # =======================================================================
 
+    # Canonical "unknown past" timestamp used when an imported audit
+    # row has an unparseable ``timestamp`` field. All such rows
+    # cluster at epoch-zero so they can never pollute real
+    # time-window filters, and ORDER BY DESC still produces a sane
+    # ordering (they land at the very end instead of mid-range).
+    _EPOCH_ZERO = "1970-01-01T00:00:00.000Z"
+
     def _parse_audit_file(self, path: Path) -> list[SystemLog]:
         """Parse a single audit JSONL file into SystemLog rows.
 
@@ -766,7 +793,9 @@ class GuardianDatabase:
         are skipped, and null fields are coerced so ``NOT NULL``
         columns never see Python ``None``. Timestamps are normalized
         to the canonical millisecond-``Z`` format so lex ordering
-        matches DB-native rows.
+        matches DB-native rows. Unparseable timestamps are rewritten
+        to the canonical epoch-zero sentinel so they can't silently
+        land between real rows and corrupt time-window queries.
         """
         logs: list[SystemLog] = []
         try:
@@ -780,8 +809,18 @@ class GuardianDatabase:
                         if not isinstance(data, dict):
                             continue
                         raw_ts = _coerce_str(data, "timestamp")
+                        canonical = normalize_iso_timestamp(raw_ts)
+                        # ``normalize_iso_timestamp`` passes garbage
+                        # through unchanged; detect that case by
+                        # checking the expected canonical shape
+                        # (len 24, ``.SSSZ`` suffix) and substitute
+                        # the epoch sentinel so bad rows never
+                        # pollute lex-ordered TEXT comparisons.
+                        if len(canonical) != 24 or not canonical.endswith("Z") \
+                                or canonical[19] != ".":
+                            canonical = self._EPOCH_ZERO
                         logs.append(SystemLog(
-                            timestamp=normalize_iso_timestamp(raw_ts),
+                            timestamp=canonical,
                             agent=_coerce_str(data, "agent"),
                             action=_coerce_str(data, "action"),
                             severity=_coerce_str(data, "severity", "info"),

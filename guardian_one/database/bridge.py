@@ -8,6 +8,7 @@ and JSON stores.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -47,28 +48,55 @@ def _s(d: dict[str, Any], key: str, default: str = "") -> str:
     return value if isinstance(value, str) else str(value)
 
 
+_NUMERIC_EXTRACT = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     """Get a float field, parsing strings and coercing bad values → default.
 
-    Upstream financial providers sometimes return amounts as strings
-    like ``"-20.00"``, ``"-20.00 USD"``, or even ``"N/A"``.  Passing
-    those through unchanged corrupts ``financial_transactions.amount``
-    (SQLite's REAL column accepts TEXT via type affinity), which then
-    breaks ``spending_summary()``'s ``amount < 0`` comparison and
-    crashes ``--db-transactions`` formatting with ``:,.2f``.
+    Upstream financial providers emit amounts in all kinds of shapes:
 
-    Parse to ``float`` where possible; fall back to the default when
-    the value is missing, ``None``, or not convertible.
+    * plain numbers (``-20.0``)
+    * plain numeric strings (``"-20.00"``)
+    * thousand-separated strings (``"1,238.93"``, ``"-1,234,567.89"``)
+    * currency-suffixed strings (``"-20.00 USD"``, ``"$1,238.93"``)
+    * garbage (``"N/A"``, ``None``)
+
+    Silently returning 0.0 for ``"1,238.93"`` would corrupt balance
+    and spending totals. This helper:
+
+      1. returns ``default`` for ``None`` / missing keys,
+      2. fast-paths ``int``/``float``,
+      3. strips thousand-separator commas and tries ``float(value)``,
+      4. regex-extracts the first signed numeric token as a last
+         resort (handles currency prefixes/suffixes), and
+      5. falls back to ``default`` only when no numeric token is
+         present.
     """
     value = d.get(key, default)
     if value is None:
         return default
     if isinstance(value, (int, float)):
         return float(value)
+    if not isinstance(value, str):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+    # Strip thousand separators before the first float() attempt so
+    # ``"1,238.93"`` → ``1238.93`` directly.
+    cleaned = value.replace(",", "").strip()
     try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+        return float(cleaned)
+    except ValueError:
+        pass
+    match = _NUMERIC_EXTRACT.search(cleaned)
+    if match:
+        try:
+            return float(match.group())
+        except ValueError:
+            pass
+    return default
 
 
 class DatabaseBridge:

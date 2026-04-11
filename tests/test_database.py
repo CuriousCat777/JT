@@ -648,6 +648,45 @@ class TestImport:
         actions = {log.action for log in logs}
         assert actions == {"oldest", "middle_a", "middle_b", "current"}
 
+    def test_import_audit_jsonl_canonicalizes_bad_timestamps(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a JSONL line with an unparseable ``timestamp``
+        must not land a garbage string in the canonical TEXT column,
+        where it could lex-compare incorrectly with real timestamps.
+        Bad rows are rewritten to the epoch sentinel so they cluster
+        harmlessly at the beginning of time-window queries."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        entries = [
+            {"timestamp": "2026-03-01T00:00:00Z",
+             "agent": "cfo", "action": "good", "severity": "info"},
+            # Completely unparseable → must be epoch sentinel, not
+            # persisted verbatim.
+            {"timestamp": "not a real date",
+             "agent": "cfo", "action": "bad", "severity": "info"},
+            # Missing timestamp field → same treatment.
+            {"agent": "cfo", "action": "missing", "severity": "info"},
+        ]
+        with open(jsonl_path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        assert db.import_audit_jsonl(jsonl_path) == 3
+
+        # Verify that NO stored timestamp is the raw garbage string.
+        rows = db.execute_raw("SELECT action, timestamp FROM system_logs")
+        by_action = {r["action"]: r["timestamp"] for r in rows}
+        assert by_action["good"] == "2026-03-01T00:00:00.000Z"
+        # Bad rows land at epoch sentinel.
+        assert by_action["bad"] == "1970-01-01T00:00:00.000Z"
+        assert by_action["missing"] == "1970-01-01T00:00:00.000Z"
+
+        # A ``since=`` filter for a real time window must not
+        # accidentally include the garbage rows just because they
+        # sort "after" the boundary as raw TEXT.
+        filtered = db.query_logs(since="2026-01-01T00:00:00Z", limit=20)
+        filtered_actions = sorted(log.action for log in filtered)
+        assert filtered_actions == ["good"]
+
     def test_import_audit_jsonl_is_idempotent(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -782,36 +821,47 @@ class TestImport:
     def test_import_cfo_ledger_parses_string_balances(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
-        """Regression: ledger files may contain ``balance`` as a string
-        (``"1238.93"``) or as garbage (``"N/A"``). The parser must
-        convert parseable strings to floats and fall back to 0.0 for
-        garbage — not let non-numeric values reach REAL columns."""
+        """Regression: ledger files contain ``balance`` in many shapes:
+        plain strings (``"1238.93"``), thousand-separated
+        (``"1,238.93"``), currency-suffixed (``"-99.99 USD"``,
+        ``"$500.00"``), or garbage (``"N/A"``). The parser must
+        extract the numeric value when possible and fall back to
+        0.0 only when no numeric token is present."""
         ledger_path = tmp_path / "cfo_ledger.json"
         data = {
             "saved_at": "2026-03-22T00:00:00Z",
             "accounts": [
-                {"name": "Parseable", "account_type": "checking",
+                {"name": "Plain String", "account_type": "checking",
                  "balance": "1238.93", "institution": "Chase"},
                 {"name": "Already Float", "account_type": "savings",
                  "balance": 500.50, "institution": "BofA"},
-                {"name": "Garbage", "account_type": "checking",
-                 "balance": "N/A", "institution": "Other"},
+                {"name": "Thousand Separated", "account_type": "checking",
+                 "balance": "1,238.93", "institution": "Wells"},
+                {"name": "Negative Separated", "account_type": "credit_card",
+                 "balance": "-1,234,567.89", "institution": "Cap One"},
                 {"name": "With Suffix", "account_type": "credit_card",
                  "balance": "-99.99 USD", "institution": "Amex"},
+                {"name": "Currency Prefix", "account_type": "savings",
+                 "balance": "$500.00", "institution": "BofA"},
+                {"name": "Garbage", "account_type": "checking",
+                 "balance": "N/A", "institution": "Other"},
             ],
         }
         with open(ledger_path, "w") as f:
             json.dump(data, f)
         count = db.import_cfo_ledger(ledger_path)
-        assert count == 4
+        assert count == 7
         accounts = {a.name: a for a in db.get_accounts()}
-        assert isinstance(accounts["Parseable"].balance, float)
-        assert accounts["Parseable"].balance == 1238.93
+        assert isinstance(accounts["Plain String"].balance, float)
+        assert accounts["Plain String"].balance == 1238.93
         assert accounts["Already Float"].balance == 500.50
-        # Unparseable strings fall back to 0.0 (safer than a wrong
-        # number, and won't crash downstream numeric logic).
+        # Thousand-separated strings are now parsed, not coerced to 0.
+        assert accounts["Thousand Separated"].balance == 1238.93
+        assert accounts["Negative Separated"].balance == -1234567.89
+        assert accounts["With Suffix"].balance == -99.99
+        assert accounts["Currency Prefix"].balance == 500.00
+        # Pure garbage with no numeric token still falls back to 0.0.
         assert accounts["Garbage"].balance == 0.0
-        assert accounts["With Suffix"].balance == 0.0
 
     def test_import_nonexistent_file(
         self, db: GuardianDatabase, tmp_path: Path
@@ -974,10 +1024,11 @@ class TestDatabaseBridge:
     def test_sync_transactions_parses_string_amounts(
         self, bridge: DatabaseBridge
     ) -> None:
-        """Regression: upstream providers sometimes return amounts as
-        strings like ``"-20.50"``. The bridge must parse them into
-        real floats so downstream numeric logic (amount < 0 filters,
-        :,.2f formatting, spending_summary) keeps working."""
+        """Regression: upstream providers return amounts in many
+        shapes — plain strings, thousand-separated, currency
+        suffixed/prefixed, and occasional garbage. The bridge must
+        extract the numeric value where possible and only fall
+        back to 0.0 when no numeric token is present."""
         txns = [
             {"date": "2026-03-01", "description": "parsable",
              "amount": "-20.50", "category": "food",
@@ -991,11 +1042,17 @@ class TestDatabaseBridge:
             {"date": "2026-03-04", "description": "already float",
              "amount": -5.25, "category": "food",
              "reference_id": "STR-4"},
+            {"date": "2026-03-05", "description": "thousand-separated",
+             "amount": "-1,238.93", "category": "food",
+             "reference_id": "STR-5"},
+            {"date": "2026-03-06", "description": "currency prefix",
+             "amount": "$500.00", "category": "income",
+             "reference_id": "STR-6"},
         ]
         count = bridge.sync_transactions(txns, source="test")
-        assert count == 4
+        assert count == 6
         stored = bridge.db.query_transactions()
-        assert len(stored) == 4
+        assert len(stored) == 6
 
         # Every stored amount must be a real float so formatting and
         # arithmetic work downstream.
@@ -1003,16 +1060,18 @@ class TestDatabaseBridge:
         assert isinstance(by_ref["STR-1"].amount, float)
         assert by_ref["STR-1"].amount == -20.50
         assert by_ref["STR-2"].amount == 0.0  # unparseable → default
-        assert by_ref["STR-3"].amount == 0.0  # non-numeric suffix → default
+        assert by_ref["STR-3"].amount == -99.99  # suffix stripped
         assert by_ref["STR-4"].amount == -5.25
+        assert by_ref["STR-5"].amount == -1238.93  # thousand-sep stripped
+        assert by_ref["STR-6"].amount == 500.00  # currency prefix stripped
 
-        # spending_summary must find only the parseable negative rows.
+        # spending_summary must find every parseable negative row,
+        # including the thousand-separated one (pre-fix it was 0.0
+        # and would have been lost from the "food" bucket).
         summary = bridge.db.spending_summary()
-        assert summary.get("food") == -25.75  # -20.50 + -5.25
-        # The garbage rows default to 0.0, so they don't pollute the
-        # "shopping" / "other" buckets.
-        assert "shopping" not in summary or summary["shopping"] == 0.0
-        assert "other" not in summary or summary["other"] == 0.0
+        # food: -20.50 + -5.25 + -1238.93 = -1264.68
+        assert summary.get("food") == pytest.approx(-1264.68)
+        assert summary.get("other") == pytest.approx(-99.99)
 
     def test_store_crawl(self, bridge: DatabaseBridge) -> None:
         row_id = bridge.store_crawl(
