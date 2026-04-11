@@ -343,6 +343,70 @@ class TestFinancialTransactions:
         # still present.
         assert descs == ["manual A", "plaid C", "plaid D"]
 
+    def test_replace_accounts_for_source_drops_stale_rows(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: ``replace_accounts_for_source`` wipes the
+        slice tagged with ``source`` before inserting the new
+        snapshot, so an account that was closed / disconnected
+        upstream actually disappears from ``financial_accounts``.
+
+        ``sync_accounts`` (the old upsert-loop path) would leave
+        the stale row behind, inflating ``net_worth`` and polluting
+        ``--db-accounts`` listings."""
+        # First snapshot: two accounts.
+        db.replace_accounts_for_source("plaid", [
+            FinancialAccount(name="Checking", institution="Chase",
+                             balance=1000.0, account_type="checking"),
+            FinancialAccount(name="Credit", institution="Chase",
+                             balance=-500.0, account_type="credit_card"),
+        ])
+        assert {a.name for a in db.get_accounts()} == {"Checking", "Credit"}
+        assert db.net_worth()["total"] == 500.0
+
+        # A separate source keeps its own row.
+        db.replace_accounts_for_source("manual", [
+            FinancialAccount(name="Cash", institution="Wallet",
+                             balance=200.0, account_type="checking"),
+        ])
+        assert len(db.get_accounts()) == 3
+
+        # Second snapshot: the Credit account is gone upstream.
+        db.replace_accounts_for_source("plaid", [
+            FinancialAccount(name="Checking", institution="Chase",
+                             balance=1100.0, account_type="checking"),
+        ])
+        stored = {a.name: a for a in db.get_accounts()}
+        # Stale Credit row is GONE.
+        assert "Credit" not in stored
+        # Checking got the updated balance.
+        assert stored["Checking"].balance == 1100.0
+        # The manual account was untouched.
+        assert "Cash" in stored
+        assert stored["Cash"].balance == 200.0
+        # Net worth reflects the drop.
+        assert db.net_worth()["total"] == 1300.0
+
+    def test_replace_accounts_empty_input_wipes_slice(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Same empty-snapshot semantics as
+        ``replace_transactions_for_source``: passing an empty list
+        clears the slice, leaving rows with other source tags
+        alone."""
+        db.replace_accounts_for_source("plaid", [
+            FinancialAccount(name="A", institution="X", balance=1.0),
+        ])
+        db.replace_accounts_for_source("manual", [
+            FinancialAccount(name="B", institution="Y", balance=2.0),
+        ])
+        assert len(db.get_accounts()) == 2
+
+        assert db.replace_accounts_for_source("plaid", []) == 0
+        remaining = db.get_accounts()
+        assert len(remaining) == 1
+        assert remaining[0].source == "manual"
+
     def test_replace_transactions_empty_input_wipes_the_slice(
         self, db: GuardianDatabase
     ) -> None:
@@ -564,6 +628,41 @@ class TestImport:
         # The null row should have coerced defaults, not None.
         severities = {log.severity for log in logs}
         assert None not in severities
+
+    def test_import_cfo_ledger_drops_stale_accounts_on_reimport(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: importing a ledger snapshot that has fewer
+        accounts than the previously-imported snapshot must remove
+        the stale rows, not leave them behind."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        # First ledger: two accounts.
+        with open(ledger_path, "w") as f:
+            json.dump({
+                "saved_at": "2026-03-22T00:00:00Z",
+                "accounts": [
+                    {"name": "Checking", "account_type": "checking",
+                     "balance": 1000.0, "institution": "Chase"},
+                    {"name": "OldCredit", "account_type": "credit_card",
+                     "balance": -200.0, "institution": "Chase"},
+                ],
+            }, f)
+        db.import_cfo_ledger(ledger_path)
+        assert {a.name for a in db.get_accounts()} == {"Checking", "OldCredit"}
+
+        # Second ledger: OldCredit was closed.
+        with open(ledger_path, "w") as f:
+            json.dump({
+                "saved_at": "2026-03-23T00:00:00Z",
+                "accounts": [
+                    {"name": "Checking", "account_type": "checking",
+                     "balance": 1100.0, "institution": "Chase"},
+                ],
+            }, f)
+        db.import_cfo_ledger(ledger_path)
+        accounts = {a.name: a for a in db.get_accounts()}
+        assert "OldCredit" not in accounts  # Stale row dropped.
+        assert accounts["Checking"].balance == 1100.0
 
     def test_import_cfo_ledger_imports_transactions(
         self, db: GuardianDatabase, tmp_path: Path
@@ -1365,6 +1464,48 @@ class TestDatabaseBridge:
         assert len(stored) == 2
         names = {a.name for a in stored}
         assert names == {"First", "Second"}
+
+    def test_replace_accounts_drops_disappeared_rows(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: when a provider's snapshot drops an account
+        (closed / disconnected), the bridge's ``replace_accounts``
+        path must remove the stale row — a ``sync_accounts`` upsert
+        loop would leave it behind and inflate ``net_worth``."""
+        first = [
+            {"name": "A", "institution": "Chase",
+             "balance": 100.0, "account_type": "checking"},
+            {"name": "B", "institution": "Chase",
+             "balance": 200.0, "account_type": "savings"},
+        ]
+        assert bridge.replace_accounts(first, source="plaid") == 2
+        assert {a.name for a in bridge.db.get_accounts()} == {"A", "B"}
+
+        # Second snapshot drops B.
+        second = [
+            {"name": "A", "institution": "Chase",
+             "balance": 150.0, "account_type": "checking"},
+        ]
+        assert bridge.replace_accounts(second, source="plaid") == 1
+        stored = bridge.db.get_accounts()
+        assert len(stored) == 1
+        assert stored[0].name == "A"
+        assert stored[0].balance == 150.0
+
+    def test_replace_accounts_skips_non_dict_entries(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Same shape-filter as ``sync_accounts``: the DELETE still
+        runs and only valid dict entries are inserted."""
+        mixed = [
+            {"name": "Good", "institution": "Chase",
+             "balance": 1.0, "account_type": "checking"},
+            None,
+            [],
+            "oops",
+        ]
+        assert bridge.replace_accounts(mixed, source="plaid") == 1
+        assert len(bridge.db.get_accounts()) == 1
 
     def test_sync_transactions_skips_non_dict_entries(
         self, bridge: DatabaseBridge

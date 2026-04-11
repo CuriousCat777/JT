@@ -180,21 +180,52 @@ class DatabaseBridge:
         Non-dict entries in the input list (e.g. a stray ``null`` in
         the provider's JSON array) are skipped so one bad element
         does not raise ``AttributeError`` and abort the entire batch.
+
+        **Note:** this method only *adds* or *updates* accounts; it
+        never removes rows that have disappeared from the upstream
+        snapshot. For a full-snapshot replace (needed when an
+        account is closed or disconnected and must drop out of
+        ``financial_accounts``), use ``replace_accounts`` instead.
         """
         count = 0
         for acct in accounts:
             if not isinstance(acct, dict):
                 continue
-            self.db.upsert_account(FinancialAccount(
-                name=_s(acct, "name"),
-                account_type=_s(acct, "account_type"),
-                balance=_f(acct, "balance"),
-                institution=_s(acct, "institution"),
-                source=source,
-                last_synced=_s(acct, "last_synced", _s(acct, "last_updated")),
-            ))
+            self.db.upsert_account(self._build_account(acct, source))
             count += 1
         return count
+
+    def replace_accounts(
+        self, accounts: list[dict[str, Any]], source: str = "sync"
+    ) -> int:
+        """Replace all account rows tagged with ``source`` in one
+        transaction. Use this when mirroring a full snapshot from a
+        provider — a ``sync_accounts`` upsert loop would leave stale
+        rows behind whenever an account is closed or disconnected
+        upstream, which corrupts ``net_worth()`` and ``--db-accounts``.
+
+        Non-dict entries are filtered out; the DELETE still runs so
+        the slice converges to the current snapshot.
+        """
+        accts = [
+            self._build_account(a, source)
+            for a in accounts
+            if isinstance(a, dict)
+        ]
+        return self.db.replace_accounts_for_source(source, accts)
+
+    def _build_account(
+        self, acct: dict[str, Any], source: str
+    ) -> FinancialAccount:
+        """Shared payload normalization for sync/replace account paths."""
+        return FinancialAccount(
+            name=_s(acct, "name"),
+            account_type=_s(acct, "account_type"),
+            balance=_f(acct, "balance"),
+            institution=_s(acct, "institution"),
+            source=source,
+            last_synced=_s(acct, "last_synced", _s(acct, "last_updated")),
+        )
 
     def sync_transactions(
         self, transactions: list[dict[str, Any]], source: str = "sync"

@@ -804,6 +804,56 @@ class GuardianDatabase:
             finally:
                 conn.close()
 
+    def replace_accounts_for_source(
+        self,
+        source: str,
+        accounts: list[FinancialAccount],
+    ) -> int:
+        """Atomically replace all account rows where ``source = <source>``.
+
+        Symmetric to ``replace_transactions_for_source``. The right
+        primitive for mirroring a full provider snapshot: if an
+        account was closed or disconnected upstream, it disappears
+        from the current payload and the existing DB row for it
+        must be removed. A plain ``upsert_account`` loop would
+        leave stale rows behind, inflating ``net_worth()`` and
+        account listings.
+
+        Rows with other ``source`` values are untouched.
+
+        Delete-and-insert is unconditional: passing an empty
+        ``accounts`` list is a legitimate "the caller has zero
+        accounts for this source" snapshot and clears the slice.
+        Callers with risky upstream paths should add their own
+        empty-input guard.
+
+        Returns the number of rows inserted.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM financial_accounts WHERE source = ?",
+                    (source,),
+                )
+                if accounts:
+                    conn.executemany(
+                        """INSERT INTO financial_accounts
+                           (name, account_type, balance, institution, source,
+                            last_synced, metadata)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        [
+                            (a.name, a.account_type, a.balance,
+                             a.institution, source, a.last_synced,
+                             a.metadata)
+                            for a in accounts
+                        ],
+                    )
+                conn.commit()
+                return len(accounts)
+            finally:
+                conn.close()
+
     def get_accounts(
         self,
         institution: str | None = None,
@@ -1048,16 +1098,17 @@ class GuardianDatabase:
         first-run initialization, where a corrupt optional seed file
         should not take down ``--db-init`` entirely.
 
-        Transaction import semantics:
+        Snapshot semantics:
 
-        * If the ledger dict contains a ``transactions`` key, its
-          value is used to *replace* the ``cfo_ledger`` slice of
-          ``financial_transactions`` (via
-          ``replace_transactions_for_source``). This preserves
-          existing transaction history on re-init and converges
-          cleanly to any explicit truncation in the ledger.
-        * If ``transactions`` is absent (old format), the
-          transactions table is left alone.
+        * Accounts are treated as a full snapshot. The ``cfo_ledger``
+          slice of ``financial_accounts`` is *replaced* with the
+          accounts in the ledger so a closed account that was
+          dropped upstream also disappears from the DB. The
+          ``accounts`` key is required for this step — if it's
+          missing (or not a list), the account slice is left alone.
+        * Transactions are also a full snapshot when the
+          ``transactions`` key is present. Missing key → slice left
+          alone (old-format ledger); explicit ``[]`` → slice wiped.
 
         Returns the number of *accounts* imported (the historical
         meaning of this method). Transaction counts are logged via
@@ -1078,19 +1129,26 @@ class GuardianDatabase:
             return 0
 
         # --- Accounts -------------------------------------------------
+        # Only touch the account slice when the key is actually
+        # present; old-format / partial ledgers are left alone.
         count = 0
-        for acct in data.get("accounts", []) or []:
-            if not isinstance(acct, dict):
-                continue
-            self.upsert_account(FinancialAccount(
-                name=_coerce_str(acct, "name"),
-                account_type=_coerce_str(acct, "account_type"),
-                balance=_coerce_float(acct, "balance"),
-                institution=_coerce_str(acct, "institution"),
-                source="cfo_ledger",
-                last_synced=_coerce_str(acct, "last_synced"),
-            ))
-            count += 1
+        if "accounts" in data:
+            raw_accounts = data.get("accounts") or []
+            if isinstance(raw_accounts, list):
+                parsed_accts: list[FinancialAccount] = []
+                for acct in raw_accounts:
+                    if not isinstance(acct, dict):
+                        continue
+                    parsed_accts.append(FinancialAccount(
+                        name=_coerce_str(acct, "name"),
+                        account_type=_coerce_str(acct, "account_type"),
+                        balance=_coerce_float(acct, "balance"),
+                        institution=_coerce_str(acct, "institution"),
+                        source="cfo_ledger",
+                        last_synced=_coerce_str(acct, "last_synced"),
+                    ))
+                self.replace_accounts_for_source("cfo_ledger", parsed_accts)
+                count = len(parsed_accts)
 
         # --- Transactions ---------------------------------------------
         # Only touch the transactions slice when the key is actually

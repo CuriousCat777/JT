@@ -201,6 +201,52 @@ class TestCFOSaveLedgerBridgeMirror:
         assert after_reorder == ["A", "C"]
         assert len(bridge.db.query_transactions()) == 2
 
+    def test_save_ledger_drops_stale_accounts(
+        self, tmp_path: Path, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: when CFO's ``clean_ledger`` (or any other
+        account removal) drops an account and then calls
+        ``save_ledger``, the DB mirror must remove the stale row
+        so ``--db-accounts`` and ``--db-net-worth`` don't keep
+        reporting inflated totals."""
+        from guardian_one.agents.cfo import (
+            CFO, Account, AccountType, Transaction, TransactionCategory,
+        )
+        from guardian_one.core.config import AgentConfig
+
+        audit = AuditLog(log_dir=tmp_path / "logs")
+        cfo = CFO(
+            config=AgentConfig(name="cfo"),
+            audit=audit,
+            data_dir=tmp_path / "data",
+            db_bridge=bridge,
+        )
+        cfo._accounts["Checking"] = Account(
+            name="Checking",
+            account_type=AccountType.CHECKING,
+            balance=1000.0,
+            institution="Chase",
+        )
+        cfo._accounts["OldCredit"] = Account(
+            name="OldCredit",
+            account_type=AccountType.CREDIT_CARD,
+            balance=-200.0,
+            institution="Chase",
+        )
+        cfo.save_ledger()
+        assert {a.name for a in bridge.db.get_accounts()} == {
+            "Checking", "OldCredit",
+        }
+
+        # User cleans up the closed card from the in-memory ledger.
+        del cfo._accounts["OldCredit"]
+        cfo.save_ledger()
+
+        stored = {a.name for a in bridge.db.get_accounts()}
+        assert stored == {"Checking"}  # Stale row gone.
+        # Net worth reflects the drop.
+        assert bridge.db.net_worth()["total"] == 1000.0
+
     def test_save_ledger_preserves_other_source_rows(
         self, tmp_path: Path, bridge: DatabaseBridge
     ) -> None:

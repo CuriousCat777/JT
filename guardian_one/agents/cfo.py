@@ -358,7 +358,14 @@ class CFO(BaseAgent):
         # JSON write above.
         if self._db_bridge is not None:
             try:
-                self._db_bridge.sync_accounts(
+                # ``replace_accounts`` (not ``sync_accounts``) so that
+                # an account removed from the ledger (via
+                # ``clean_ledger`` or user action) also disappears
+                # from ``financial_accounts``. A plain upsert loop
+                # would leave the stale row in the table and
+                # ``--db-accounts`` / ``--db-net-worth`` would keep
+                # reporting inflated totals.
+                self._db_bridge.replace_accounts(
                     data["accounts"], source="cfo_ledger"
                 )
                 self._db_bridge.replace_transactions(
