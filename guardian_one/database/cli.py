@@ -36,7 +36,9 @@ def db_main() -> None:
 
 def _handle_db_commands(args: argparse.Namespace) -> None:
     """Handle all --db-* CLI commands."""
-    db_path = Path(args.db_path) if args.db_path else Path("data/guardian.db")
+    # If --db-path is given, honor it; otherwise let GuardianDatabase
+    # resolve the default via GUARDIAN_DATA_DIR (or fall back to ./data).
+    db_path = Path(args.db_path) if args.db_path else None
     db = GuardianDatabase(db_path)
 
     if args.db_init:

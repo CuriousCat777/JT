@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import tempfile
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -108,6 +108,31 @@ class TestSystemLogs:
         assert len(logs2) == 3
         assert logs[0].id != logs2[0].id
 
+    def test_insert_logs_batch(self, db: GuardianDatabase) -> None:
+        batch = [SystemLog(agent="bulk", action=f"a_{i}") for i in range(50)]
+        count = db.insert_logs_batch(batch)
+        assert count == 50
+        assert db.count_logs() == 50
+
+    def test_insert_logs_batch_empty(self, db: GuardianDatabase) -> None:
+        assert db.insert_logs_batch([]) == 0
+
+    def test_timestamps_use_z_suffix(self, db: GuardianDatabase) -> None:
+        """Python-generated and DB-generated timestamps must both end in 'Z'."""
+        from guardian_one.database.models import _now_iso
+
+        # Python-generated
+        assert _now_iso().endswith("Z")
+        assert "+00:00" not in _now_iso()
+
+        # Round-trip through the DB: inserted row has a Python timestamp,
+        # and a row with schema default has a DB-generated timestamp. Both
+        # must be lexicographically comparable.
+        db.insert_log(SystemLog(agent="a", action="x"))
+        rows = db.execute_raw("SELECT timestamp FROM system_logs")
+        for row in rows:
+            assert row["timestamp"].endswith("Z"), row["timestamp"]
+
 
 # -----------------------------------------------------------------------
 # System Codes
@@ -138,7 +163,7 @@ class TestSystemCodes:
 
     def test_unique_code_id(self, db: GuardianDatabase) -> None:
         db.insert_code(SystemCode(code_id="UNQ-001"))
-        with pytest.raises(Exception):
+        with pytest.raises(sqlite3.IntegrityError):
             db.insert_code(SystemCode(code_id="UNQ-001"))
 
 
@@ -327,9 +352,13 @@ class TestImport:
         accounts = db.get_accounts()
         assert len(accounts) == 2
 
-    def test_import_nonexistent_file(self, db: GuardianDatabase) -> None:
-        assert db.import_audit_jsonl("/nonexistent/path") == 0
-        assert db.import_cfo_ledger("/nonexistent/path") == 0
+    def test_import_nonexistent_file(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        missing = tmp_path / "definitely-not-here.json"
+        assert not missing.exists()
+        assert db.import_audit_jsonl(missing) == 0
+        assert db.import_cfo_ledger(missing) == 0
 
 
 # -----------------------------------------------------------------------
@@ -394,6 +423,28 @@ class TestMaintenance:
         db.insert_log(SystemLog(agent="test", action="hello"))
         rows = db.execute_raw("SELECT COUNT(*) as cnt FROM system_logs")
         assert rows[0]["cnt"] == 1
+
+    def test_execute_raw_accepts_with_cte(self, db: GuardianDatabase) -> None:
+        db.insert_log(SystemLog(agent="a", action="x"))
+        rows = db.execute_raw(
+            "WITH agg AS (SELECT agent FROM system_logs) SELECT COUNT(*) AS n FROM agg"
+        )
+        assert rows[0]["n"] == 1
+
+    def test_execute_raw_rejects_mutations(self, db: GuardianDatabase) -> None:
+        db.insert_log(SystemLog(agent="target", action="keep"))
+        for stmt in (
+            "DELETE FROM system_logs",
+            "UPDATE system_logs SET agent='x'",
+            "DROP TABLE system_logs",
+            "INSERT INTO system_logs(agent) VALUES ('x')",
+            "-- comment\nDELETE FROM system_logs",
+        ):
+            with pytest.raises(ValueError):
+                db.execute_raw(stmt)
+        # Data was not touched.
+        rows = db.execute_raw("SELECT COUNT(*) AS n FROM system_logs")
+        assert rows[0]["n"] == 1
 
     def test_vacuum(self, db: GuardianDatabase) -> None:
         db.insert_log(SystemLog(agent="test", action="hello"))

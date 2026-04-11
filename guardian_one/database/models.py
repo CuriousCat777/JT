@@ -12,7 +12,14 @@ from typing import Any
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    """Return an ISO-8601 UTC timestamp with a canonical 'Z' suffix.
+
+    The SQLite schema defaults use ``strftime('%Y-%m-%dT%H:%M:%fZ', 'now')``,
+    which always ends in ``Z``.  ``datetime.isoformat()`` produces ``+00:00``
+    instead, so we normalize here to keep all timestamps lexicographically
+    comparable across Python-generated and DB-generated rows.
+    """
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 # ---------------------------------------------------------------------------

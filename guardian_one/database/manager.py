@@ -15,6 +15,8 @@ encryption, queryable with SQL.
 from __future__ import annotations
 
 import json
+import os
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -139,7 +141,13 @@ class GuardianDatabase:
     """
 
     def __init__(self, db_path: Path | str | None = None) -> None:
-        self._db_path = Path(db_path) if db_path else Path("data/guardian.db")
+        if db_path is not None:
+            self._db_path = Path(db_path)
+        else:
+            # Honor the same GUARDIAN_DATA_DIR used by Docker, compose, and
+            # the rest of the codebase so local and containerized runs agree.
+            data_dir = Path(os.environ.get("GUARDIAN_DATA_DIR", "data"))
+            self._db_path = data_dir / "guardian.db"
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._initialize_schema()
@@ -182,6 +190,33 @@ class GuardianDatabase:
                 )
                 conn.commit()
                 return cur.lastrowid or 0
+            finally:
+                conn.close()
+
+    def insert_logs_batch(self, logs: list[SystemLog]) -> int:
+        """Bulk-insert system logs in a single transaction.
+
+        Much faster than calling :meth:`insert_log` per row for large
+        imports because it uses one connection, one transaction, and a
+        single ``executemany`` call.
+        """
+        if not logs:
+            return 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.executemany(
+                    """INSERT INTO system_logs
+                       (timestamp, agent, action, severity, component, message, details, source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [
+                        (log.timestamp, log.agent, log.action, log.severity,
+                         log.component, log.message, log.details, log.source)
+                        for log in logs
+                    ],
+                )
+                conn.commit()
+                return len(logs)
             finally:
                 conn.close()
 
@@ -600,7 +635,11 @@ class GuardianDatabase:
     # =======================================================================
 
     def import_audit_jsonl(self, jsonl_path: Path | str) -> int:
-        """Import existing audit.jsonl entries into system_logs."""
+        """Import existing audit.jsonl entries into system_logs.
+
+        Uses a single bulk insert so importing a large audit log stays
+        fast and does not hold the DB lock longer than necessary.
+        """
         path = Path(jsonl_path)
         if not path.exists():
             return 0
@@ -624,11 +663,7 @@ class GuardianDatabase:
                     ))
                 except (json.JSONDecodeError, TypeError):
                     continue
-        count = 0
-        for log in logs:
-            self.insert_log(log)
-            count += 1
-        return count
+        return self.insert_logs_batch(logs)
 
     def import_cfo_ledger(self, ledger_path: Path | str) -> int:
         """Import existing cfo_ledger.json accounts into financial_accounts."""
@@ -671,7 +706,21 @@ class GuardianDatabase:
             conn.close()
 
     def execute_raw(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-        """Execute a raw read-only SQL query. For advanced queries."""
+        """Execute a raw read-only SQL query. For advanced queries.
+
+        Only ``SELECT`` and ``WITH`` (CTE) statements are permitted; any
+        statement that could mutate the database (INSERT/UPDATE/DELETE/DDL)
+        is rejected with a ``ValueError``. Comments are stripped before the
+        check so they cannot be used to bypass the gate.
+        """
+        stripped = re.sub(r"--[^\n]*", "", sql)
+        stripped = re.sub(r"/\*.*?\*/", "", stripped, flags=re.DOTALL)
+        head = stripped.strip().lstrip("(").lstrip().upper()
+        if not (head.startswith("SELECT") or head.startswith("WITH")):
+            raise ValueError(
+                "execute_raw() is read-only; only SELECT or WITH statements "
+                "are permitted. Use the typed helper methods for mutations."
+            )
         conn = self._connect()
         try:
             rows = conn.execute(sql, params).fetchall()
