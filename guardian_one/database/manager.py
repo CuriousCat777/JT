@@ -770,21 +770,33 @@ class GuardianDatabase:
     # =======================================================================
 
     def upsert_account(self, acct: FinancialAccount) -> int:
-        """Insert or update an account snapshot (by name + institution)."""
+        """Insert or update an account snapshot.
+
+        The uniqueness key is ``(source, name, institution)`` so
+        that provider slices stay independent. If Plaid and Rocket
+        Money both report "Chase Checking / Chase Bank", each
+        provider's row is tracked separately and
+        ``replace_accounts_for_source('plaid', ...)`` never
+        clobbers the rocket_money row. Before this was scoped by
+        source, the second upsert from a different provider would
+        silently rewrite the first row's ``source`` column, which
+        then broke source-scoped replace flows.
+        """
         with self._lock:
             conn = self._connect()
             try:
                 existing = conn.execute(
-                    "SELECT id FROM financial_accounts WHERE name = ? AND institution = ?",
-                    (acct.name, acct.institution),
+                    "SELECT id FROM financial_accounts "
+                    "WHERE source = ? AND name = ? AND institution = ?",
+                    (acct.source, acct.name, acct.institution),
                 ).fetchone()
                 if existing:
                     conn.execute(
                         """UPDATE financial_accounts
-                           SET balance = ?, account_type = ?, source = ?,
+                           SET balance = ?, account_type = ?,
                                last_synced = ?, metadata = ?
                            WHERE id = ?""",
-                        (acct.balance, acct.account_type, acct.source,
+                        (acct.balance, acct.account_type,
                          acct.last_synced, acct.metadata, existing["id"]),
                     )
                     conn.commit()
@@ -1130,71 +1142,75 @@ class GuardianDatabase:
 
         # --- Accounts -------------------------------------------------
         # Only touch the account slice when the key is actually
-        # present; old-format / partial ledgers are left alone.
+        # present AND the value is a real list. A ``null`` /
+        # ``false`` / ``""`` / ``0`` under the ``accounts`` key is
+        # treated as invalid (leave slice alone), not as a
+        # legitimate empty snapshot — otherwise a malformed ledger
+        # with ``"accounts": null`` would silently wipe every
+        # previously-imported row.
         count = 0
-        if "accounts" in data:
-            raw_accounts = data.get("accounts") or []
-            if isinstance(raw_accounts, list):
-                parsed_accts: list[FinancialAccount] = []
-                for acct in raw_accounts:
-                    if not isinstance(acct, dict):
-                        continue
-                    parsed_accts.append(FinancialAccount(
-                        name=_coerce_str(acct, "name"),
-                        account_type=_coerce_str(acct, "account_type"),
-                        balance=_coerce_float(acct, "balance"),
-                        institution=_coerce_str(acct, "institution"),
-                        source="cfo_ledger",
-                        last_synced=_coerce_str(acct, "last_synced"),
-                    ))
-                self.replace_accounts_for_source("cfo_ledger", parsed_accts)
-                count = len(parsed_accts)
+        if isinstance(data.get("accounts"), list):
+            raw_accounts = data["accounts"]
+            parsed_accts: list[FinancialAccount] = []
+            for acct in raw_accounts:
+                if not isinstance(acct, dict):
+                    continue
+                parsed_accts.append(FinancialAccount(
+                    name=_coerce_str(acct, "name"),
+                    account_type=_coerce_str(acct, "account_type"),
+                    balance=_coerce_float(acct, "balance"),
+                    institution=_coerce_str(acct, "institution"),
+                    source="cfo_ledger",
+                    last_synced=_coerce_str(acct, "last_synced"),
+                ))
+            self.replace_accounts_for_source("cfo_ledger", parsed_accts)
+            count = len(parsed_accts)
 
         # --- Transactions ---------------------------------------------
-        # Only touch the transactions slice when the key is actually
-        # present; old-format ledgers (accounts only) are left alone.
-        if "transactions" in data:
-            raw_txns = data.get("transactions") or []
-            if isinstance(raw_txns, list):
-                parsed: list[FinancialTransaction] = []
-                occurrence: dict[tuple[str, str, float, str], int] = {}
-                for tx in raw_txns:
-                    if not isinstance(tx, dict):
-                        continue
-                    meta = tx.get("metadata") or {}
-                    if not isinstance(meta, dict):
-                        meta = {}
-                    provider_id = (
-                        meta.get("id")
-                        or meta.get("provider_id")
-                        or meta.get("plaid_id")
-                        or meta.get("transaction_id")
+        # Same invalid-vs-empty distinction: ``transactions: null``
+        # leaves the slice alone (invalid), while ``transactions: []``
+        # is a meaningful "zero rows" snapshot that wipes the slice.
+        if isinstance(data.get("transactions"), list):
+            raw_txns = data["transactions"]
+            parsed: list[FinancialTransaction] = []
+            occurrence: dict[tuple[str, str, float, str], int] = {}
+            for tx in raw_txns:
+                if not isinstance(tx, dict):
+                    continue
+                meta = tx.get("metadata") or {}
+                if not isinstance(meta, dict):
+                    meta = {}
+                provider_id = (
+                    meta.get("id")
+                    or meta.get("provider_id")
+                    or meta.get("plaid_id")
+                    or meta.get("transaction_id")
+                )
+                date = _coerce_str(tx, "date")
+                description = _coerce_str(tx, "description")
+                amount = _coerce_float(tx, "amount")
+                category = _coerce_str(tx, "category")
+                account = _coerce_str(tx, "account")
+                if provider_id:
+                    ref = str(provider_id)
+                else:
+                    key = (account, date, amount, description)
+                    n = occurrence.get(key, 0)
+                    occurrence[key] = n + 1
+                    ref = (
+                        f"cfo_ledger:{account}|{date}|"
+                        f"{amount}|{description}#{n}"
                     )
-                    date = _coerce_str(tx, "date")
-                    description = _coerce_str(tx, "description")
-                    amount = _coerce_float(tx, "amount")
-                    category = _coerce_str(tx, "category")
-                    account = _coerce_str(tx, "account")
-                    if provider_id:
-                        ref = str(provider_id)
-                    else:
-                        key = (account, date, amount, description)
-                        n = occurrence.get(key, 0)
-                        occurrence[key] = n + 1
-                        ref = (
-                            f"cfo_ledger:{account}|{date}|"
-                            f"{amount}|{description}#{n}"
-                        )
-                    parsed.append(FinancialTransaction(
-                        date=date,
-                        description=description,
-                        amount=amount,
-                        category=category,
-                        account=account,
-                        source="cfo_ledger",
-                        reference_id=ref,
-                    ))
-                self.replace_transactions_for_source("cfo_ledger", parsed)
+                parsed.append(FinancialTransaction(
+                    date=date,
+                    description=description,
+                    amount=amount,
+                    category=category,
+                    account=account,
+                    source="cfo_ledger",
+                    reference_id=ref,
+                ))
+            self.replace_transactions_for_source("cfo_ledger", parsed)
 
         return count
 

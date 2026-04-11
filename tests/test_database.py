@@ -715,6 +715,111 @@ class TestImport:
         db.import_cfo_ledger(ledger_path)
         assert len(db.query_transactions()) == 4
 
+    def test_import_cfo_ledger_null_accounts_leaves_slice(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a malformed ledger with ``"accounts": null``
+        (or any falsy non-list value) must NOT wipe the existing
+        cfo_ledger account slice. The previous ``or []`` coercion
+        turned null into an empty list and silently deleted every
+        previously-imported row."""
+        # Seed two accounts so there's something to preserve.
+        first_ledger = tmp_path / "cfo_ledger.json"
+        with open(first_ledger, "w") as f:
+            json.dump({
+                "accounts": [
+                    {"name": "Checking", "institution": "Chase",
+                     "balance": 100.0, "account_type": "checking"},
+                    {"name": "Savings", "institution": "Chase",
+                     "balance": 200.0, "account_type": "savings"},
+                ],
+            }, f)
+        db.import_cfo_ledger(first_ledger)
+        assert len(db.get_accounts()) == 2
+
+        # Now a ledger with an explicit null accounts value.
+        for bad in (None, False, "", 0):
+            bad_ledger = tmp_path / f"cfo_ledger_{type(bad).__name__}.json"
+            with open(bad_ledger, "w") as f:
+                json.dump({"accounts": bad}, f)
+            db.import_cfo_ledger(bad_ledger)
+            assert len(db.get_accounts()) == 2, (
+                f"accounts={bad!r} wiped the slice"
+            )
+
+    def test_import_cfo_ledger_null_transactions_leaves_slice(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: same guard for the transactions slice —
+        ``"transactions": null`` must leave the slice alone, not
+        wipe via ``or []`` coercion."""
+        seed = tmp_path / "cfo_ledger.json"
+        with open(seed, "w") as f:
+            json.dump({
+                "accounts": [{"name": "A", "institution": "X",
+                              "balance": 1.0}],
+                "transactions": [
+                    {"date": "2026-03-01", "description": "seed",
+                     "amount": -10.0, "account": "A"},
+                ],
+            }, f)
+        db.import_cfo_ledger(seed)
+        assert len(db.query_transactions()) == 1
+
+        # Ledger with null transactions.
+        bad = tmp_path / "cfo_ledger_null_txns.json"
+        with open(bad, "w") as f:
+            json.dump({"transactions": None}, f)
+        db.import_cfo_ledger(bad)
+        # Transactions slice untouched.
+        assert len(db.query_transactions()) == 1
+
+    def test_upsert_account_is_source_scoped(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: ``(name, institution)`` alone is not a
+        sufficient uniqueness key. Two providers can legitimately
+        report the same account label (e.g. "Chase Checking /
+        Chase Bank"); clobbering one provider's row with another's
+        would break source-scoped replace flows.
+
+        After the fix, ``upsert_account`` matches on
+        ``(source, name, institution)``, so each provider gets its
+        own row and ``replace_accounts_for_source`` only touches
+        its own slice."""
+        db.upsert_account(FinancialAccount(
+            name="Chase Checking", institution="Chase",
+            balance=1000.0, account_type="checking",
+            source="plaid",
+        ))
+        db.upsert_account(FinancialAccount(
+            name="Chase Checking", institution="Chase",
+            balance=1001.0, account_type="checking",
+            source="rocket_money",
+        ))
+
+        stored = db.get_accounts()
+        assert len(stored) == 2
+        by_source = {a.source: a for a in stored}
+        assert by_source["plaid"].balance == 1000.0
+        assert by_source["rocket_money"].balance == 1001.0
+
+        # Updating the plaid row does not disturb the rocket_money row.
+        db.upsert_account(FinancialAccount(
+            name="Chase Checking", institution="Chase",
+            balance=1500.0, account_type="checking",
+            source="plaid",
+        ))
+        stored = {a.source: a for a in db.get_accounts()}
+        assert stored["plaid"].balance == 1500.0
+        assert stored["rocket_money"].balance == 1001.0
+
+        # replace_accounts_for_source only touches the plaid slice.
+        db.replace_accounts_for_source("plaid", [])
+        stored_after = db.get_accounts()
+        assert len(stored_after) == 1
+        assert stored_after[0].source == "rocket_money"
+
     def test_import_cfo_ledger_without_transactions_key_leaves_slice(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
