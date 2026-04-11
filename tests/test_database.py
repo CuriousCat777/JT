@@ -262,6 +262,59 @@ class TestFinancialTransactions:
         count = db.insert_transactions_batch(txns)
         assert count == 5
 
+    def test_batch_dedupes_existing_refs_but_keeps_new_ones(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: dedup must drop only the reference_id collisions,
+        not the whole batch or unrelated rows."""
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="seed", amount=-1.0,
+            reference_id="R-1",
+        ))
+        batch = [
+            FinancialTransaction(date="2026-03-02", description="dup",
+                                 amount=-2.0, reference_id="R-1"),  # dup
+            FinancialTransaction(date="2026-03-03", description="new",
+                                 amount=-3.0, reference_id="R-2"),  # new
+            FinancialTransaction(date="2026-03-04", description="no-ref",
+                                 amount=-4.0, reference_id=""),  # no key
+        ]
+        # Only the two non-duplicate rows should be inserted.
+        assert db.insert_transactions_batch(batch) == 2
+        assert len(db.query_transactions()) == 3
+
+    def test_batch_dedupes_within_batch(self, db: GuardianDatabase) -> None:
+        """Regression: the same reference_id appearing twice in one
+        batch must only be inserted once."""
+        batch = [
+            FinancialTransaction(date="2026-03-01", amount=-1.0, reference_id="SAME"),
+            FinancialTransaction(date="2026-03-02", amount=-2.0, reference_id="SAME"),
+            FinancialTransaction(date="2026-03-03", amount=-3.0, reference_id="SAME"),
+        ]
+        assert db.insert_transactions_batch(batch) == 1
+        assert len(db.query_transactions()) == 1
+
+    def test_batch_surfaces_real_constraint_violations(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: non-dedup constraint violations (like passing
+        ``None`` for a ``NOT NULL`` column) must surface as
+        ``sqlite3.IntegrityError``, not be silently swallowed.
+
+        We construct the bad row with ``object.__setattr__`` to bypass
+        the dataclass default, simulating what would happen if upstream
+        code bypassed the bridge normalization and passed raw ``None``.
+        """
+        bad = FinancialTransaction(
+            date="2026-03-01", description="x", amount=-1.0,
+            reference_id="BAD-1",
+        )
+        # Force a NULL into the amount column (REAL NOT NULL DEFAULT 0.0)
+        object.__setattr__(bad, "amount", None)
+        # The single-row path must raise — not silently skip.
+        with pytest.raises(sqlite3.IntegrityError):
+            db.insert_transaction(bad)
+
     def test_filter_by_category(self, db: GuardianDatabase) -> None:
         db.insert_transaction(FinancialTransaction(
             date="2026-03-01", category="food", amount=-20.0, reference_id="a"))
@@ -397,6 +450,27 @@ class TestDatabaseBridge:
         count = bridge.sync_accounts(accounts, source="test")
         assert count == 1
 
+    def test_sync_accounts_coerces_null_to_defaults(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: upstream providers often send JSON ``null`` for
+        optional fields. The bridge must coerce those to defaults so
+        the sync doesn't abort on NOT NULL constraint violations."""
+        accounts = [
+            {"name": None, "account_type": None, "balance": None,
+             "institution": None, "last_synced": None},
+            {"name": "Real", "institution": "Bank"},  # mixed: missing + None
+        ]
+        count = bridge.sync_accounts(accounts, source="test")
+        assert count == 2
+        stored = bridge.db.get_accounts()
+        assert len(stored) == 2
+        # No None values made it into the table.
+        for a in stored:
+            assert a.name is not None
+            assert a.institution is not None
+            assert a.balance == 0.0 or a.balance == pytest.approx(a.balance)
+
     def test_sync_transactions(self, bridge: DatabaseBridge) -> None:
         txns = [
             {"date": "2026-03-01", "description": "Amazon",
@@ -406,6 +480,22 @@ class TestDatabaseBridge:
         ]
         count = bridge.sync_transactions(txns, source="test")
         assert count == 2
+
+    def test_sync_transactions_coerces_null_to_defaults(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: JSON ``null`` fields in upstream transaction
+        payloads must be coerced, not passed through as Python None."""
+        txns = [
+            {"date": None, "description": None, "amount": None,
+             "category": None, "reference_id": "NULL-1"},
+            {"date": "2026-03-02", "description": "ok",
+             "amount": -5.50, "reference_id": "NULL-2"},
+        ]
+        count = bridge.sync_transactions(txns, source="test")
+        assert count == 2
+        stored = bridge.db.query_transactions()
+        assert len(stored) == 2
 
     def test_store_crawl(self, bridge: DatabaseBridge) -> None:
         row_id = bridge.store_crawl(

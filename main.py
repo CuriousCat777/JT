@@ -64,15 +64,27 @@ if sys.stdout.encoding and sys.stdout.encoding.lower().startswith("cp"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+# Load ``.env`` *before* routing to the --db fast path so that database
+# commands honor ``GUARDIAN_DATA_DIR`` / ``GUARDIAN_LOG_DIR`` even when
+# they are only set in ``.env`` and not exported in the shell.
+#
+# ``python-dotenv`` is pure Python and ships in requirements.txt, so it
+# is expected to be installed. We still guard the import so `--db`
+# commands can run in stripped-down environments (e.g. the Ryzen image)
+# that do not have dotenv available — in that case env vars must be
+# exported in the shell.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Fast path: database commands need only stdlib + guardian_one.database.
-# This lets --db-* work without cryptography, dotenv, or other heavy deps.
+# This lets --db-* work without cryptography or other heavy deps.
 if any(a.startswith("--db") for a in sys.argv[1:]):
     from guardian_one.database.cli import db_main
     db_main()
     sys.exit(0)
-
-from dotenv import load_dotenv
-load_dotenv()
 
 from guardian_one.core.config import AgentConfig, load_config
 from guardian_one.core.guardian import GuardianOne

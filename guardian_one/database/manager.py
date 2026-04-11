@@ -435,12 +435,29 @@ class GuardianDatabase:
     # =======================================================================
 
     def insert_transaction(self, txn: FinancialTransaction) -> int:
-        """Insert a financial transaction. Deduplicates on reference_id."""
+        """Insert a financial transaction.
+
+        Deduplicates on non-empty ``reference_id`` via an explicit
+        pre-check. Returns ``0`` if the row was skipped as a duplicate,
+        otherwise the new row id.
+
+        Unlike ``INSERT OR IGNORE``, this only suppresses the
+        *reference-id* conflict. Any other constraint violation
+        (``NOT NULL``, type mismatch, …) surfaces as
+        ``sqlite3.IntegrityError`` so bad input is not silently dropped.
+        """
         with self._lock:
             conn = self._connect()
             try:
+                if txn.reference_id:
+                    existing = conn.execute(
+                        "SELECT id FROM financial_transactions WHERE reference_id = ?",
+                        (txn.reference_id,),
+                    ).fetchone()
+                    if existing:
+                        return 0
                 cur = conn.execute(
-                    """INSERT OR IGNORE INTO financial_transactions
+                    """INSERT INTO financial_transactions
                        (date, description, amount, category, account, institution,
                         transaction_type, source, reference_id, notes, recorded_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -454,14 +471,47 @@ class GuardianDatabase:
                 conn.close()
 
     def insert_transactions_batch(self, txns: list[FinancialTransaction]) -> int:
-        """Bulk insert transactions with deduplication. Returns count inserted."""
+        """Bulk insert transactions with explicit dedup on reference_id.
+
+        Returns the number of rows actually inserted (excluding
+        duplicates).  Dedup is performed by pre-fetching the set of
+        existing non-empty ``reference_id`` values and also tracking
+        duplicates *within* the batch itself. Real constraint
+        violations propagate as ``sqlite3.IntegrityError``.
+        """
         if not txns:
             return 0
         with self._lock:
             conn = self._connect()
             try:
-                cur = conn.executemany(
-                    """INSERT OR IGNORE INTO financial_transactions
+                # Pre-fetch already-stored reference_ids so we only
+                # skip the ones we know collide.  An empty reference_id
+                # is treated as "no dedup key" and always inserted.
+                refs = [t.reference_id for t in txns if t.reference_id]
+                existing: set[str] = set()
+                if refs:
+                    placeholders = ",".join("?" * len(refs))
+                    rows = conn.execute(
+                        f"SELECT reference_id FROM financial_transactions "
+                        f"WHERE reference_id IN ({placeholders})",
+                        refs,
+                    ).fetchall()
+                    existing = {row["reference_id"] for row in rows}
+
+                seen_in_batch: set[str] = set()
+                new_txns: list[FinancialTransaction] = []
+                for t in txns:
+                    if t.reference_id:
+                        if t.reference_id in existing or t.reference_id in seen_in_batch:
+                            continue
+                        seen_in_batch.add(t.reference_id)
+                    new_txns.append(t)
+
+                if not new_txns:
+                    return 0
+
+                conn.executemany(
+                    """INSERT INTO financial_transactions
                        (date, description, amount, category, account, institution,
                         transaction_type, source, reference_id, notes, recorded_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -469,11 +519,11 @@ class GuardianDatabase:
                         (t.date, t.description, t.amount, t.category,
                          t.account, t.institution, t.transaction_type,
                          t.source, t.reference_id, t.notes, t.recorded_at)
-                        for t in txns
+                        for t in new_txns
                     ],
                 )
                 conn.commit()
-                return cur.rowcount
+                return len(new_txns)
             finally:
                 conn.close()
 

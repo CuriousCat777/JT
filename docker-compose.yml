@@ -1,5 +1,15 @@
 # Guardian One — Docker Compose
 # ================================
+# Volume strategy:
+#   - ``./data`` and ``./logs`` are bind-mounted from the host so that
+#     existing ``cfo_ledger.json`` and ``audit.jsonl`` files can be
+#     imported by ``--db-init`` on first run and so the resulting
+#     ``guardian.db`` is visible on the host for inspection / backup.
+#     (Named volumes would be empty on first deploy and the advertised
+#      import workflow would silently import zero records.)
+#   - ``./config`` is bind-mounted read-only inside containers so
+#     tokens and credentials live on the host, not baked into images.
+#
 # Three kinds of services live here:
 #
 #   guardian (default) — CLI-only DB access. One-shot by design: each
@@ -22,8 +32,19 @@
 #   docker compose --profile setup up db-init          # bootstrap
 #   docker compose --profile full up -d                # sync + scheduler
 #   docker compose --profile web up -d devpanel        # Flask panel
-#
-# Data persists across container restarts via named volumes.
+
+x-volumes: &default-volumes
+  # Bind-mount the host data/ and logs/ directories so first-run
+  # imports can actually see cfo_ledger.json and audit.jsonl, and
+  # so the user can inspect the resulting guardian.db on the host.
+  - ./data:/app/data
+  - ./logs:/app/logs
+  - ./config:/app/config:ro
+
+x-env: &default-env
+  - GUARDIAN_DATA_DIR=/app/data
+  - GUARDIAN_LOG_DIR=/app/logs
+  - TZ=America/Chicago
 
 services:
   guardian:
@@ -34,15 +55,8 @@ services:
     # runs a single CLI command, and exits cleanly.
     env_file:
       - .env
-    environment:
-      - GUARDIAN_DATA_DIR=/app/data
-      - GUARDIAN_LOG_DIR=/app/logs
-      - TZ=America/Chicago
-    volumes:
-      # Persistent storage — survives container rebuilds
-      - guardian-data:/app/data          # SQLite database + CFO ledger
-      - guardian-logs:/app/logs          # Audit logs (JSONL)
-      - guardian-config:/app/config      # Config files, tokens, credentials
+    environment: *default-env
+    volumes: *default-volumes
 
   # One-shot service to initialize the database on first deploy
   db-init:
@@ -50,12 +64,8 @@ services:
     container_name: guardian-db-init
     env_file:
       - .env
-    environment:
-      - GUARDIAN_DATA_DIR=/app/data
-      - GUARDIAN_LOG_DIR=/app/logs
-    volumes:
-      - guardian-data:/app/data
-      - guardian-logs:/app/logs
+    environment: *default-env
+    volumes: *default-volumes
     command: ["--db-init"]
     profiles:
       - setup
@@ -67,14 +77,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - GUARDIAN_DATA_DIR=/app/data
-      - GUARDIAN_LOG_DIR=/app/logs
-      - TZ=America/Chicago
-    volumes:
-      - guardian-data:/app/data
-      - guardian-logs:/app/logs
-      - guardian-config:/app/config
+    environment: *default-env
+    volumes: *default-volumes
     command: ["--sync"]
     # Non-mutating healthcheck: only verifies the DB file is reachable
     # read-only; it does not create or initialize the schema.
@@ -93,14 +97,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - GUARDIAN_DATA_DIR=/app/data
-      - GUARDIAN_LOG_DIR=/app/logs
-      - TZ=America/Chicago
-    volumes:
-      - guardian-data:/app/data
-      - guardian-logs:/app/logs
-      - guardian-config:/app/config
+    environment: *default-env
+    volumes: *default-volumes
     command: ["--schedule"]
     healthcheck:
       test: ["CMD", "python", "-c", "import os, sqlite3, sys; p = os.path.join(os.environ.get('GUARDIAN_DATA_DIR', 'data'), 'guardian.db'); sys.exit(1) if not os.path.exists(p) else sqlite3.connect(f'file:{p}?mode=ro', uri=True).execute('SELECT 1').fetchone()"]
@@ -117,14 +115,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - GUARDIAN_DATA_DIR=/app/data
-      - GUARDIAN_LOG_DIR=/app/logs
-      - TZ=America/Chicago
-    volumes:
-      - guardian-data:/app/data
-      - guardian-logs:/app/logs
-      - guardian-config:/app/config
+    environment: *default-env
+    volumes: *default-volumes
     ports:
       - "5100:5100"
     command: ["--devpanel", "--devpanel-port", "5100"]
@@ -135,11 +127,3 @@ services:
       retries: 3
     profiles:
       - web
-
-volumes:
-  guardian-data:
-    driver: local
-  guardian-logs:
-    driver: local
-  guardian-config:
-    driver: local

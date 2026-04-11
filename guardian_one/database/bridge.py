@@ -21,6 +21,24 @@ from guardian_one.database.models import (
 )
 
 
+def _s(d: dict[str, Any], key: str, default: str = "") -> str:
+    """Get a string field, coercing ``None`` → default.
+
+    ``dict.get(key, default)`` returns ``None`` when the key is present
+    but holds a JSON ``null``, which then violates ``NOT NULL``
+    constraints downstream.  This helper treats ``None`` the same as a
+    missing key.
+    """
+    value = d.get(key, default)
+    return default if value is None else value
+
+
+def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
+    """Get a float field, coercing ``None`` → default."""
+    value = d.get(key, default)
+    return default if value is None else value
+
+
 class DatabaseBridge:
     """Connects existing Guardian One subsystems to the database.
 
@@ -54,16 +72,21 @@ class DatabaseBridge:
         ))
 
     def sync_accounts(self, accounts: list[dict[str, Any]], source: str = "sync") -> int:
-        """Upsert a batch of account snapshots from financial sync."""
+        """Upsert a batch of account snapshots from financial sync.
+
+        Fields are normalized via ``_s``/``_f`` so that JSON ``null``
+        values from upstream providers don't propagate into the
+        ``NOT NULL`` columns and abort the whole sync.
+        """
         count = 0
         for acct in accounts:
             self.db.upsert_account(FinancialAccount(
-                name=acct.get("name", ""),
-                account_type=acct.get("account_type", ""),
-                balance=acct.get("balance", 0.0),
-                institution=acct.get("institution", ""),
+                name=_s(acct, "name"),
+                account_type=_s(acct, "account_type"),
+                balance=_f(acct, "balance"),
+                institution=_s(acct, "institution"),
                 source=source,
-                last_synced=acct.get("last_synced", acct.get("last_updated", "")),
+                last_synced=_s(acct, "last_synced", _s(acct, "last_updated")),
             ))
             count += 1
         return count
@@ -71,19 +94,24 @@ class DatabaseBridge:
     def sync_transactions(
         self, transactions: list[dict[str, Any]], source: str = "sync"
     ) -> int:
-        """Insert a batch of transactions with deduplication."""
+        """Insert a batch of transactions with deduplication.
+
+        Fields are normalized via ``_s``/``_f`` so that JSON ``null``
+        values from upstream providers don't propagate as Python
+        ``None`` into string/float columns.
+        """
         txns = [
             FinancialTransaction(
-                date=t.get("date", ""),
-                description=t.get("description", ""),
-                amount=t.get("amount", 0.0),
-                category=t.get("category", ""),
-                account=t.get("account", ""),
-                institution=t.get("institution", ""),
-                transaction_type=t.get("transaction_type", ""),
+                date=_s(t, "date"),
+                description=_s(t, "description"),
+                amount=_f(t, "amount"),
+                category=_s(t, "category"),
+                account=_s(t, "account"),
+                institution=_s(t, "institution"),
+                transaction_type=_s(t, "transaction_type"),
                 source=source,
-                reference_id=t.get("reference_id", t.get("id", "")),
-                notes=t.get("notes", ""),
+                reference_id=_s(t, "reference_id", _s(t, "id")),
+                notes=_s(t, "notes"),
             )
             for t in transactions
         ]
