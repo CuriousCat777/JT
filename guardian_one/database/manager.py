@@ -48,9 +48,25 @@ def _coerce_str(d: dict[str, Any], key: str, default: str = "") -> str:
 
 
 def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
-    """Get a float field from a dict, coercing ``None`` → default."""
+    """Get a float field from a dict, parsing strings and falling back.
+
+    Imported ledger files sometimes contain amounts as strings (e.g.
+    ``"1238.93"`` or even ``"1,238.93 USD"``).  Passing those through
+    unchanged corrupts REAL columns via SQLite's type affinity, which
+    then breaks numeric comparisons (``amount < 0``) and format
+    specifiers (``:,.2f``). Parse to ``float`` where possible; fall
+    back to the default when the value is missing, ``None``, or not
+    convertible.
+    """
     value = d.get(key, default)
-    return default if value is None else value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _coerce_dict(d: dict[str, Any], key: str) -> dict[str, Any]:

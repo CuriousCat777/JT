@@ -483,6 +483,40 @@ class TestImport:
             assert a.institution is not None
             assert a.balance is not None
 
+    def test_import_cfo_ledger_parses_string_balances(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: ledger files may contain ``balance`` as a string
+        (``"1238.93"``) or as garbage (``"N/A"``). The parser must
+        convert parseable strings to floats and fall back to 0.0 for
+        garbage — not let non-numeric values reach REAL columns."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        data = {
+            "saved_at": "2026-03-22T00:00:00Z",
+            "accounts": [
+                {"name": "Parseable", "account_type": "checking",
+                 "balance": "1238.93", "institution": "Chase"},
+                {"name": "Already Float", "account_type": "savings",
+                 "balance": 500.50, "institution": "BofA"},
+                {"name": "Garbage", "account_type": "checking",
+                 "balance": "N/A", "institution": "Other"},
+                {"name": "With Suffix", "account_type": "credit_card",
+                 "balance": "-99.99 USD", "institution": "Amex"},
+            ],
+        }
+        with open(ledger_path, "w") as f:
+            json.dump(data, f)
+        count = db.import_cfo_ledger(ledger_path)
+        assert count == 4
+        accounts = {a.name: a for a in db.get_accounts()}
+        assert isinstance(accounts["Parseable"].balance, float)
+        assert accounts["Parseable"].balance == 1238.93
+        assert accounts["Already Float"].balance == 500.50
+        # Unparseable strings fall back to 0.0 (safer than a wrong
+        # number, and won't crash downstream numeric logic).
+        assert accounts["Garbage"].balance == 0.0
+        assert accounts["With Suffix"].balance == 0.0
+
     def test_import_nonexistent_file(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -556,6 +590,49 @@ class TestDatabaseBridge:
         assert count == 2
         stored = bridge.db.query_transactions()
         assert len(stored) == 2
+
+    def test_sync_transactions_parses_string_amounts(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: upstream providers sometimes return amounts as
+        strings like ``"-20.50"``. The bridge must parse them into
+        real floats so downstream numeric logic (amount < 0 filters,
+        :,.2f formatting, spending_summary) keeps working."""
+        txns = [
+            {"date": "2026-03-01", "description": "parsable",
+             "amount": "-20.50", "category": "food",
+             "reference_id": "STR-1"},
+            {"date": "2026-03-02", "description": "garbage",
+             "amount": "N/A", "category": "shopping",
+             "reference_id": "STR-2"},
+            {"date": "2026-03-03", "description": "with suffix",
+             "amount": "-99.99 USD", "category": "other",
+             "reference_id": "STR-3"},
+            {"date": "2026-03-04", "description": "already float",
+             "amount": -5.25, "category": "food",
+             "reference_id": "STR-4"},
+        ]
+        count = bridge.sync_transactions(txns, source="test")
+        assert count == 4
+        stored = bridge.db.query_transactions()
+        assert len(stored) == 4
+
+        # Every stored amount must be a real float so formatting and
+        # arithmetic work downstream.
+        by_ref = {t.reference_id: t for t in stored}
+        assert isinstance(by_ref["STR-1"].amount, float)
+        assert by_ref["STR-1"].amount == -20.50
+        assert by_ref["STR-2"].amount == 0.0  # unparseable → default
+        assert by_ref["STR-3"].amount == 0.0  # non-numeric suffix → default
+        assert by_ref["STR-4"].amount == -5.25
+
+        # spending_summary must find only the parseable negative rows.
+        summary = bridge.db.spending_summary()
+        assert summary.get("food") == -25.75  # -20.50 + -5.25
+        # The garbage rows default to 0.0, so they don't pollute the
+        # "shopping" / "other" buckets.
+        assert "shopping" not in summary or summary["shopping"] == 0.0
+        assert "other" not in summary or summary["other"] == 0.0
 
     def test_store_crawl(self, bridge: DatabaseBridge) -> None:
         row_id = bridge.store_crawl(

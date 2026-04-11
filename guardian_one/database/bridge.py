@@ -34,9 +34,27 @@ def _s(d: dict[str, Any], key: str, default: str = "") -> str:
 
 
 def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
-    """Get a float field, coercing ``None`` → default."""
+    """Get a float field, parsing strings and coercing bad values → default.
+
+    Upstream financial providers sometimes return amounts as strings
+    like ``"-20.00"``, ``"-20.00 USD"``, or even ``"N/A"``.  Passing
+    those through unchanged corrupts ``financial_transactions.amount``
+    (SQLite's REAL column accepts TEXT via type affinity), which then
+    breaks ``spending_summary()``'s ``amount < 0`` comparison and
+    crashes ``--db-transactions`` formatting with ``:,.2f``.
+
+    Parse to ``float`` where possible; fall back to the default when
+    the value is missing, ``None``, or not convertible.
+    """
     value = d.get(key, default)
-    return default if value is None else value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 class DatabaseBridge:
