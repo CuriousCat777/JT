@@ -85,17 +85,22 @@ def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     * plain numbers (``-20.0``)
     * plain numeric strings (``"-20.00"``)
     * thousand-separated strings (``"1,238.93"``, ``"-1,234,567.89"``)
-    * currency-suffixed strings (``"-20.00 USD"``, ``"$1,238.93"``)
+    * currency-prefixed strings (``"$500.00"``, ``"-$99.99"``)
+    * currency-suffixed strings (``"-20.00 USD"``, ``"1,238.93 USD"``)
     * garbage (``"N/A"``, ``None``)
 
-    Silently returning 0.0 for ``"1,238.93"`` would corrupt balance
-    and spending totals. This helper:
+    Silently returning 0.0 for ``"1,238.93"`` or flipping the sign
+    on ``"-$99.99"`` would corrupt balances and spending totals.
+    The parser:
 
       1. returns ``default`` for ``None`` / missing keys,
       2. fast-paths ``int``/``float``,
       3. strips thousand-separator commas and tries ``float(value)``,
       4. regex-extracts the first signed numeric token as a last
-         resort (handles currency prefixes/suffixes), and
+         resort. If the prefix before the matched token contains a
+         bare ``-`` (as in ``"-$99.99"`` where the ``$`` separates
+         the sign from the digits), the sign is re-applied so
+         debits aren't silently flipped into credits,
       5. falls back to ``default`` only when no numeric token is
          present.
     """
@@ -119,9 +124,17 @@ def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     match = _NUMERIC_EXTRACT.search(cleaned)
     if match:
         try:
-            return float(match.group())
+            parsed = float(match.group())
         except ValueError:
-            pass
+            return default
+        # Regex-matched number may or may not include its sign
+        # depending on whether a currency symbol sat between the
+        # ``-`` and the digits. If the prefix before the match has
+        # a bare ``-`` and the match itself is positive, apply the
+        # sign so ``"-$99.99"`` stays negative.
+        if parsed >= 0 and "-" in cleaned[: match.start()]:
+            parsed = -parsed
+        return parsed
     return default
 
 

@@ -60,15 +60,19 @@ def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     """Get a float field from a dict, parsing strings and falling back.
 
     Imported ledger files frequently contain amounts as strings with
-    thousand separators (``"1,238.93"``), currency suffixes
-    (``"1,238.93 USD"``, ``"$500.00"``), or as garbage (``"N/A"``).
-    Silently returning 0.0 for ``"1,238.93"`` would corrupt balance
-    totals, so we:
+    thousand separators (``"1,238.93"``), currency prefixes
+    (``"$500.00"``, ``"-$99.99"``), currency suffixes
+    (``"1,238.93 USD"``), or as garbage (``"N/A"``). Silently
+    returning 0.0 for ``"1,238.93"`` or flipping the sign on
+    ``"-$99.99"`` would corrupt balance totals, so we:
 
       1. fast-path ``int``/``float`` values,
       2. strip commas (thousand separators) and try ``float()``,
       3. regex-extract the first signed numeric token as a last
-         resort for currency-prefixed / -suffixed strings,
+         resort for currency-prefixed / -suffixed strings; if the
+         prefix before the match contains a bare ``-`` (as in
+         ``"-$99.99"``), the sign is re-applied so debits aren't
+         silently flipped into credits,
       4. fall back to ``default`` only if no numeric token is found.
     """
     value = d.get(key, default)
@@ -89,9 +93,12 @@ def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
     match = _NUMERIC_EXTRACT.search(cleaned)
     if match:
         try:
-            return float(match.group())
+            parsed = float(match.group())
         except ValueError:
-            pass
+            return default
+        if parsed >= 0 and "-" in cleaned[: match.start()]:
+            parsed = -parsed
+        return parsed
     return default
 
 
@@ -786,7 +793,7 @@ class GuardianDatabase:
     # ordering (they land at the very end instead of mid-range).
     _EPOCH_ZERO = "1970-01-01T00:00:00.000Z"
 
-    def _parse_audit_file(self, path: Path) -> list[SystemLog]:
+    def _parse_audit_file(self, path: Path) -> list[SystemLog] | None:
         """Parse a single audit JSONL file into SystemLog rows.
 
         Non-UTF-8 bytes are replaced rather than raising, bad lines
@@ -796,7 +803,17 @@ class GuardianDatabase:
         matches DB-native rows. Unparseable timestamps are rewritten
         to the canonical epoch-zero sentinel so they can't silently
         land between real rows and corrupt time-window queries.
+
+        Returns ``None`` when the file cannot be read at all (e.g.
+        permission error). Callers use that signal to skip the
+        delete-and-replace step so a *partial* parse failure across
+        rotated siblings never wipes prior audit history.
+        Returns an empty list when the file is missing or simply
+        contains no valid rows — that is a legitimate "nothing to
+        import" outcome, not a read failure.
         """
+        if not path.exists():
+            return []
         logs: list[SystemLog] = []
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -810,12 +827,6 @@ class GuardianDatabase:
                             continue
                         raw_ts = _coerce_str(data, "timestamp")
                         canonical = normalize_iso_timestamp(raw_ts)
-                        # ``normalize_iso_timestamp`` passes garbage
-                        # through unchanged; detect that case by
-                        # checking the expected canonical shape
-                        # (len 24, ``.SSSZ`` suffix) and substitute
-                        # the epoch sentinel so bad rows never
-                        # pollute lex-ordered TEXT comparisons.
                         if len(canonical) != 24 or not canonical.endswith("Z") \
                                 or canonical[19] != ".":
                             canonical = self._EPOCH_ZERO
@@ -833,6 +844,7 @@ class GuardianDatabase:
                         continue
         except OSError as exc:
             print(f"  [WARN] Skipping {path}: unreadable ({exc})")
+            return None
         return logs
 
     def _rotated_audit_files(self, current: Path) -> list[Path]:
@@ -871,31 +883,47 @@ class GuardianDatabase:
         in chronological order so no history is lost when the log
         has been rotated.
 
-        **Idempotent:** when at least one file yields at least one
-        parseable row, every call replaces all rows where
-        ``source = 'audit.jsonl'`` in a single transaction, so
-        re-running ``--db-init`` (e.g. after an entrypoint sentinel
-        recovery) does not accumulate duplicate rows. Rows written
-        directly through ``insert_log`` with a different ``source``
-        are untouched.
+        **Idempotent:** when every file parses cleanly AND at least
+        one file yields at least one parseable row, every call
+        replaces all rows where ``source = 'audit.jsonl'`` in a
+        single transaction, so re-running ``--db-init`` (e.g. after
+        an entrypoint sentinel recovery) does not accumulate
+        duplicate rows. Rows written directly through ``insert_log``
+        with a different ``source`` are untouched.
 
-        **Data-loss guard:** when no files are found OR all found
-        files parse to zero rows, the method returns ``0`` *without*
-        deleting anything. Otherwise, a no-op re-run with a missing
-        ``audit.jsonl`` (e.g. a different log directory mounted, or
-        the file temporarily removed) would silently erase the
-        previously-imported audit history. Explicit truncation is
-        not the job of ``--db-init``.
+        **Data-loss guards:** the delete-and-replace is skipped when
+        either
+
+          1. *any* file in the rotated set exists but cannot be read
+             (``_parse_audit_file`` returns ``None``). Proceeding in
+             this state would replace complete history with a
+             partial subset. We'd rather keep the existing rows
+             stale than silently drop half of them.
+          2. no file yields any valid row. This covers missing
+             directories, empty files, and fully-corrupt files.
+
+        In either case the method returns ``0`` without touching
+        the table.
         """
         path = Path(jsonl_path)
         files = self._rotated_audit_files(path)
 
         all_logs: list[SystemLog] = []
         for fp in files:
-            all_logs.extend(self._parse_audit_file(fp))
+            parsed = self._parse_audit_file(fp)
+            if parsed is None:
+                # File existed but was unreadable. Refuse to wipe
+                # existing history when we can't trust the replacement.
+                print(
+                    f"  [WARN] Aborting audit import: one or more source "
+                    f"files could not be read ({fp}). Existing history "
+                    f"left untouched."
+                )
+                return 0
+            all_logs.extend(parsed)
 
         if not all_logs:
-            # Nothing to import — files are missing, unreadable, or
+            # Nothing to import — files are missing, empty, or
             # yielded zero valid rows. Skip the delete-and-replace
             # so we don't wipe previously-imported history.
             return 0

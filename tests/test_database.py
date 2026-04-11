@@ -773,6 +773,62 @@ class TestImport:
         assert len(after) == 1
         assert after[0].action == "first"
 
+    def test_import_audit_jsonl_partial_read_failure_preserves_history(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: if ONE rotated sibling exists but is
+        unreadable while others parse successfully, the delete-
+        and-replace must be aborted entirely rather than replacing
+        full history with a partial subset."""
+        import os
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        # Populate rotated siblings with good rows first.
+        (log_dir / "audit.jsonl.2").write_text(
+            json.dumps({"timestamp": "2026-03-01T00:00:00Z",
+                        "agent": "cfo", "action": "oldest",
+                        "severity": "info"}) + "\n"
+        )
+        (log_dir / "audit.jsonl.1").write_text(
+            json.dumps({"timestamp": "2026-03-02T00:00:00Z",
+                        "agent": "cfo", "action": "middle",
+                        "severity": "info"}) + "\n"
+        )
+        (log_dir / "audit.jsonl").write_text(
+            json.dumps({"timestamp": "2026-03-03T00:00:00Z",
+                        "agent": "cfo", "action": "newest",
+                        "severity": "info"}) + "\n"
+        )
+        # First import: clean.
+        assert db.import_audit_jsonl(log_dir / "audit.jsonl") == 3
+        actions_before = {log.action for log in db.query_logs(limit=20)}
+        assert actions_before == {"oldest", "middle", "newest"}
+
+        # Now make audit.jsonl.1 unreadable (chmod 000). Root in
+        # the test sandbox can still read 000 files, so simulate
+        # the failure with a monkeypatch on ``open`` for that
+        # specific path instead.
+        import builtins
+        real_open = builtins.open
+        target = str(log_dir / "audit.jsonl.1")
+
+        def _fake_open(path, *args, **kwargs):  # noqa: ANN001
+            if str(path) == target:
+                raise OSError("simulated read failure")
+            return real_open(path, *args, **kwargs)
+
+        builtins.open = _fake_open
+        try:
+            # Second import: one file fails → must NOT wipe anything.
+            assert db.import_audit_jsonl(log_dir / "audit.jsonl") == 0
+        finally:
+            builtins.open = real_open
+
+        # All three original rows must still be present.
+        actions_after = {log.action for log in db.query_logs(limit=20)}
+        assert actions_after == actions_before
+
     def test_import_audit_jsonl_finds_rotated_only(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -896,11 +952,11 @@ class TestImport:
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
         """Regression: ledger files contain ``balance`` in many shapes:
-        plain strings (``"1238.93"``), thousand-separated
-        (``"1,238.93"``), currency-suffixed (``"-99.99 USD"``,
-        ``"$500.00"``), or garbage (``"N/A"``). The parser must
-        extract the numeric value when possible and fall back to
-        0.0 only when no numeric token is present."""
+        plain strings, thousand-separated, currency-prefixed
+        (``"$500.00"``, ``"-$99.99"``), currency-suffixed, or garbage.
+        Special attention to ``"-$99.99"`` — the negative sign sits
+        before the currency symbol, and a naive regex extract would
+        drop the sign and flip a debit into a credit."""
         ledger_path = tmp_path / "cfo_ledger.json"
         data = {
             "saved_at": "2026-03-22T00:00:00Z",
@@ -917,6 +973,10 @@ class TestImport:
                  "balance": "-99.99 USD", "institution": "Amex"},
                 {"name": "Currency Prefix", "account_type": "savings",
                  "balance": "$500.00", "institution": "BofA"},
+                {"name": "Neg Currency Prefix", "account_type": "credit_card",
+                 "balance": "-$99.99", "institution": "Discover"},
+                {"name": "Neg Currency Prefix Sep", "account_type": "credit_card",
+                 "balance": "-$1,234.56", "institution": "Citi"},
                 {"name": "Garbage", "account_type": "checking",
                  "balance": "N/A", "institution": "Other"},
             ],
@@ -924,16 +984,19 @@ class TestImport:
         with open(ledger_path, "w") as f:
             json.dump(data, f)
         count = db.import_cfo_ledger(ledger_path)
-        assert count == 7
+        assert count == 9
         accounts = {a.name: a for a in db.get_accounts()}
         assert isinstance(accounts["Plain String"].balance, float)
         assert accounts["Plain String"].balance == 1238.93
         assert accounts["Already Float"].balance == 500.50
-        # Thousand-separated strings are now parsed, not coerced to 0.
         assert accounts["Thousand Separated"].balance == 1238.93
         assert accounts["Negative Separated"].balance == -1234567.89
         assert accounts["With Suffix"].balance == -99.99
         assert accounts["Currency Prefix"].balance == 500.00
+        # Critical: the ``-`` sits before the ``$`` and must be
+        # preserved so a debit doesn't become a credit.
+        assert accounts["Neg Currency Prefix"].balance == -99.99
+        assert accounts["Neg Currency Prefix Sep"].balance == -1234.56
         # Pure garbage with no numeric token still falls back to 0.0.
         assert accounts["Garbage"].balance == 0.0
 

@@ -374,7 +374,11 @@ def main() -> None:
 
     config_path = Path(args.config) if args.config else None
     config = load_config(config_path)
-    guardian = GuardianOne(config=config)
+    # Forward --db-path to GuardianOne so runtime audit + CFO writes
+    # land in the *same* database the --db-* CLI reads from. Without
+    # this, a mixed invocation like ``main.py --sync --db-path x.db``
+    # would initialize x.db but continue writing to the default.
+    guardian = GuardianOne(config=config, db_path=args.db_path)
     _build_agents(guardian)
 
     if args.cfo:

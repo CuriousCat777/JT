@@ -346,29 +346,71 @@ class CFO(BaseAgent):
                     data["accounts"], source="cfo_ledger"
                 )
                 self._db_bridge.sync_transactions(
-                    [
-                        {
-                            "date": tx["date"],
-                            "description": tx["description"],
-                            "amount": tx["amount"],
-                            "category": tx["category"],
-                            "account": tx["account"],
-                            # Use a deterministic reference so re-syncs
-                            # are idempotent: (account, date, amount,
-                            # description) is stable per transaction.
-                            "reference_id": (
-                                f"{tx['account']}|{tx['date']}|"
-                                f"{tx['amount']}|{tx['description']}"
-                            ),
-                        }
-                        for tx in data["transactions"]
-                    ],
+                    self._build_ledger_txn_mirror(data["transactions"]),
                     source="cfo_ledger",
                 )
             except Exception:  # noqa: BLE001
                 # The JSON ledger is authoritative — a DB mirror
                 # failure should never break the live sync path.
                 pass
+
+    @staticmethod
+    def _build_ledger_txn_mirror(
+        transactions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Build the per-transaction payload for the DB mirror.
+
+        Selecting a stable, collision-safe ``reference_id`` is
+        subtle: the same account can legitimately see two
+        same-day, same-amount charges at the same merchant (e.g.
+        two $4.99 coffees). A naive
+        ``account|date|amount|description`` key would treat the
+        second one as a duplicate and silently drop it.
+
+        Priority order for the dedup key:
+
+          1. If the upstream provider gave us an explicit id in
+             the transaction metadata (``metadata['id']`` or
+             ``metadata['provider_id']`` or ``metadata['plaid_id']``),
+             use that — it's unique by construction.
+          2. Otherwise, synthesize a composite key that includes
+             the positional *index* of the transaction within the
+             ledger snapshot. Index is stable across re-mirrors as
+             long as the ledger's serialization order is stable,
+             which it is because ``save_ledger`` always iterates
+             ``self._transactions`` in insertion order.
+
+        The composite fallback is namespaced with ``cfo_ledger:`` so
+        it can never collide with a real provider id that happens
+        to follow the same shape.
+        """
+        out: list[dict[str, Any]] = []
+        for idx, tx in enumerate(transactions):
+            meta = tx.get("metadata") or {}
+            provider_id = (
+                meta.get("id")
+                or meta.get("provider_id")
+                or meta.get("plaid_id")
+                or meta.get("transaction_id")
+            )
+            if provider_id:
+                ref = str(provider_id)
+            else:
+                ref = (
+                    f"cfo_ledger:{idx}|{tx['account']}|{tx['date']}|"
+                    f"{tx['amount']}|{tx['description']}"
+                )
+            out.append(
+                {
+                    "date": tx["date"],
+                    "description": tx["description"],
+                    "amount": tx["amount"],
+                    "category": tx["category"],
+                    "account": tx["account"],
+                    "reference_id": ref,
+                }
+            )
+        return out
 
     def add_account(self, account: Account, persist: bool = True) -> None:
         self._accounts[account.name] = account

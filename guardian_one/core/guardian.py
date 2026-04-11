@@ -46,8 +46,16 @@ class GuardianOne:
         config: GuardianConfig | None = None,
         vault_passphrase: str | None = None,
         ai_config: AIConfig | None = None,
+        db_path: Path | str | None = None,
     ) -> None:
         self.config = config or load_config()
+        # ``db_path`` override (if any) lets callers such as
+        # ``main.py --sync --db-path /custom.db`` route runtime
+        # audit + CFO writes at the same file that ``--db-*``
+        # commands read. Without this, runtime persistence would
+        # always target ``config.data_dir/guardian.db`` and the
+        # database state would fork across two files.
+        self._db_path_override = Path(db_path) if db_path else None
         # Database bridge — single point of persistence for live
         # audit events, sync snapshots, and CLI queries. Constructed
         # before AuditLog so it can be wired into the logger.
@@ -116,11 +124,15 @@ class GuardianOne:
     def _build_db_bridge(self) -> "DatabaseBridge | None":
         """Construct the DB bridge used for live audit/sync persistence.
 
-        The bridge writes to ``${GUARDIAN_DATA_DIR}/guardian.db`` (or
-        the configured ``data_dir``) so every ``AuditLog.record()``
-        call and every CFO sync mirrors into the SQLite repository
-        in real time.  ``--db-init`` is no longer the only way to
-        populate the database.
+        The bridge writes to (in priority order):
+
+          1. an explicit ``db_path`` constructor argument, or
+          2. ``${config.data_dir}/guardian.db``.
+
+        This keeps ``--db-path /custom.db`` consistent across
+        ``--db-*`` CLI commands and the runtime audit/CFO mirror:
+        all four read and write the same file instead of splitting
+        state across default and custom paths.
 
         Returns ``None`` if the import or schema initialization
         fails, so a missing / broken DB never blocks Guardian One
@@ -130,7 +142,11 @@ class GuardianOne:
         try:
             from guardian_one.database.bridge import DatabaseBridge
 
-            db_path = Path(self.config.data_dir) / "guardian.db"
+            db_path = (
+                self._db_path_override
+                if self._db_path_override is not None
+                else Path(self.config.data_dir) / "guardian.db"
+            )
             return DatabaseBridge(db_path=db_path)
         except Exception:  # noqa: BLE001
             return None
