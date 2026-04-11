@@ -871,12 +871,21 @@ class GuardianDatabase:
         in chronological order so no history is lost when the log
         has been rotated.
 
-        **Idempotent:** every call replaces all rows where
+        **Idempotent:** when at least one file yields at least one
+        parseable row, every call replaces all rows where
         ``source = 'audit.jsonl'`` in a single transaction, so
         re-running ``--db-init`` (e.g. after an entrypoint sentinel
         recovery) does not accumulate duplicate rows. Rows written
         directly through ``insert_log`` with a different ``source``
         are untouched.
+
+        **Data-loss guard:** when no files are found OR all found
+        files parse to zero rows, the method returns ``0`` *without*
+        deleting anything. Otherwise, a no-op re-run with a missing
+        ``audit.jsonl`` (e.g. a different log directory mounted, or
+        the file temporarily removed) would silently erase the
+        previously-imported audit history. Explicit truncation is
+        not the job of ``--db-init``.
         """
         path = Path(jsonl_path)
         files = self._rotated_audit_files(path)
@@ -885,8 +894,14 @@ class GuardianDatabase:
         for fp in files:
             all_logs.extend(self._parse_audit_file(fp))
 
+        if not all_logs:
+            # Nothing to import — files are missing, unreadable, or
+            # yielded zero valid rows. Skip the delete-and-replace
+            # so we don't wipe previously-imported history.
+            return 0
+
         # Delete-and-replace the imported slice atomically so retries
-        # from --db-init stay idempotent.
+        # from --db-init stay idempotent for the same source file.
         with self._lock:
             conn = self._connect()
             try:
@@ -894,17 +909,16 @@ class GuardianDatabase:
                     "DELETE FROM system_logs WHERE source = ?",
                     ("audit.jsonl",),
                 )
-                if all_logs:
-                    conn.executemany(
-                        """INSERT INTO system_logs
-                           (timestamp, agent, action, severity, component, message, details, source)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        [
-                            (log.timestamp, log.agent, log.action, log.severity,
-                             log.component, log.message, log.details, log.source)
-                            for log in all_logs
-                        ],
-                    )
+                conn.executemany(
+                    """INSERT INTO system_logs
+                       (timestamp, agent, action, severity, component, message, details, source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    [
+                        (log.timestamp, log.agent, log.action, log.severity,
+                         log.component, log.message, log.details, log.source)
+                        for log in all_logs
+                    ],
+                )
                 conn.commit()
                 return len(all_logs)
             finally:

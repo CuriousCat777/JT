@@ -719,6 +719,80 @@ class TestImport:
         # The manual row is still present.
         assert any(log.source == "manual_entry" for log in second)
 
+    def test_import_audit_jsonl_missing_file_does_not_wipe_existing(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: re-running ``import_audit_jsonl`` when the
+        source file is missing (or empty) must NOT delete previously
+        imported rows. This matters for --db-init retries in an
+        environment where the logs directory is temporarily absent
+        or mis-mounted — silently wiping prior history would be a
+        data-loss bug."""
+        # First: import a real file so system_logs has audit rows.
+        jsonl_path = tmp_path / "audit.jsonl"
+        jsonl_path.write_text(
+            json.dumps({"timestamp": "2026-03-01T00:00:00Z",
+                        "agent": "cfo", "action": "sync",
+                        "severity": "info"}) + "\n"
+        )
+        assert db.import_audit_jsonl(jsonl_path) == 1
+        # Manual row with different source — should survive both calls.
+        db.insert_log(SystemLog(agent="manual", action="keep",
+                                source="manual_entry"))
+        assert len(db.query_logs()) == 2
+
+        # Now delete the file and re-run the import. The method must
+        # return 0 without touching the previously-imported audit row.
+        jsonl_path.unlink()
+        assert db.import_audit_jsonl(jsonl_path) == 0
+        after = db.query_logs(limit=50)
+        assert len(after) == 2
+        sources = {log.source for log in after}
+        assert sources == {"audit.jsonl", "manual_entry"}
+
+    def test_import_audit_jsonl_empty_file_does_not_wipe_existing(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: same guard as above, but for the case where
+        the file exists but contains no valid rows (empty, or all
+        lines malformed). Stale audit rows must be preserved."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        jsonl_path.write_text(
+            json.dumps({"timestamp": "2026-03-01T00:00:00Z",
+                        "agent": "cfo", "action": "first",
+                        "severity": "info"}) + "\n"
+        )
+        assert db.import_audit_jsonl(jsonl_path) == 1
+        assert len(db.query_logs()) == 1
+
+        # Replace the file with one that parses to zero valid rows.
+        jsonl_path.write_text("not json\n{\n")
+        assert db.import_audit_jsonl(jsonl_path) == 0
+        # Original row is still there.
+        after = db.query_logs(limit=50)
+        assert len(after) == 1
+        assert after[0].action == "first"
+
+    def test_import_audit_jsonl_finds_rotated_only(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a log directory that contains ONLY rotated
+        siblings (``audit.jsonl.1``) and no base ``audit.jsonl`` must
+        still import cleanly. The caller (cli.py --db-init) doesn't
+        pre-check file existence, so the method is the single point
+        of truth."""
+        base = tmp_path / "audit.jsonl"
+        # No base file — only a rotated sibling.
+        (tmp_path / "audit.jsonl.1").write_text(
+            json.dumps({"timestamp": "2026-03-01T00:00:00Z",
+                        "agent": "cfo", "action": "rotated_only",
+                        "severity": "info"}) + "\n"
+        )
+        assert db.import_audit_jsonl(base) == 1
+        logs = db.query_logs(limit=5)
+        assert len(logs) == 1
+        assert logs[0].action == "rotated_only"
+
     def test_query_logs_normalizes_since_until_bounds(
         self, db: GuardianDatabase
     ) -> None:

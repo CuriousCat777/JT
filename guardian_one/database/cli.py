@@ -67,12 +67,20 @@ def _handle_db_commands(args: argparse.Namespace) -> None:
         print()
 
         # Import existing audit logs from the configured log dir.
+        # We always call ``import_audit_jsonl`` — even when the base
+        # ``audit.jsonl`` file is missing — because the method
+        # auto-discovers rotated siblings (``audit.jsonl.1`` …
+        # ``audit.jsonl.5``). Gating on ``audit.jsonl`` existence
+        # would silently drop environments that only have rotated
+        # files left.
         audit_path = log_dir / "audit.jsonl"
-        if audit_path.exists():
-            count = db.import_audit_jsonl(audit_path)
-            print(f"  Imported {count} audit log entries from {audit_path}")
+        count = db.import_audit_jsonl(audit_path)
+        if count > 0:
+            print(
+                f"  Imported {count} audit log entries from {log_dir}/audit.jsonl*"
+            )
         else:
-            print(f"  No audit log found at {audit_path} (skipped)")
+            print(f"  No audit log found at {log_dir}/audit.jsonl* (skipped)")
 
         # Import existing CFO ledger from the same directory as the DB
         # so --db-path and GUARDIAN_DATA_DIR both stay in sync.
