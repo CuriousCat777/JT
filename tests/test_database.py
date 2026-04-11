@@ -617,6 +617,97 @@ class TestImport:
         assert len(accounts) == 1
         assert "Bank" in accounts[0].institution
 
+    def test_import_audit_jsonl_includes_rotated_files(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: the audit subsystem rotates audit.jsonl into
+        audit.jsonl.1 … audit.jsonl.5 where *higher* suffix == *older*
+        file. --db-init must import all rotated siblings plus the
+        current file, in chronological order, so no history is lost."""
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        # Create one line per rotation level with a distinct action
+        # we can later assert on.
+        rotated_entries = {
+            "audit.jsonl.3": ("oldest", "2026-03-01T00:00:00.000Z"),
+            "audit.jsonl.2": ("middle_a", "2026-03-02T00:00:00.000Z"),
+            "audit.jsonl.1": ("middle_b", "2026-03-03T00:00:00.000Z"),
+            "audit.jsonl": ("current", "2026-03-04T00:00:00.000Z"),
+        }
+        for name, (action, ts) in rotated_entries.items():
+            (log_dir / name).write_text(
+                json.dumps({"timestamp": ts, "agent": "cfo",
+                            "action": action, "severity": "info"}) + "\n"
+            )
+        # Also drop a non-digit sibling that must be ignored.
+        (log_dir / "audit.jsonl.bak").write_text("garbage")
+
+        count = db.import_audit_jsonl(log_dir / "audit.jsonl")
+        assert count == 4
+        logs = db.query_logs(limit=20)
+        actions = {log.action for log in logs}
+        assert actions == {"oldest", "middle_a", "middle_b", "current"}
+
+    def test_import_audit_jsonl_is_idempotent(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: re-running --db-init (after a partial init with
+        the entrypoint sentinel recovery) must NOT duplicate audit
+        rows. The import is delete-and-replace keyed on
+        ``source = 'audit.jsonl'``."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        jsonl_path.write_text(
+            json.dumps({"timestamp": "2026-03-01T00:00:00Z",
+                        "agent": "cfo", "action": "sync",
+                        "severity": "info"}) + "\n"
+            + json.dumps({"timestamp": "2026-03-02T00:00:00Z",
+                          "agent": "chronos", "action": "schedule",
+                          "severity": "warning"}) + "\n"
+        )
+        # Also add a manually-inserted log with a different source;
+        # it should survive the delete-and-replace.
+        db.insert_log(SystemLog(agent="manual", action="created",
+                                source="manual_entry"))
+
+        assert db.import_audit_jsonl(jsonl_path) == 2
+        first = db.query_logs(limit=50)
+        assert len(first) == 3  # 2 from file + 1 manual
+
+        # Second call: same file, must still only have 3 rows total.
+        assert db.import_audit_jsonl(jsonl_path) == 2
+        second = db.query_logs(limit=50)
+        assert len(second) == 3
+        # The manual row is still present.
+        assert any(log.source == "manual_entry" for log in second)
+
+    def test_query_logs_normalizes_since_until_bounds(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: ``since`` / ``until`` must be normalized to the
+        canonical ms-``Z`` format before being compared against
+        stored timestamps. Otherwise a naive boundary like
+        ``...00:00Z`` would lex-compare as GREATER than stored
+        ``...00:00.100Z`` (because ``Z`` > ``.``), wrongly excluding
+        rows from the boundary second."""
+        # Seed rows with canonical millisecond timestamps.
+        for ms, action in [("100", "a"), ("200", "b"), ("900", "c")]:
+            db.insert_log(SystemLog(
+                timestamp=f"2026-03-02T00:00:00.{ms}Z",
+                agent="test", action=action, severity="info",
+            ))
+        # Filter with an un-normalized boundary (no fractional seconds).
+        # Pre-fix, comparing TEXT ``'2026-03-02T00:00:00Z'`` against
+        # ``'2026-03-02T00:00:00.100Z'`` puts the former AFTER the
+        # latter, so the >= filter would return zero rows.
+        logs = db.query_logs(since="2026-03-02T00:00:00Z", limit=10)
+        actions = sorted(log.action for log in logs)
+        assert actions == ["a", "b", "c"]
+
+        # Until must also be normalized. A plain ``...00:01Z`` should
+        # include everything stored in the 00:00 minute.
+        logs = db.query_logs(until="2026-03-02T00:00:01Z", limit=10)
+        assert sorted(log.action for log in logs) == ["a", "b", "c"]
+
     def test_import_audit_jsonl_normalizes_legacy_timestamps(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:

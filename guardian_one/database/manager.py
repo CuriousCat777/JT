@@ -284,7 +284,15 @@ class GuardianDatabase:
         limit: int = 100,
         offset: int = 0,
     ) -> list[SystemLog]:
-        """Query system logs with optional filters."""
+        """Query system logs with optional filters.
+
+        ``since`` / ``until`` are normalized to the DB's canonical
+        millisecond-``Z`` format before being bound into the WHERE
+        clause, so callers can pass ordinary ISO-8601 boundaries
+        like ``2026-03-02T00:00:00Z`` and still get correct
+        lexicographic comparison against stored values such as
+        ``2026-03-02T00:00:00.100Z``.
+        """
         clauses: list[str] = []
         params: list[Any] = []
         if agent:
@@ -298,10 +306,10 @@ class GuardianDatabase:
             params.append(component)
         if since:
             clauses.append("timestamp >= ?")
-            params.append(since)
+            params.append(normalize_iso_timestamp(since))
         if until:
             clauses.append("timestamp <= ?")
-            params.append(until)
+            params.append(normalize_iso_timestamp(until))
         if search:
             clauses.append("(message LIKE ? OR details LIKE ? OR action LIKE ?)")
             params.extend([f"%{search}%"] * 3)
@@ -470,8 +478,11 @@ class GuardianDatabase:
             clauses.append("tags LIKE ?")
             params.append(f"%{tag}%")
         if since:
+            # Normalize to canonical ms-Z format so boundaries like
+            # ``...00:00Z`` compare correctly against stored values
+            # like ``...00:00.100Z``.
             clauses.append("crawl_timestamp >= ?")
-            params.append(since)
+            params.append(normalize_iso_timestamp(since))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = f"SELECT * FROM crawl_records {where} ORDER BY crawl_timestamp DESC LIMIT ?"
         params.append(limit)
@@ -748,25 +759,15 @@ class GuardianDatabase:
     # Import helpers — ingest existing Guardian One data
     # =======================================================================
 
-    def import_audit_jsonl(self, jsonl_path: Path | str) -> int:
-        """Import existing audit.jsonl entries into system_logs.
+    def _parse_audit_file(self, path: Path) -> list[SystemLog]:
+        """Parse a single audit JSONL file into SystemLog rows.
 
-        Uses a single bulk insert so importing a large audit log stays
-        fast and does not hold the DB lock longer than necessary.
-
-        Fields are coerced via ``_coerce_str`` so lines with explicit
-        ``null`` values (e.g. ``"severity": null``) don't propagate
-        as Python ``None`` into ``NOT NULL`` columns and abort the
-        whole batch.
-
-        The file is opened with ``errors="replace"`` so non-UTF-8
-        bytes don't raise ``UnicodeDecodeError`` mid-iteration. Each
-        JSONL line is still validated individually, so a corrupt
-        line is skipped instead of tanking the whole import.
+        Non-UTF-8 bytes are replaced rather than raising, bad lines
+        are skipped, and null fields are coerced so ``NOT NULL``
+        columns never see Python ``None``. Timestamps are normalized
+        to the canonical millisecond-``Z`` format so lex ordering
+        matches DB-native rows.
         """
-        path = Path(jsonl_path)
-        if not path.exists():
-            return 0
         logs: list[SystemLog] = []
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -778,10 +779,6 @@ class GuardianDatabase:
                         data = json.loads(line)
                         if not isinstance(data, dict):
                             continue
-                        # Normalize the imported timestamp to the
-                        # DB's canonical millisecond-``Z`` format so
-                        # legacy rows (``...+00:00``) remain lex-
-                        # comparable with new ``_now_iso()`` rows.
                         raw_ts = _coerce_str(data, "timestamp")
                         logs.append(SystemLog(
                             timestamp=normalize_iso_timestamp(raw_ts),
@@ -797,8 +794,82 @@ class GuardianDatabase:
                         continue
         except OSError as exc:
             print(f"  [WARN] Skipping {path}: unreadable ({exc})")
-            return 0
-        return self.insert_logs_batch(logs)
+        return logs
+
+    def _rotated_audit_files(self, current: Path) -> list[Path]:
+        """Return audit log files in chronological order (oldest first).
+
+        The Guardian One audit subsystem rotates ``audit.jsonl`` into
+        ``audit.jsonl.1`` … ``audit.jsonl.5``, where the *higher* the
+        numeric suffix the *older* the file. To preserve the original
+        event order we return the rotated siblings sorted by suffix
+        descending (``.5`` → ``.1``) and then append the current file
+        last (newest). Only siblings whose suffix is a pure integer
+        are considered so we don't accidentally sweep in other
+        artifacts.
+        """
+        parent = current.parent
+        prefix = current.name + "."
+        rotated: list[tuple[int, Path]] = []
+        if parent.is_dir():
+            for sibling in parent.iterdir():
+                if not sibling.is_file() or not sibling.name.startswith(prefix):
+                    continue
+                suffix = sibling.name[len(prefix):]
+                if not suffix.isdigit():
+                    continue
+                rotated.append((int(suffix), sibling))
+        rotated.sort(key=lambda pair: pair[0], reverse=True)  # oldest first
+        ordered = [p for _, p in rotated]
+        if current.exists():
+            ordered.append(current)
+        return ordered
+
+    def import_audit_jsonl(self, jsonl_path: Path | str) -> int:
+        """Import existing audit logs into ``system_logs``.
+
+        Handles rotated siblings (``audit.jsonl.1`` … ``audit.jsonl.5``)
+        in chronological order so no history is lost when the log
+        has been rotated.
+
+        **Idempotent:** every call replaces all rows where
+        ``source = 'audit.jsonl'`` in a single transaction, so
+        re-running ``--db-init`` (e.g. after an entrypoint sentinel
+        recovery) does not accumulate duplicate rows. Rows written
+        directly through ``insert_log`` with a different ``source``
+        are untouched.
+        """
+        path = Path(jsonl_path)
+        files = self._rotated_audit_files(path)
+
+        all_logs: list[SystemLog] = []
+        for fp in files:
+            all_logs.extend(self._parse_audit_file(fp))
+
+        # Delete-and-replace the imported slice atomically so retries
+        # from --db-init stay idempotent.
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM system_logs WHERE source = ?",
+                    ("audit.jsonl",),
+                )
+                if all_logs:
+                    conn.executemany(
+                        """INSERT INTO system_logs
+                           (timestamp, agent, action, severity, component, message, details, source)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        [
+                            (log.timestamp, log.agent, log.action, log.severity,
+                             log.component, log.message, log.details, log.source)
+                            for log in all_logs
+                        ],
+                    )
+                conn.commit()
+                return len(all_logs)
+            finally:
+                conn.close()
 
     def import_cfo_ledger(self, ledger_path: Path | str) -> int:
         """Import existing cfo_ledger.json accounts into financial_accounts.
