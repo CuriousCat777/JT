@@ -34,6 +34,30 @@ from guardian_one.database.models import (
 
 _SCHEMA_VERSION = 1
 
+
+def _coerce_str(d: dict[str, Any], key: str, default: str = "") -> str:
+    """Get a string field from a dict, coercing ``None`` → default.
+
+    ``dict.get(key, default)`` returns ``None`` when the key is present
+    but holds a JSON ``null`` — which then violates ``NOT NULL``
+    constraints downstream.  This helper treats missing keys and
+    explicit-null values identically.
+    """
+    value = d.get(key, default)
+    return default if value is None else value
+
+
+def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
+    """Get a float field from a dict, coercing ``None`` → default."""
+    value = d.get(key, default)
+    return default if value is None else value
+
+
+def _coerce_dict(d: dict[str, Any], key: str) -> dict[str, Any]:
+    """Get a dict field, coercing missing / ``None`` → empty dict."""
+    value = d.get(key)
+    return value if isinstance(value, dict) else {}
+
 _SCHEMA_SQL = """
 -- System logs table
 CREATE TABLE IF NOT EXISTS system_logs (
@@ -689,6 +713,11 @@ class GuardianDatabase:
 
         Uses a single bulk insert so importing a large audit log stays
         fast and does not hold the DB lock longer than necessary.
+
+        Fields are coerced via ``_coerce_str`` so lines with explicit
+        ``null`` values (e.g. ``"severity": null``) don't propagate
+        as Python ``None`` into ``NOT NULL`` columns and abort the
+        whole batch.
         """
         path = Path(jsonl_path)
         if not path.exists():
@@ -701,14 +730,16 @@ class GuardianDatabase:
                     continue
                 try:
                     data = json.loads(line)
+                    if not isinstance(data, dict):
+                        continue
                     logs.append(SystemLog(
-                        timestamp=data.get("timestamp", ""),
-                        agent=data.get("agent", ""),
-                        action=data.get("action", ""),
-                        severity=data.get("severity", "info"),
+                        timestamp=_coerce_str(data, "timestamp"),
+                        agent=_coerce_str(data, "agent"),
+                        action=_coerce_str(data, "action"),
+                        severity=_coerce_str(data, "severity", "info"),
                         component="audit",
-                        message=data.get("action", ""),
-                        details=json.dumps(data.get("details", {})),
+                        message=_coerce_str(data, "action"),
+                        details=json.dumps(_coerce_dict(data, "details")),
                         source="audit.jsonl",
                     ))
                 except (json.JSONDecodeError, TypeError):
@@ -716,21 +747,29 @@ class GuardianDatabase:
         return self.insert_logs_batch(logs)
 
     def import_cfo_ledger(self, ledger_path: Path | str) -> int:
-        """Import existing cfo_ledger.json accounts into financial_accounts."""
+        """Import existing cfo_ledger.json accounts into financial_accounts.
+
+        Fields are coerced via ``_coerce_str`` / ``_coerce_float`` so
+        ledger entries with explicit ``null`` values don't propagate
+        as Python ``None`` into ``NOT NULL`` columns and abort the
+        whole ledger import.
+        """
         path = Path(ledger_path)
         if not path.exists():
             return 0
         with open(path) as f:
             data = json.load(f)
         count = 0
-        for acct in data.get("accounts", []):
+        for acct in data.get("accounts", []) or []:
+            if not isinstance(acct, dict):
+                continue
             self.upsert_account(FinancialAccount(
-                name=acct.get("name", ""),
-                account_type=acct.get("account_type", ""),
-                balance=acct.get("balance", 0.0),
-                institution=acct.get("institution", ""),
+                name=_coerce_str(acct, "name"),
+                account_type=_coerce_str(acct, "account_type"),
+                balance=_coerce_float(acct, "balance"),
+                institution=_coerce_str(acct, "institution"),
                 source="cfo_ledger",
-                last_synced=acct.get("last_synced", ""),
+                last_synced=_coerce_str(acct, "last_synced"),
             ))
             count += 1
         return count

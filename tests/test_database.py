@@ -423,6 +423,66 @@ class TestImport:
         accounts = db.get_accounts()
         assert len(accounts) == 2
 
+    def test_import_audit_jsonl_coerces_null_fields(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a JSONL line with explicit ``null`` values for
+        NOT NULL columns must not abort the whole import.  The row
+        should land with default values instead."""
+        jsonl_path = tmp_path / "audit.jsonl"
+        entries = [
+            {"timestamp": "2026-03-01T00:00:00Z", "agent": "cfo",
+             "action": "sync", "severity": "info", "details": {}},
+            # All fields that the schema marks NOT NULL are explicitly
+            # null here. Pre-fix this would abort the whole batch.
+            {"timestamp": None, "agent": None, "action": None,
+             "severity": None, "details": None},
+            {"timestamp": "2026-03-01T01:00:00Z", "agent": "chronos",
+             "action": "schedule", "severity": "warning",
+             "details": {"note": "conflict"}},
+        ]
+        with open(jsonl_path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        count = db.import_audit_jsonl(jsonl_path)
+        assert count == 3
+        logs = db.query_logs(limit=10)
+        assert len(logs) == 3
+        # The null row should have coerced defaults, not None.
+        severities = {log.severity for log in logs}
+        assert None not in severities
+
+    def test_import_cfo_ledger_coerces_null_fields(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a ledger account with explicit ``null`` fields
+        must not abort the whole ledger import."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        data = {
+            "saved_at": "2026-03-22T00:00:00Z",
+            "accounts": [
+                {"name": "Real Account", "account_type": "checking",
+                 "balance": 1000.0, "institution": "Chase",
+                 "last_synced": "2026-03-19T00:00:00Z"},
+                # All NOT NULL fields explicitly null. Pre-fix this
+                # would raise IntegrityError and abort the import.
+                {"name": None, "account_type": None, "balance": None,
+                 "institution": None, "last_synced": None},
+                {"name": "Second Real", "account_type": "savings",
+                 "balance": 500.0, "institution": "BofA"},
+            ],
+        }
+        with open(ledger_path, "w") as f:
+            json.dump(data, f)
+        count = db.import_cfo_ledger(ledger_path)
+        assert count == 3
+        accounts = db.get_accounts()
+        assert len(accounts) == 3
+        for a in accounts:
+            assert a.name is not None
+            assert a.institution is not None
+            assert a.balance is not None
+
     def test_import_nonexistent_file(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
