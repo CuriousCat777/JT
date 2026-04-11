@@ -785,6 +785,49 @@ class TestDatabaseBridge:
         assert stored[0].name == "42"
         assert isinstance(stored[0].name, str)
 
+    def test_sync_accounts_skips_non_dict_entries(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: a stray ``null`` / primitive in the provider's
+        account list must not abort the sync via ``AttributeError``
+        inside ``_s``. Bad entries are skipped; good ones land."""
+        accounts = [
+            {"name": "First", "institution": "Chase",
+             "balance": 100.0, "account_type": "checking"},
+            None,
+            "unexpected string",
+            42,
+            {"name": "Second", "institution": "BofA",
+             "balance": 200.0, "account_type": "savings"},
+        ]
+        assert bridge.sync_accounts(accounts) == 2
+        stored = bridge.db.get_accounts()
+        assert len(stored) == 2
+        names = {a.name for a in stored}
+        assert names == {"First", "Second"}
+
+    def test_sync_transactions_skips_non_dict_entries(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: a stray ``null`` / primitive in the provider's
+        transaction list must not abort the batch via ``AttributeError``
+        inside ``_s``. Bad entries are filtered out of the generator;
+        good ones land."""
+        txns = [
+            {"date": "2026-03-01", "description": "Good A",
+             "amount": -10.0, "reference_id": "A"},
+            None,
+            [],
+            "broken",
+            {"date": "2026-03-02", "description": "Good B",
+             "amount": -20.0, "reference_id": "B"},
+        ]
+        assert bridge.sync_transactions(txns) == 2
+        stored = bridge.db.query_transactions()
+        assert len(stored) == 2
+        refs = {t.reference_id for t in stored}
+        assert refs == {"A", "B"}
+
     def test_sync_transactions_parses_string_amounts(
         self, bridge: DatabaseBridge
     ) -> None:

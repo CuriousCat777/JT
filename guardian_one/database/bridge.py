@@ -109,9 +109,15 @@ class DatabaseBridge:
         Fields are normalized via ``_s``/``_f`` so that JSON ``null``
         values from upstream providers don't propagate into the
         ``NOT NULL`` columns and abort the whole sync.
+
+        Non-dict entries in the input list (e.g. a stray ``null`` in
+        the provider's JSON array) are skipped so one bad element
+        does not raise ``AttributeError`` and abort the entire batch.
         """
         count = 0
         for acct in accounts:
+            if not isinstance(acct, dict):
+                continue
             self.db.upsert_account(FinancialAccount(
                 name=_s(acct, "name"),
                 account_type=_s(acct, "account_type"),
@@ -131,6 +137,10 @@ class DatabaseBridge:
         Fields are normalized via ``_s``/``_f`` so that JSON ``null``
         values from upstream providers don't propagate as Python
         ``None`` into string/float columns.
+
+        Non-dict entries in the input list are skipped so one bad
+        element does not raise ``AttributeError`` and abort the
+        whole sync.
         """
         txns = [
             FinancialTransaction(
@@ -146,6 +156,7 @@ class DatabaseBridge:
                 notes=_s(t, "notes"),
             )
             for t in transactions
+            if isinstance(t, dict)
         ]
         return self.db.insert_transactions_batch(txns)
 
