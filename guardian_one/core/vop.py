@@ -416,8 +416,8 @@ class VOPEngine:
             # If verifiers are registered, defer to Step 2 verification
             if self._verifiers:
                 return True
-            # Otherwise, must have evidence or a source to pass
-            return bool(claim.evidence or claim.source)
+            # Otherwise, require the same remote-provided fields as Step 2
+            return bool(claim.evidence and claim.source)
         if claim.claim_type == ClaimType.LOCAL:
             return bool(claim.evidence)
         return True
