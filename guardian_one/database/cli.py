@@ -40,12 +40,13 @@ def _handle_db_commands(args: argparse.Namespace) -> None:
     # resolve the default via GUARDIAN_DATA_DIR (or fall back to ./data).
     db_path = Path(args.db_path) if args.db_path else None
     db = GuardianDatabase(db_path)
+    resolved_db_path = db.stats()["db_path"]
 
     if args.db_init:
         print("=" * 60)
         print("  GUARDIAN ONE DATABASE — INITIALIZATION")
         print("=" * 60)
-        print(f"  Database: {db_path}")
+        print(f"  Database: {resolved_db_path}")
         print()
 
         # Import existing audit logs
