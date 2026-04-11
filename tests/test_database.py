@@ -483,6 +483,31 @@ class TestImport:
             assert a.institution is not None
             assert a.balance is not None
 
+    def test_import_cfo_ledger_tolerates_malformed_json(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: a corrupt or truncated ledger file must not
+        raise ``json.JSONDecodeError`` and abort ``--db-init``. The
+        import should skip the file and return 0 the same way
+        ``import_audit_jsonl`` tolerates bad JSONL lines."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        ledger_path.write_text('{"accounts": [not valid json')
+        # Must not raise.
+        count = db.import_cfo_ledger(ledger_path)
+        assert count == 0
+        # The database is still usable and the accounts table empty.
+        assert db.get_accounts() == []
+
+    def test_import_cfo_ledger_tolerates_non_dict_top_level(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """A JSON file whose top-level is a list or primitive is
+        syntactically valid JSON but not a ledger. Importing it must
+        not crash — it should just import zero accounts."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        ledger_path.write_text('[1, 2, 3]')
+        assert db.import_cfo_ledger(ledger_path) == 0
+
     def test_import_cfo_ledger_parses_string_balances(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:
@@ -590,6 +615,47 @@ class TestDatabaseBridge:
         assert count == 2
         stored = bridge.db.query_transactions()
         assert len(stored) == 2
+
+    def test_sync_transactions_numeric_reference_id_resyncs(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: upstream providers sometimes send numeric
+        ``reference_id`` values (e.g. ``123``). Both the first sync
+        and every subsequent re-sync must succeed — the stored value
+        must match the incoming value's str form so the dedup
+        pre-check catches duplicates before they hit the UNIQUE index.
+        """
+        txns = [
+            {"date": "2026-03-01", "description": "numeric id",
+             "amount": -20.0, "reference_id": 123},
+            {"date": "2026-03-02", "description": "still numeric",
+             "amount": -30.0, "reference_id": 456},
+        ]
+        # First sync: both rows land.
+        assert bridge.sync_transactions(txns) == 2
+        stored = bridge.db.query_transactions()
+        # reference_id must be stored as a string, not an int.
+        for row in stored:
+            assert isinstance(row.reference_id, str)
+        # Re-sync must be idempotent (0 new rows, no IntegrityError).
+        assert bridge.sync_transactions(txns) == 0
+        assert len(bridge.db.query_transactions()) == 2
+
+    def test_sync_accounts_numeric_fields_are_stringified(
+        self, bridge: DatabaseBridge
+    ) -> None:
+        """Regression: a numeric ``name`` or ``institution`` from a
+        quirky upstream payload should not break re-sync via the
+        ``upsert_account`` unique-name check."""
+        accounts = [
+            {"name": 42, "account_type": "checking",
+             "balance": 100.0, "institution": "Chase"},
+        ]
+        assert bridge.sync_accounts(accounts) == 1
+        stored = bridge.db.get_accounts()
+        assert len(stored) == 1
+        assert stored[0].name == "42"
+        assert isinstance(stored[0].name, str)
 
     def test_sync_transactions_parses_string_amounts(
         self, bridge: DatabaseBridge

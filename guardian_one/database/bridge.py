@@ -22,15 +22,29 @@ from guardian_one.database.models import (
 
 
 def _s(d: dict[str, Any], key: str, default: str = "") -> str:
-    """Get a string field, coercing ``None`` → default.
+    """Get a string field, coercing ``None`` → default and always
+    returning ``str``.
 
-    ``dict.get(key, default)`` returns ``None`` when the key is present
-    but holds a JSON ``null``, which then violates ``NOT NULL``
-    constraints downstream.  This helper treats ``None`` the same as a
-    missing key.
+    Two concerns are handled here:
+
+    1. ``dict.get(key, default)`` returns ``None`` when the key is
+       present but holds a JSON ``null``, which then violates
+       ``NOT NULL`` constraints downstream.  This helper treats
+       ``None`` the same as a missing key.
+
+    2. Upstream providers sometimes serialize string-like fields as
+       numbers — most importantly transaction IDs such as
+       ``"reference_id": 123``.  If the int is stored as-is in the
+       TEXT column, SQLite keeps it as an int, and on the next sync
+       ``insert_transactions_batch``'s dedup pre-check compares
+       ``'123'`` (stored) against ``123`` (incoming), fails to spot
+       the duplicate, then hits the UNIQUE constraint and blows up.
+       Casting to ``str`` here makes re-sync idempotent.
     """
     value = d.get(key, default)
-    return default if value is None else value
+    if value is None:
+        return default
+    return value if isinstance(value, str) else str(value)
 
 
 def _f(d: dict[str, Any], key: str, default: float = 0.0) -> float:

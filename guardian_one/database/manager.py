@@ -36,15 +36,20 @@ _SCHEMA_VERSION = 1
 
 
 def _coerce_str(d: dict[str, Any], key: str, default: str = "") -> str:
-    """Get a string field from a dict, coercing ``None`` → default.
+    """Get a string field from a dict, coercing ``None`` → default and
+    always returning ``str``.
 
-    ``dict.get(key, default)`` returns ``None`` when the key is present
-    but holds a JSON ``null`` — which then violates ``NOT NULL``
-    constraints downstream.  This helper treats missing keys and
-    explicit-null values identically.
+    - ``None`` values are treated like missing keys (prevents NOT NULL
+      violations when a JSON ``null`` is present).
+    - Non-string values are cast to ``str`` so an integer reference ID
+      (``{"reference_id": 123}``) round-trips consistently through the
+      TEXT column instead of being stored as an int and breaking
+      later dedup pre-checks against the stored ``'123'``.
     """
     value = d.get(key, default)
-    return default if value is None else value
+    if value is None:
+        return default
+    return value if isinstance(value, str) else str(value)
 
 
 def _coerce_float(d: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -769,12 +774,29 @@ class GuardianDatabase:
         ledger entries with explicit ``null`` values don't propagate
         as Python ``None`` into ``NOT NULL`` columns and abort the
         whole ledger import.
+
+        A malformed or truncated ledger file is tolerated the same
+        way ``import_audit_jsonl`` tolerates bad JSONL lines: the
+        method logs a warning to stderr and returns ``0`` instead of
+        raising ``json.JSONDecodeError``. This matters during Docker
+        first-run initialization, where a corrupt optional seed file
+        should not take down ``--db-init`` entirely.
         """
         path = Path(ledger_path)
         if not path.exists():
             return 0
-        with open(path) as f:
-            data = json.load(f)
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            # Mirror the per-line tolerance in import_audit_jsonl:
+            # skip the import, keep going. The caller still gets 0.
+            print(
+                f"  [WARN] Skipping {path}: malformed or unreadable JSON ({exc})"
+            )
+            return 0
+        if not isinstance(data, dict):
+            return 0
         count = 0
         for acct in data.get("accounts", []) or []:
             if not isinstance(acct, dict):
