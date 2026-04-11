@@ -151,7 +151,14 @@ CREATE INDEX IF NOT EXISTS idx_txn_date ON financial_transactions(date);
 CREATE INDEX IF NOT EXISTS idx_txn_category ON financial_transactions(category);
 CREATE INDEX IF NOT EXISTS idx_txn_account ON financial_transactions(account);
 CREATE INDEX IF NOT EXISTS idx_txn_source ON financial_transactions(source);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_txn_ref ON financial_transactions(reference_id)
+-- Deduplication is keyed on (source, reference_id) so two different
+-- providers (e.g. Plaid and Rocket Money) can legitimately use the
+-- same reference_id without colliding. The old single-column
+-- idx_txn_ref is dropped on startup for backwards compatibility with
+-- existing DB files.
+DROP INDEX IF EXISTS idx_txn_ref;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_txn_source_ref
+    ON financial_transactions(source, reference_id)
     WHERE reference_id != '';
 
 -- Financial accounts table
@@ -483,22 +490,25 @@ class GuardianDatabase:
     def insert_transaction(self, txn: FinancialTransaction) -> int:
         """Insert a financial transaction.
 
-        Deduplicates on non-empty ``reference_id`` via an explicit
-        pre-check. Returns ``0`` if the row was skipped as a duplicate,
-        otherwise the new row id.
+        Deduplicates on ``(source, reference_id)`` — a non-empty
+        reference_id is only considered a duplicate if *the same
+        source* already stored it. This lets multiple providers
+        (Plaid, Rocket Money, Empower) use overlapping ID spaces
+        without colliding with each other. Returns ``0`` if the row
+        was skipped as a duplicate, otherwise the new row id.
 
         Unlike ``INSERT OR IGNORE``, this only suppresses the
-        *reference-id* conflict. Any other constraint violation
-        (``NOT NULL``, type mismatch, …) surfaces as
-        ``sqlite3.IntegrityError`` so bad input is not silently dropped.
+        ``(source, reference_id)`` conflict. Any other constraint
+        violation surfaces as ``sqlite3.IntegrityError``.
         """
         with self._lock:
             conn = self._connect()
             try:
                 if txn.reference_id:
                     existing = conn.execute(
-                        "SELECT id FROM financial_transactions WHERE reference_id = ?",
-                        (txn.reference_id,),
+                        "SELECT id FROM financial_transactions "
+                        "WHERE source = ? AND reference_id = ?",
+                        (txn.source, txn.reference_id),
                     ).fetchone()
                     if existing:
                         return 0
@@ -517,40 +527,48 @@ class GuardianDatabase:
                 conn.close()
 
     def insert_transactions_batch(self, txns: list[FinancialTransaction]) -> int:
-        """Bulk insert transactions with explicit dedup on reference_id.
+        """Bulk insert transactions with explicit dedup on
+        ``(source, reference_id)``.
 
         Returns the number of rows actually inserted (excluding
-        duplicates).  Dedup is performed by pre-fetching the set of
-        existing non-empty ``reference_id`` values and also tracking
-        duplicates *within* the batch itself. Real constraint
-        violations propagate as ``sqlite3.IntegrityError``.
+        duplicates). Dedup is performed by pre-fetching the set of
+        existing ``(source, reference_id)`` pairs for the incoming
+        reference_ids and tracking in-batch collisions with the same
+        tuple key. Real constraint violations propagate as
+        ``sqlite3.IntegrityError``.
         """
         if not txns:
             return 0
         with self._lock:
             conn = self._connect()
             try:
-                # Pre-fetch already-stored reference_ids so we only
-                # skip the ones we know collide.  An empty reference_id
-                # is treated as "no dedup key" and always inserted.
+                # Pre-fetch already-stored (source, reference_id)
+                # pairs for any incoming non-empty reference_id, so
+                # we only skip rows that actually collide with the
+                # same-source record already in the DB.  An empty
+                # reference_id is treated as "no dedup key" and
+                # always inserted.
                 refs = [t.reference_id for t in txns if t.reference_id]
-                existing: set[str] = set()
+                existing_pairs: set[tuple[str, str]] = set()
                 if refs:
                     placeholders = ",".join("?" * len(refs))
                     rows = conn.execute(
-                        f"SELECT reference_id FROM financial_transactions "
+                        f"SELECT source, reference_id FROM financial_transactions "
                         f"WHERE reference_id IN ({placeholders})",
                         refs,
                     ).fetchall()
-                    existing = {row["reference_id"] for row in rows}
+                    existing_pairs = {
+                        (row["source"], row["reference_id"]) for row in rows
+                    }
 
-                seen_in_batch: set[str] = set()
+                seen_in_batch: set[tuple[str, str]] = set()
                 new_txns: list[FinancialTransaction] = []
                 for t in txns:
                     if t.reference_id:
-                        if t.reference_id in existing or t.reference_id in seen_in_batch:
+                        key = (t.source, t.reference_id)
+                        if key in existing_pairs or key in seen_in_batch:
                             continue
-                        seen_in_batch.add(t.reference_id)
+                        seen_in_batch.add(key)
                     new_txns.append(t)
 
                 if not new_txns:

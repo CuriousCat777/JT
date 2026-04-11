@@ -253,6 +253,58 @@ class TestFinancialTransactions:
         txns = db.query_transactions()
         assert len(txns) == 1
 
+    def test_dedup_is_namespaced_by_source_single(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: two different providers may independently emit
+        the same reference_id value. The second insert must not be
+        silently dropped as a "duplicate" of the first — dedup should
+        be keyed on ``(source, reference_id)``."""
+        db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="Plaid txn",
+            amount=-10.0, source="plaid", reference_id="123",
+        ))
+        # Same reference_id, different source — must land.
+        inserted = db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="Rocket Money txn",
+            amount=-20.0, source="rocket_money", reference_id="123",
+        ))
+        assert inserted > 0
+        stored = db.query_transactions()
+        assert len(stored) == 2
+        sources = {t.source for t in stored}
+        assert sources == {"plaid", "rocket_money"}
+
+        # Re-inserting the plaid row with the same source is still a
+        # duplicate (skipped).
+        again = db.insert_transaction(FinancialTransaction(
+            date="2026-03-01", description="Plaid txn",
+            amount=-10.0, source="plaid", reference_id="123",
+        ))
+        assert again == 0
+        assert len(db.query_transactions()) == 2
+
+    def test_dedup_is_namespaced_by_source_batch(
+        self, db: GuardianDatabase
+    ) -> None:
+        """Regression: the batch path must apply the same
+        source-namespaced dedup — two providers with reference_id=123
+        in the same batch must both land."""
+        batch = [
+            FinancialTransaction(date="2026-03-01", amount=-10.0,
+                                 source="plaid", reference_id="X"),
+            FinancialTransaction(date="2026-03-01", amount=-20.0,
+                                 source="rocket_money", reference_id="X"),
+            # Within-batch dup for the SAME source → skipped.
+            FinancialTransaction(date="2026-03-02", amount=-30.0,
+                                 source="plaid", reference_id="X"),
+        ]
+        assert db.insert_transactions_batch(batch) == 2
+        stored = db.query_transactions()
+        assert len(stored) == 2
+        pairs = {(t.source, t.reference_id) for t in stored}
+        assert pairs == {("plaid", "X"), ("rocket_money", "X")}
+
     def test_batch_insert(self, db: GuardianDatabase) -> None:
         txns = [
             FinancialTransaction(date=f"2026-03-{i:02d}", description=f"txn_{i}",
