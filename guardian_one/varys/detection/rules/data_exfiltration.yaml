@@ -1,0 +1,19 @@
+title: Potential Data Exfiltration
+id: varys-004
+description: Detects tools and commands used for data exfiltration
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1048
+logsource:
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - "curl -X POST"
+      - "wget --post-data"
+      - "nc -e"
+      - "ncat"
+      - "rclone"
+      - "megacmd"
+  condition: selection

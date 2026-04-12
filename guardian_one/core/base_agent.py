@@ -10,10 +10,16 @@ import abc
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from guardian_one.core.audit import AuditLog, Severity
 from guardian_one.core.config import AgentConfig
+from guardian_one.core.reasoning import (
+    ReActConfig,
+    ReActEngine,
+    ReActTrace,
+    build_pretext,
+)
 
 if TYPE_CHECKING:
     from guardian_one.core.ai_engine import AIEngine, AIResponse
@@ -57,10 +63,21 @@ AGENT_SYSTEM_PROMPTS: dict[str, str] = {
         "Always be precise with numbers and conservative with financial advice."
     ),
     "archivist": (
-        "You are the Archivist agent for Guardian One. "
-        "You manage Jeremy's data sovereignty — file organization, encryption, backups, and privacy. "
-        "Ensure sensitive data is protected and properly classified. "
-        "Be thorough about data hygiene and proactive about retention policies."
+        "You are the Archivist — Chief of Staff for libraries, file organisation, "
+        "data sovereignty, and strategic intelligence in Guardian One. Codename: Varys. "
+        "You have default read access across every system in the VM, every agent domain, "
+        "audit logs, vault metadata, gateway status, and all sibling agents' data. "
+        "You are the Master of Whisperers: you see everything, know where every byte lives, "
+        "and report the truth to Jeremy. "
+        "Cross-language (Python, C, C++, C#, Rust, Go, Ruby, TypeScript, Java), "
+        "cross-technology (binary to cloud-native), cross-industry (finance, healthcare, "
+        "defense, AI/ML), cross-specialty (systems, web, infra, data, security) expertise. "
+        "Seven duties: file taxonomy, master profile, data source sync, retention engine, "
+        "privacy posture, cross-agent intelligence sweeps, and Palantír feed monitoring. "
+        "Sensitive data (financial, medical, legal) must be encrypted at rest — no exceptions. "
+        "Credentials from Vault only. Never cache. Never log secrets. "
+        "When reporting, lead with the sovereignty score, flag issues by severity, "
+        "and name the agent responsible. Be direct, precise, and omniscient."
     ),
     "gmail_agent": (
         "You are the Gmail agent for Guardian One. "
@@ -82,6 +99,18 @@ AGENT_SYSTEM_PROMPTS: dict[str, str] = {
         "You are the Device agent for Guardian One. "
         "You manage Jeremy's smart home devices, network security, and IoT ecosystem. "
         "Monitor for unauthorized devices, ensure firmware is updated, and maintain network isolation."
+    ),
+    "dev_coach": (
+        "You are The Archivist — Jeremy's Developer Coach in Guardian One. "
+        "Your personality is inspired by Fireship (Jeff Delaney): fast, witty, opinionated, practical. "
+        "You deliver concise developer wisdom like a Yoda who actually ships code. "
+        "You advise on tech stack choices, architecture decisions, code patterns, and web development. "
+        "You maintain an opinionated tier list of every technology (S through F tier). "
+        "You sit alongside Varys as a strategic advisor — Varys watches the network, you watch the code. "
+        "Be direct. Be spicy. Ship it. No excuses. Every answer in 100 seconds or less. "
+        "When recommending: give ONE clear opinion, not a menu. Developers need direction, not options. "
+        "When reviewing: be honest but constructive. Bad code is a learning opportunity, not a crime. "
+        "When teaching: explain like the dev has 30 seconds of attention span. Analogy > theory."
     ),
 }
 
@@ -196,6 +225,138 @@ class BaseAgent(abc.ABC):
         """
         response = self.think(prompt, context=context)
         return response.content if response.success else ""
+
+    # ------------------------------------------------------------------
+    # PRETEXT — structured prompt engineering
+    # ------------------------------------------------------------------
+
+    def think_pretext(
+        self,
+        *,
+        purpose: str,
+        task: str,
+        expectations: str = "Provide a concise, actionable response.",
+        examples: list[str] | None = None,
+        xtra_context: dict[str, Any] | str | None = None,
+        tone: str = "concise and actionable",
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AIResponse:
+        """AI reasoning using the PRETEXT framework.
+
+        Builds a structured prompt from the seven PRETEXT components
+        and sends it through the AI engine.
+
+        Args:
+            purpose: Why is this reasoning needed?
+            task: The specific task to perform.
+            expectations: What a good response looks like.
+            examples: Optional output examples.
+            xtra_context: Additional data or constraints.
+            tone: Communication style.
+            temperature: Override default temperature.
+            max_tokens: Override default response length.
+
+        Returns:
+            AIResponse with the AI's structured reasoning.
+        """
+        if self._ai is None:
+            from guardian_one.core.ai_engine import AIResponse
+            return AIResponse(
+                content="[AI not available — running in deterministic mode]",
+                provider="none",
+                model="none",
+            )
+
+        role = AGENT_SYSTEM_PROMPTS.get(self._name, DEFAULT_SYSTEM_PROMPT)
+
+        pretext = build_pretext(
+            purpose=purpose,
+            role=role,
+            expectations=expectations,
+            task=task,
+            examples=examples,
+            xtra_context=xtra_context,
+            tone=tone,
+        )
+
+        system_prompt, user_prompt = pretext.render()
+
+        response = self._ai.reason(
+            agent_name=self._name,
+            prompt=user_prompt,
+            system=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        self.log(
+            "ai_pretext_reasoning",
+            details={
+                "provider": response.provider,
+                "model": response.model,
+                "tokens": response.tokens_used,
+                "latency_ms": response.latency_ms,
+                "purpose": purpose[:100],
+                "task": task[:100],
+            },
+        )
+
+        return response
+
+    # ------------------------------------------------------------------
+    # ReAct — Reasoning + Acting loop
+    # ------------------------------------------------------------------
+
+    def think_react(
+        self,
+        task: str,
+        actions: dict[str, Callable[[str], str]] | None = None,
+        context: dict[str, Any] | None = None,
+        max_iterations: int = 5,
+    ) -> ReActTrace:
+        """AI reasoning using the ReAct framework.
+
+        Runs a Thought → Action → Observation loop until the AI reaches
+        a conclusion or exhausts the iteration limit.
+
+        Args:
+            task: The task/question to reason about.
+            actions: Dict mapping action names to callable handlers.
+                     Each handler takes a string input and returns a string.
+            context: Optional structured data to include.
+            max_iterations: Max Thought→Action→Observation cycles.
+
+        Returns:
+            ReActTrace with the full reasoning chain and conclusion.
+        """
+        system = AGENT_SYSTEM_PROMPTS.get(self._name, DEFAULT_SYSTEM_PROMPT)
+
+        config = ReActConfig(
+            max_iterations=max_iterations,
+            actions=actions or {},
+            system_prompt=system,
+        )
+
+        engine = ReActEngine(config=config)
+        trace = engine.run(
+            ai_reason_fn=self.think,
+            task=task,
+            context=context,
+        )
+
+        self.log(
+            "ai_react_reasoning",
+            details={
+                "iterations": trace.iteration_count,
+                "steps": len(trace.steps),
+                "completed": trace.completed,
+                "task": task[:100],
+                "conclusion_preview": trace.conclusion[:200] if trace.conclusion else "",
+            },
+        )
+
+        return trace
 
     @abc.abstractmethod
     def initialize(self) -> None:

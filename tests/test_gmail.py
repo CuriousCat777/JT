@@ -218,7 +218,9 @@ def test_gmail_agent_report():
     agent.initialize()
     report = agent.report()
     assert report.agent_name == "gmail"
-    assert "jeremytabernero@gmail.com" in report.summary
+    # PII must be redacted — the raw email must NOT appear in the report
+    assert "jeremytabernero@gmail.com" not in report.summary
+    assert "[OWNER-EMAIL-REDACTED]" in report.summary
 
 
 def test_gmail_agent_check_inbox_unauthenticated():

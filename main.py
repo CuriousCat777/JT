@@ -31,13 +31,51 @@ Usage:
     python main.py --scene movie         # Activate a scene (movie, work, away, goodnight)
     python main.py --home-event wake     # Fire event (wake, sleep, leave, arrive, sunrise, sunset)
     python main.py --flipper             # Flipper Zero device profiles
+    python main.py --hue                  # Show all Hue lights and groups
+    python main.py --hue-register         # Register with Hue Bridge (press link button first!)
+    python main.py --hue-on 1             # Turn on light 1
+    python main.py --hue-off 1            # Turn off light 1
+    python main.py --hue-dim 1:50         # Dim light 1 to 50%
+    python main.py --hue-color 1:warm     # Set light 1 to warm white
+    python main.py --hue-scene 1:abc123   # Activate scene in group
     python main.py --security-review     # Run security remediation review for all domains
     python main.py --security-review jtmdai.com  # Review a single domain
     python main.py --security-sync       # Push remediation status to Notion
     python main.py --connector-audit     # Audit Claude connector attack surface
+    python main.py --power-tools          # Rails + Gin power tools status
+    python main.py --rails-new APP        # Scaffold a new Rails app
+    python main.py --gin-new APP          # Scaffold a new Gin app
+    python main.py --rails-server PATH    # Start Rails dev server
+    python main.py --gin-server PATH      # Start Gin dev server
+    python main.py --rails-install        # Install Ruby on Rails via gem
+    python main.py --archivist            # Full Archivist report (sovereignty, feeds, platforms)
+    python main.py --feeds               # Palantir intelligence briefing
+    python main.py --sovereignty         # Data sovereignty score + cross-agent sweep
     python main.py --cfo                  # Interactive CFO financial assistant (conversational)
-    python main.py --heap-analyze PATH     # Analyze a V8 .heapsnapshot file
-    python main.py --heap-analyze PATH --heap-diag DIAG  # With companion diagnostics JSON
+    python main.py --cortex               # InputCortex status — keystroke intelligence
+    python main.py --cortex-daemon        # Start InputCortex daemon (listener+watcher)
+    python main.py --cortex-daemon listener  # HTTP-only mode
+    python main.py --cortex-digest        # Today's behavioral digest
+    python main.py --cortex-query search  # Query context blocks by category
+    python main.py --cortex-pattern 7     # Behavioral pattern analysis (N days)
+    python main.py --fleet               # Fleet command center (3-node dashboard)
+    python main.py --fleet-health        # Health check all fleet nodes (A/B/C)
+    python main.py --fleet-ssh NODE CMD  # Execute command on a fleet node via SSH
+    python main.py --fleet-start NODE SVC # Start a service on a fleet node
+    python main.py --fleet-stop NODE SVC  # Stop a service on a fleet node
+    python main.py --fleet-services NODE  # List running services on a node
+    python main.py --fleet-displays      # Display topology (monitors + TVs layout)
+    python main.py --fleet-resources     # Resource optimization recommendations
+    python main.py --fleet-subs          # Subscription portfolio dashboard
+    python main.py --fleet-backup        # Backup strategy overview
+    python main.py --fleet-kernels       # Active kernels & daemons on all 3 nodes
+    python main.py --fleet-status        # Full status (fleet + displays + subs)
+    python main.py --autofill-server      # Start autofill bridge (localhost only)
+    python main.py --autofill-lan         # Start autofill bridge in LAN mode (MacBook access)
+    python main.py --autofill-pin         # Set/change LAN access PIN
+    python main.py --autofill-add card    # Add a payment card profile
+    python main.py --autofill-list        # List all autofill profiles
+    python main.py --autofill-bookmarklet # Get the browser bookmarklet
 """
 
 from __future__ import annotations
@@ -66,6 +104,8 @@ from guardian_one.agents.cfo import CFO
 from guardian_one.agents.doordash import DoorDashAgent
 from guardian_one.agents.gmail_agent import GmailAgent
 from guardian_one.agents.web_architect import WebArchitect
+from guardian_one.agents.input_cortex import InputCortex
+from guardian_one.agents.autofill import AutofillAgent
 
 
 def _build_agents(guardian: GuardianOne) -> None:
@@ -76,7 +116,9 @@ def _build_agents(guardian: GuardianOne) -> None:
     guardian.register_agent(Chronos(config=chronos_cfg, audit=guardian.audit))
 
     archivist_cfg = config.agents.get("archivist", AgentConfig(name="archivist"))
-    guardian.register_agent(Archivist(config=archivist_cfg, audit=guardian.audit))
+    archivist = Archivist(config=archivist_cfg, audit=guardian.audit)
+    guardian.register_agent(archivist)
+    archivist.set_guardian(guardian)  # Varys mode — cross-agent read access
 
     cfo_cfg = config.agents.get("cfo", AgentConfig(name="cfo"))
     guardian.register_agent(CFO(config=cfo_cfg, audit=guardian.audit, data_dir=config.data_dir))
@@ -93,6 +135,68 @@ def _build_agents(guardian: GuardianOne) -> None:
 
     wa_cfg = config.agents.get("web_architect", AgentConfig(name="web_architect"))
     guardian.register_agent(WebArchitect(config=wa_cfg, audit=guardian.audit))
+
+    cortex_cfg = config.agents.get("input_cortex", AgentConfig(name="input_cortex"))
+    guardian.register_agent(InputCortex(
+        config=cortex_cfg, audit=guardian.audit, data_dir=config.data_dir,
+    ))
+
+    af_cfg = config.agents.get("autofill", AgentConfig(name="autofill"))
+    af_agent = AutofillAgent(config=af_cfg, audit=guardian.audit, vault=guardian.vault)
+    guardian.register_agent(af_agent)
+
+
+def _autofill_add_interactive(af: AutofillAgent, profile_type: str) -> None:
+    """Interactive prompt to add an autofill profile."""
+    print(f"\n  Add {profile_type} profile")
+    print("  " + "-" * 40)
+
+    def ask(prompt: str, required: bool = True) -> str:
+        while True:
+            val = input(f"  {prompt}: ").strip()
+            if val or not required:
+                return val
+            print(f"  (required)")
+
+    if profile_type == "card":
+        p = af.add_card(
+            label=ask("Label (e.g. Chase Sapphire)"),
+            cardholder_name=ask("Cardholder Name"),
+            card_number=ask("Card Number"),
+            exp_month=ask("Exp Month (MM)"),
+            exp_year=ask("Exp Year (YYYY)"),
+            cvv=ask("CVV"),
+            billing_address=ask("Billing Address", required=False),
+            billing_zip=ask("Billing Zip", required=False),
+        )
+        print(f"\n  Added card: {p.label} ({p.masked_number})")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "address":
+        p = af.add_address(
+            label=ask("Label (e.g. Home, Work)"),
+            full_name=ask("Full Name"),
+            street=ask("Street Address"),
+            city=ask("City"),
+            state=ask("State"),
+            zip_code=ask("Zip Code"),
+            country=ask("Country", required=False) or "US",
+            phone=ask("Phone", required=False),
+        )
+        print(f"\n  Added address: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
+
+    elif profile_type == "identity":
+        p = af.add_identity(
+            label=ask("Label (e.g. Personal, Work)"),
+            first_name=ask("First Name"),
+            last_name=ask("Last Name"),
+            email=ask("Email"),
+            phone=ask("Phone", required=False),
+            date_of_birth=ask("Date of Birth (YYYY-MM-DD)", required=False),
+        )
+        print(f"\n  Added identity: {p.label}")
+        print(f"  Profile ID: {p.profile_id}\n")
 
 
 def _print_validation_report(cfo: CFO) -> None:
@@ -277,6 +381,8 @@ def main() -> None:
     parser.add_argument("--website-sync", action="store_true", help="Push website dashboards to Notion")
     parser.add_argument("--notion-sync", action="store_true", help="Full Notion workspace sync (all dashboards)")
     parser.add_argument("--notion-preview", action="store_true", help="Preview Notion pages that would be created (no API needed)")
+    parser.add_argument("--n8n-sync", action="store_true", help="Push n8n workflow status to Notion dashboard")
+    parser.add_argument("--n8n-status", action="store_true", help="Show n8n connection and workflow status")
     parser.add_argument("--devices", action="store_true",
                         help="Show all managed IoT/LAN devices")
     parser.add_argument("--device-audit", action="store_true",
@@ -295,8 +401,30 @@ def main() -> None:
                         help="Push remediation status to Notion")
     parser.add_argument("--connector-audit", action="store_true",
                         help="Audit Claude connector/MCP attack surface")
+    parser.add_argument("--cortex", action="store_true",
+                        help="InputCortex status — keystroke intelligence agent")
+    parser.add_argument("--cortex-daemon", nargs="?", const="both", default=None,
+                        help="Start InputCortex daemon (listener|watcher|both)")
+    parser.add_argument("--cortex-port", type=int, default=9473,
+                        help="InputCortex listener port (default: 9473)")
+    parser.add_argument("--cortex-bind", type=str, default="127.0.0.1",
+                        help="InputCortex listener bind address (default: 127.0.0.1 loopback)")
+    parser.add_argument("--cortex-show-token", action="store_true",
+                        help="Print the InputCortex auth token on daemon start (default: hide)")
+    parser.add_argument("--cortex-digest", nargs="?", const="today", default=None,
+                        help="Generate InputCortex daily digest (date or 'today')")
+    parser.add_argument("--cortex-query", type=str, default=None,
+                        help="Query InputCortex context (category filter)")
+    parser.add_argument("--cortex-pattern", type=int, default=None,
+                        help="InputCortex behavioral pattern analysis (N days)")
     parser.add_argument("--cfo", action="store_true",
                         help="Interactive CFO financial assistant (conversational)")
+    # NOTE: --sentinel* flags are intentionally not exposed in this CLI.
+    # The sentinel agent module still exists for standalone use or future reintegration.
+    parser.add_argument("--network-audit", action="store_true",
+                        help="LAN security audit (VLAN, DNS blocking, credentials)")
+    parser.add_argument("--vpn-status", action="store_true",
+                        help="Tailscale VPN connection status")
     parser.add_argument("--cfo-clean", action="store_true",
                         help="Clean ledger: strip sandbox data, RM goals, zero-balance dupes")
     parser.add_argument("--cfo-clean-dry", action="store_true",
@@ -310,12 +438,60 @@ def main() -> None:
                         help="Benchmark an Ollama model (default: configured model)")
     parser.add_argument("--ollama-pull", type=str, default=None, help="Pull a model from Ollama registry")
     parser.add_argument("--ollama-delete", type=str, default=None, help="Delete a local Ollama model")
-    parser.add_argument("--heap-analyze", type=str, default=None,
-                        help="Analyze a V8 .heapsnapshot file")
-    parser.add_argument("--heap-diag", type=str, default=None,
-                        help="Companion diagnostics JSON for heap analysis")
+    parser.add_argument("--archivist", action="store_true",
+                        help="Run Archivist with full report (sovereignty, feeds, platforms)")
+    parser.add_argument("--feeds", action="store_true",
+                        help="Palantir intelligence briefing (unread feeds)")
+    parser.add_argument("--sovereignty", action="store_true",
+                        help="Data sovereignty report (cross-agent sweep)")
+    parser.add_argument("--dev-coach", dest="dev_coach", action="store_true",
+                        help="Developer Coach (tier list, wisdom, system inventory)")
+    parser.add_argument("--dev-coach-tier", dest="dev_coach_tier", action="store_true",
+                        help="Show the Developer Coach's opinionated tech tier list")
+    parser.add_argument("--dev-coach-wisdom", dest="dev_coach_wisdom", action="store_true",
+                        help="Get a Fireship-style developer wisdom tip")
+    parser.add_argument("--dev-coach-system", dest="dev_coach_system", action="store_true",
+                        help="Show system inventory (hardware/software)")
+    parser.add_argument("--dev-coach-stack", dest="dev_coach_stack", type=str, default=None,
+                        help="Get stack recommendation (saas, api, static_site, ai_app, mobile)")
+    parser.add_argument("--dev-coach-audit", dest="dev_coach_audit", type=str, default=None,
+                        help="Run web dev audit on a domain")
+    parser.add_argument("--autofill-server", action="store_true",
+                        help="Start the autofill bridge local server")
+    parser.add_argument("--autofill-add", type=str, default=None,
+                        choices=["card", "address", "identity"],
+                        help="Add an autofill profile (card, address, or identity)")
+    parser.add_argument("--autofill-list", action="store_true",
+                        help="List all autofill profiles")
+    parser.add_argument("--autofill-remove", type=str, default=None,
+                        help="Remove an autofill profile by TYPE:ID (e.g. card:abc123)")
+    parser.add_argument("--autofill-bookmarklet", action="store_true",
+                        help="Print the bookmarklet JavaScript for browser autofill")
+    parser.add_argument("--autofill-lan", action="store_true",
+                        help="Start autofill server in LAN mode (accessible from MacBook/other devices)")
+    parser.add_argument("--autofill-pin", action="store_true",
+                        help="Set/change the PIN for LAN-mode access")
     parser.add_argument("--devpanel", action="store_true", help="Launch web-based dev panel")
     parser.add_argument("--devpanel-port", type=int, default=5100, help="Dev panel port (default: 5100)")
+    # Fleet management (multi-device orchestration)
+    parser.add_argument("--fleet", action="store_true", help="Fleet command center dashboard")
+    parser.add_argument("--fleet-health", action="store_true", help="Health check all fleet nodes")
+    parser.add_argument("--fleet-ssh", nargs=argparse.REMAINDER, metavar=("NODE", "CMD"), default=None,
+                        help="Execute SSH command on a fleet node (use '--' before NODE and command)")
+    parser.add_argument("--fleet-start", nargs=2, metavar=("NODE", "SERVICE"), default=None,
+                        help="Start a service on a fleet node")
+    parser.add_argument("--fleet-stop", nargs=2, metavar=("NODE", "SERVICE"), default=None,
+                        help="Stop a service on a fleet node")
+    parser.add_argument("--fleet-services", type=str, default=None,
+                        help="List running services on a fleet node")
+    parser.add_argument("--fleet-displays", action="store_true", help="Show display topology layout")
+    parser.add_argument("--fleet-resources", action="store_true", help="Resource optimization dashboard")
+    parser.add_argument("--fleet-subs", action="store_true", help="Subscription portfolio")
+    parser.add_argument("--fleet-backup", action="store_true", help="Backup strategy overview")
+    parser.add_argument("--fleet-kernels", action="store_true",
+                        help="Active kernels and daemons across all 3 nodes")
+    parser.add_argument("--fleet-status", action="store_true",
+                        help="Full fleet status (nodes + displays + subscriptions)")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
 
@@ -323,6 +499,164 @@ def main() -> None:
     config = load_config(config_path)
     guardian = GuardianOne(config=config)
     _build_agents(guardian)
+
+    # ------------------------------------------------------------------
+    # Archivist commands
+    # ------------------------------------------------------------------
+    if args.archivist:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = guardian.run_agent("archivist")
+            print("=" * 60)
+            print("  ARCHIVIST REPORT — Data Sovereignty Intelligence")
+            print("=" * 60)
+            print(f"  Status: {report.status}")
+            print(f"  Summary: {report.summary}")
+            if report.alerts:
+                print("\n  ALERTS:")
+                for a in report.alerts:
+                    print(f"    [!] {a}")
+            if report.recommendations:
+                print("\n  RECOMMENDATIONS:")
+                for r in report.recommendations:
+                    print(f"    - {r}")
+            if report.actions_taken:
+                print("\n  ACTIONS:")
+                for a in report.actions_taken:
+                    print(f"    > {a}")
+            sov = report.data.get("sovereignty", {})
+            if sov:
+                print(f"\n  SOVEREIGNTY SCORE: {sov.get('data_sovereignty_score', '?')}/100")
+            pal = report.data.get("palantir", {})
+            if pal:
+                print(f"  PALANTIR: {pal.get('unread', 0)} unread | {pal.get('critical', 0)} critical")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.feeds:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            briefing = archivist.intelligence_briefing()
+            print("=" * 60)
+            print("  PALANTIR INTELLIGENCE BRIEFING")
+            print("=" * 60)
+            print(f"  Generated: {briefing['generated_at']}")
+            print(f"  Sources: {briefing['sources_active']}/{briefing['sources_total']} active")
+            print(f"  Unread: {briefing['total_unread']} | Critical: {briefing['critical_count']} | High: {briefing['high_priority_count']}")
+            if briefing["critical_alerts"]:
+                print("\n  CRITICAL ALERTS:")
+                for a in briefing["critical_alerts"]:
+                    print(f"    [!!!] {a['source']}: {a['title']}")
+            for cat, items in briefing.get("by_category", {}).items():
+                print(f"\n  {cat.upper()}:")
+                for item in items[:5]:
+                    pri = f"[{item['priority'].upper()}]" if item["priority"] != "medium" else ""
+                    print(f"    {pri} {item['source']}: {item['title']}")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    if args.sovereignty:
+        archivist = guardian.get_agent("archivist")
+        if archivist and isinstance(archivist, Archivist):
+            report = archivist.sovereignty_report()
+            score = report["data_sovereignty_score"]
+            print("=" * 60)
+            print("  DATA SOVEREIGNTY REPORT")
+            print("=" * 60)
+            grade = "A+" if score >= 90 else "A" if score >= 80 else "B" if score >= 70 else "C" if score >= 60 else "F"
+            print(f"  Score: {score}/100 (Grade: {grade})")
+            print(f"  Files tracked: {report['files_tracked']}")
+            print(f"  Files due for deletion: {report['files_due_for_deletion']}")
+            if report["cross_agent_issues"]:
+                print("\n  ISSUES:")
+                for issue in report["cross_agent_issues"]:
+                    print(f"    [!] {issue}")
+            if report["recommendations"]:
+                print("\n  RECOMMENDATIONS:")
+                for rec in report["recommendations"]:
+                    print(f"    - {rec}")
+            vault = report.get("vault", {})
+            if vault:
+                print(f"\n  VAULT: {vault.get('total_credentials', 0)} credentials")
+                if vault.get("due_for_rotation"):
+                    print(f"    ** {vault['due_for_rotation']} due for rotation **")
+            print()
+        else:
+            print("Archivist agent not available.")
+        guardian.shutdown()
+        return
+
+    # ------------------------------------------------------------------
+    # The Archivist — Developer Coach commands
+    # ------------------------------------------------------------------
+    if args.dev_coach or args.dev_coach_tier or args.dev_coach_wisdom or args.dev_coach_system or args.dev_coach_stack or args.dev_coach_audit:
+        from guardian_one.agents.dev_coach import DevCoach
+        coach = guardian.get_agent("dev_coach")
+        if coach and isinstance(coach, DevCoach):
+            if args.dev_coach_tier:
+                tiers = coach.get_tier_list()
+                print("\n  THE ARCHIVIST — Opinionated Tech Tier List")
+                print("  " + "=" * 55)
+                for tier_name in ["S", "A", "B", "C", "D", "F"]:
+                    entries = tiers.get(tier_name, [])
+                    if entries:
+                        print(f"\n  [{tier_name}-TIER]")
+                        for e in entries:
+                            print(f"    {e['name']:<20} {e['notes']}")
+                print()
+            elif args.dev_coach_wisdom:
+                tip = coach.get_wisdom()
+                print(f"\n  The Archivist says:\n  \"{tip}\"\n")
+            elif args.dev_coach_system:
+                inventory = coach.get_system_inventory()
+                print("\n  THE ARCHIVIST — System Inventory")
+                print("  " + "=" * 55)
+                for comp in inventory:
+                    print(f"  [{comp['type']}] {comp['name']}: {comp['status']}")
+                    for k, v in comp.get('specs', {}).items():
+                        print(f"    {k}: {v}")
+                print()
+            elif args.dev_coach_stack:
+                rec = coach.recommend_stack(args.dev_coach_stack)
+                print(f"\n  THE ARCHIVIST — Stack Recommendation: {args.dev_coach_stack}")
+                print("  " + "=" * 55)
+                for item in rec.get("stack", []):
+                    print(f"  {item['name']:<20} {item['reason']}")
+                print(f"\n  \"{rec.get('summary', '')}\"\n")
+            elif args.dev_coach_audit:
+                audit = coach.web_audit(args.dev_coach_audit)
+                print(f"\n  THE ARCHIVIST — Web Audit: {args.dev_coach_audit}")
+                print("  " + "=" * 55)
+                for check, info in audit.items():
+                    status = info.get("status", "needs_review")
+                    icon = "+" if status == "pass" else "!" if status == "needs_review" else "X"
+                    print(f"  [{icon}] {check:<20} {info.get('note', '')}")
+                print()
+            else:
+                report = guardian.run_agent("dev_coach")
+                print(f"\n  THE ARCHIVIST — Developer Coach Report")
+                print("  " + "=" * 55)
+                print(f"  Status: {report.status}")
+                print(f"  {report.summary}")
+                if report.recommendations:
+                    print("\n  Recommendations:")
+                    for r in report.recommendations:
+                        print(f"    - {r}")
+                if report.alerts:
+                    print("\n  Alerts:")
+                    for a in report.alerts:
+                        print(f"    [!] {a}")
+                print()
+        else:
+            print("DevCoach agent not available.")
+        guardian.shutdown()
+        return
 
     if args.cfo:
         cfo = guardian.get_agent("cfo")
@@ -440,6 +774,337 @@ def main() -> None:
                 print(f"  Net worth: ${cfo.net_worth():,.2f}")
         else:
             print("CFO agent not available.")
+        guardian.shutdown()
+        return
+
+    # --- Power Tools: Rails + Gin ---
+    if (args.power_tools or args.rails_new or args.rails_server
+            or args.rails_install or args.gin_new or args.gin_server):
+        from guardian_one.integrations.rails_gin import (
+            power_tools_status, scaffold_rails, scaffold_gin,
+            start_rails_server, start_gin_server, install_rails,
+        )
+
+        if args.power_tools:
+            status = power_tools_status()
+            print()
+            print("  POWER TOOLS — Rails + Gin")
+            print("  " + "=" * 50)
+            print(f"  Ruby:   {status['ruby']['status']:<16} {status['ruby']['version']}")
+            print(f"  Rails:  {status['rails']['status']:<16} {status['rails']['version']}")
+            print(f"  Go:     {status['go']['status']:<16} {status['go']['version']}")
+            print(f"  Gin:    {status['gin']['status']:<16} {status['gin'].get('note', '')}")
+            print()
+            print("  RAILS CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["rails"]:
+                print(f"    - {cap}")
+            print()
+            print("  GIN CAPABILITIES")
+            print("  " + "-" * 50)
+            for cap in status["capabilities"]["gin"]:
+                print(f"    - {cap}")
+            print()
+            print("  USE CASES")
+            print("  " + "-" * 50)
+            for key, desc in status["use_cases"].items():
+                label = key.replace("_", " ").title()
+                print(f"    {label}:")
+                print(f"      {desc}")
+            print()
+
+        elif args.rails_install:
+            print("\n  Installing Ruby on Rails...")
+            result = install_rails()
+            if result["success"]:
+                if result.get("already_installed"):
+                    print(f"  Rails already installed: {result['version']}")
+                else:
+                    print(f"  Rails installed: {result['version']}")
+            else:
+                print(f"  Installation failed: {result['error']}")
+
+        elif args.rails_new:
+            app_name = args.rails_new
+            print(f"\n  Scaffolding Rails app: {app_name}")
+            if args.rails_api:
+                print("  Mode: API-only")
+            print(f"  Database: {args.rails_db}")
+            result = scaffold_rails(
+                app_name=app_name,
+                api_only=args.rails_api,
+                database=args.rails_db,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --rails-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_new:
+            app_name = args.gin_new
+            module = args.gin_module or app_name
+            print(f"\n  Scaffolding Gin app: {app_name}")
+            print(f"  Module: {module}")
+            print(f"  Port: {args.gin_port}")
+            result = scaffold_gin(
+                app_name=app_name,
+                module_path=module,
+                port=args.gin_port,
+            )
+            if result["success"]:
+                print(f"  [OK] Created at: {result['path']}")
+                print(f"  Start with: python main.py --gin-server {result['path']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.rails_server:
+            app_path = args.rails_server
+            port = args.rails_port
+            print(f"\n  Starting Rails server: {app_path} on port {port}")
+            result = start_rails_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.gin_server:
+            app_path = args.gin_server
+            port = args.gin_port
+            print(f"\n  Starting Gin server: {app_path} on port {port}")
+            result = start_gin_server(app_path, port=port)
+            if result["success"]:
+                print(f"  [OK] PID {result['pid']} — {result['url']}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+    if args.iot or args.iot_scaffold or args.iot_start or args.iot_stop or args.iot_scan is not None or args.iot_security or args.iot_workflows:
+        from guardian_one.homelink.iot_controller import IoTController
+
+        iot_cfg = config.agents.get("iot_stack", AgentConfig(name="iot_stack"))
+        custom = iot_cfg.custom if hasattr(iot_cfg, "custom") and iot_cfg.custom else {}
+        stack_dir = Path(custom.get("stack_dir", "~/iot-stack")).expanduser()
+        tz = config.timezone or "America/Chicago"
+
+        iot = IoTController(stack_dir=stack_dir, audit=guardian.audit, timezone=tz)
+        iot.initialize()
+
+        if args.iot_scaffold:
+            zigbee = custom.get("zigbee_device", "/dev/ttyUSB0")
+            print(f"\n  Scaffolding IoT stack at {stack_dir}...")
+            result = iot.scaffold_stack(zigbee_device=zigbee)
+            if result["success"]:
+                print(f"  [OK] Stack scaffolded: {result['stack_dir']}")
+                print(f"  Files created: {len(result['files_created'])}")
+                for f in result["files_created"]:
+                    print(f"    {f}")
+                print(f"\n  Next steps:")
+                for step in result["next_steps"]:
+                    print(f"    {step}")
+            else:
+                print(f"  [FAILED] {result.get('error', 'unknown')}")
+
+        elif args.iot_start:
+            print(f"\n  Starting IoT stack...")
+            result = iot.start_stack()
+            if result["success"]:
+                print(f"  [OK] Stack started.")
+                if result.get("output"):
+                    print(f"  {result['output'][:200]}")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_stop:
+            print(f"\n  Stopping IoT stack...")
+            result = iot.stop_stack()
+            if result["success"]:
+                print(f"  [OK] Stack stopped.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+
+        elif args.iot_scan is not None:
+            subnet = custom.get("subnet", "192.168.1.0/24") if args.iot_scan == "__CONFIG__" else args.iot_scan
+            print(f"\n  Scanning LAN: {subnet}...")
+            devices = iot.scan_network(subnet)
+            if not devices:
+                print("  No devices found (nmap may not be installed or scan failed).")
+            else:
+                print(f"  Found {len(devices)} device(s):\n")
+                print(f"  {'IP Address':15s} {'MAC Address':17s} {'Vendor':20s} {'Class':12s} {'Risk':4s}")
+                print("  " + "-" * 70)
+                for d in devices:
+                    print(
+                        f"  {d.ip_address:15s} {d.mac_address:17s} "
+                        f"{(d.vendor or 'unknown')[:20]:20s} "
+                        f"{d.device_class.value:12s} {d.risk_score}"
+                    )
+                unknown = iot.unknown_devices()
+                if unknown:
+                    print(f"\n  [!!] {len(unknown)} UNKNOWN device(s) detected!")
+                    print("  Run --iot-security for recommended actions.")
+
+        elif args.iot_security:
+            print("\n  H.O.M.E. L.I.N.K. — IoT SECURITY POSTURE")
+            print("  " + "=" * 50)
+
+            # Security checklist
+            checklist = iot.security_checklist()
+            print("\n  HARDENING CHECKLIST:")
+            for item in checklist:
+                prio = item["priority"].upper()
+                print(f"    [{prio:8s}] {item['item']}")
+                print(f"              {item['action']}")
+
+            # VLAN policy
+            policy = iot.vlan_policy()
+            print("\n  VLAN SEGMENTATION:")
+            for v in policy["vlans"]:
+                print(f"    VLAN {v['vlan_id']:2d} ({v['name']:6s}): {v['description']}")
+
+            print(f"\n  FIREWALL RULES:")
+            for rule in policy["firewall_rules"]:
+                print(f"    - {rule}")
+
+            print(f"\n  {policy['recommendation']}")
+            print()
+
+        elif args.iot_workflows:
+            from guardian_one.homelink.iot_stack import export_all_workflows
+            output_dir = args.iot_workflows
+            print(f"\n  Exporting IoT workflow templates to {output_dir}...")
+            files = export_all_workflows(output_dir)
+            print(f"  [OK] Exported {len(files)} workflow(s):")
+            for name, path in files.items():
+                print(f"    {name}: {path}")
+            print("\n  Import these into n8n and Node-RED via their respective UIs or APIs.")
+
+        else:
+            # --iot: full dashboard
+            print(iot.dashboard_text())
+
+            # Maintenance schedule
+            maint = iot.maintenance_schedule()
+            print("  MAINTENANCE:")
+            for task, freq in maint["automated"].items():
+                print(f"    {task:30s} {freq}")
+            print("\n  REQUIRES MANUAL APPROVAL:")
+            for task in maint["manual_approval_required"]:
+                print(f"    - {task}")
+            print()
+
+        guardian.shutdown()
+        return
+
+    if args.hue or args.hue_register or args.hue_on or args.hue_off or args.hue_dim or args.hue_color or args.hue_scene:
+        from guardian_one.homelink.drivers import HueDriver
+
+        dev_cfg = config.agents.get("device_agent", AgentConfig(name="device_agent"))
+        custom = dev_cfg.custom if hasattr(dev_cfg, "custom") and dev_cfg.custom else {}
+        hue_cfg = custom.get("ecosystems", {}).get("philips_hue", {})
+        bridge_ip = hue_cfg.get("bridge_ip", "192.168.1.147")
+
+        if args.hue_register:
+            print(f"\n  Registering with Hue Bridge at {bridge_ip}...")
+            print("  (Make sure you pressed the link button within the last 30 seconds!)\n")
+            result = HueDriver.register(bridge_ip)
+            if result["success"]:
+                username = result["username"]
+                print(f"  [OK] Registered! API username: {username}")
+                print(f"\n  Add this to your .env file:")
+                print(f"    HUE_BRIDGE_USERNAME={username}")
+                print(f"\n  Then Guardian One will control your lights automatically.")
+            else:
+                print(f"  [FAILED] {result['error']}")
+                if "link button" in result.get("error", "").lower():
+                    print("  Press the physical button on top of the bridge, then retry within 30s.")
+            guardian.shutdown()
+            return
+
+        # All other hue commands need an API key
+        api_key = os.environ.get("HUE_BRIDGE_USERNAME", "")
+        if not api_key:
+            api_key = guardian.vault.retrieve("HUE_BRIDGE_USERNAME") or ""
+        if not api_key:
+            print("\n  Hue Bridge not registered. Run --hue-register first.")
+            print("  (Press the link button on the bridge, then run --hue-register)")
+            guardian.shutdown()
+            return
+
+        hue = HueDriver(bridge_ip=bridge_ip, api_key=api_key)
+
+        if args.hue_on:
+            result = hue.turn_on(light_id=args.hue_on)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_on} on"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_off:
+            result = hue.turn_off(light_id=args.hue_off)
+            print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {args.hue_off} off"
+                  f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_dim:
+            parts = args.hue_dim.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-dim LIGHT_ID:PERCENT (e.g. --hue-dim 1:50)")
+            else:
+                result = hue.set_brightness(int(parts[1]), light_id=parts[0])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}%"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_color:
+            parts = args.hue_color.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-color LIGHT_ID:COLOR (warm/daylight/red/green/blue)")
+            else:
+                result = hue.set_color(light_id=parts[0], color_name=parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Light {parts[0]} → {parts[1]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        elif args.hue_scene:
+            parts = args.hue_scene.split(":")
+            if len(parts) != 2:
+                print("  Usage: --hue-scene GROUP_ID:SCENE_ID")
+            else:
+                result = hue.activate_scene(int(parts[0]), parts[1])
+                print(f"  {'[OK]' if result['success'] else '[FAILED]'} Scene {parts[1]} in group {parts[0]}"
+                      f"{' — ' + result.get('error', '') if not result['success'] else ''}")
+
+        else:
+            # --hue: show all lights and groups
+            print(f"\n  H.O.M.E. L.I.N.K. — PHILIPS HUE (bridge: {bridge_ip})")
+            print("  " + "=" * 50)
+
+            lights_result = hue.get_lights()
+            if lights_result["success"] and lights_result.get("data"):
+                lights = lights_result["data"]
+                print(f"\n  LIGHTS ({len(lights)}):")
+                print(f"  {'ID':4s} {'Name':30s} {'State':6s} {'Bri':4s} {'Reachable':9s}")
+                print("  " + "-" * 55)
+                for lid, info in sorted(lights.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {})
+                    on = "ON" if state.get("on") else "OFF"
+                    bri = str(state.get("bri", "")) if state.get("on") else ""
+                    reach = "yes" if state.get("reachable") else "NO"
+                    name = info.get("name", "")
+                    print(f"  {lid:4s} {name:30s} {on:6s} {bri:4s} {reach:9s}")
+            else:
+                print(f"  Could not fetch lights: {lights_result.get('error', 'unknown')}")
+
+            groups_result = hue.get_groups()
+            if groups_result["success"] and groups_result.get("data"):
+                groups = groups_result["data"]
+                print(f"\n  GROUPS/ROOMS ({len(groups)}):")
+                print(f"  {'ID':4s} {'Name':25s} {'Type':10s} {'Lights':8s} {'All On':6s}")
+                print("  " + "-" * 55)
+                for gid, info in sorted(groups.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
+                    state = info.get("state", {}) if isinstance(info, dict) else {}
+                    name = info.get("name", "")
+                    gtype = info.get("type", "")
+                    light_count = str(len(info.get("lights", [])))
+                    all_on = "yes" if state.get("all_on") else "no"
+                    print(f"  {gid:4s} {name:25s} {gtype:10s} {light_count:8s} {all_on:6s}")
+
+            print()
+
         guardian.shutdown()
         return
 
@@ -620,6 +1285,121 @@ def main() -> None:
                     print(f"    [!!] {alert}")
         else:
             print(dev_agent.dashboard_text())
+
+    elif args.cortex or args.cortex_daemon or args.cortex_digest or args.cortex_query is not None or args.cortex_pattern is not None:
+        cortex = guardian.get_agent("input_cortex")
+        if not cortex or not isinstance(cortex, InputCortex):
+            print("InputCortex agent not available.")
+            guardian.shutdown()
+            return
+        # NOTE: guardian.register_agent() already called cortex.initialize().
+        # We do NOT call it again here to avoid resetting in-memory state.
+
+        if args.cortex_daemon:
+            # CLI args override config.custom defaults
+            cortex_custom = cortex.config.custom or {}
+            mode = args.cortex_daemon
+            if mode == "both" and "daemon_mode" in cortex_custom:
+                mode = cortex_custom["daemon_mode"]
+            port = args.cortex_port
+            if args.cortex_port == 9473 and "listener_port" in cortex_custom:
+                port = int(cortex_custom["listener_port"])
+            bind = args.cortex_bind
+            if args.cortex_bind == "127.0.0.1" and "listener_bind" in cortex_custom:
+                bind = str(cortex_custom["listener_bind"])
+            print(f"\n  InputCortex daemon starting (mode={mode}, bind={bind}:{port})")
+            if args.cortex_show_token:
+                print(f"  Auth token (X-Cortex-Token): {cortex.auth_token}")
+            else:
+                print("  Auth token (X-Cortex-Token): [hidden] — "
+                      "use --cortex-show-token to print, or set "
+                      "CORTEX_AUTH_TOKEN / listener_auth_token in config to rotate.")
+            print(f"  Endpoints:")
+            print(f"    POST http://{bind}:{port}/input   — single payload")
+            print(f"    POST http://{bind}:{port}/batch   — batch payloads")
+            print(f"    GET  http://{bind}:{port}/status  — agent status")
+            print(f"    GET  http://{bind}:{port}/query   — query context")
+            print(f"  Drop dir: {cortex.drop_dir}")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            cortex.start_daemon(mode=mode, port=port, bind=bind)
+            # Periodically trigger run() so stale sessions get flushed to
+            # disk and the cortex index stays current for queries/digests.
+            flush_interval = max(
+                1, cortex.config.schedule_interval_minutes
+            ) * 60
+            try:
+                elapsed = 0
+                while True:
+                    time.sleep(1)
+                    elapsed += 1
+                    if elapsed >= flush_interval:
+                        cortex.run()
+                        elapsed = 0
+            except KeyboardInterrupt:
+                print("\n  Stopping daemon (flushing open sessions)...")
+                cortex.stop_daemon()
+                cortex.shutdown()  # flush open sessions to disk
+
+        elif args.cortex_digest:
+            date_arg = args.cortex_digest
+            date = None if date_arg == "today" else date_arg
+            digest = cortex.daily_digest(date)
+            print("\n  INPUT CORTEX — DAILY DIGEST")
+            print("  " + "=" * 40)
+            print(f"  Date: {digest['date']}")
+            print(f"  Sessions: {digest['total_sessions']}")
+            print(f"  Total words: {digest['total_words']}")
+            if digest.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in digest["category_distribution"].items():
+                    print(f"    {cat:<16} {count} sessions")
+            if digest.get("app_usage"):
+                print(f"\n  App usage (by words):")
+                for app, words in list(digest["app_usage"].items())[:10]:
+                    print(f"    {app:<24} {words:,} words")
+            print()
+
+        elif args.cortex_query is not None:
+            results = cortex.query_context(category=args.cortex_query or None, limit=20)
+            print(f"\n  INPUT CORTEX — QUERY RESULTS ({len(results)} matches)")
+            print("  " + "=" * 50)
+            for e in results:
+                apps = ", ".join(e.get("apps", []))
+                print(f"  [{e.get('started', '?')[:16]}] {e.get('category', '?'):<12} "
+                      f"{e.get('words', 0):>5}w  {apps}")
+            print()
+
+        elif args.cortex_pattern is not None:
+            pattern = cortex.behavioral_pattern(days=args.cortex_pattern)
+            print(f"\n  INPUT CORTEX — BEHAVIORAL PATTERN ({pattern['period_days']} days)")
+            print("  " + "=" * 50)
+            print(f"  Avg words/day: {pattern['avg_words_per_day']:,}")
+            if pattern.get("top_apps"):
+                print(f"\n  Top apps:")
+                for app, freq in pattern["top_apps"].items():
+                    print(f"    {app:<24} {freq} sessions")
+            if pattern.get("category_distribution"):
+                print(f"\n  Categories:")
+                for cat, count in pattern["category_distribution"].items():
+                    print(f"    {cat:<16} {count}")
+            print()
+
+        else:
+            report = cortex.report()
+            print("\n  INPUT CORTEX — STATUS")
+            print("  " + "=" * 40)
+            print(f"  Status: {report.status}")
+            print(f"  {report.summary}")
+            if report.data.get("open_sessions"):
+                print(f"\n  Open sessions:")
+                for s in report.data["open_sessions"]:
+                    print(f"    {s['session_id'][:12]}  {s['blocks']} blocks  {s.get('words', 0)} words")
+            # Print skill manifest
+            manifest = InputCortex.skill_manifest()
+            print(f"\n  Available skills:")
+            for skill in manifest["skills"]:
+                print(f"    {skill['name']:<24} {skill['description']}")
+            print()
 
     elif args.brief:
         print(guardian.monitor.weekly_brief_text())
@@ -1048,6 +1828,58 @@ def main() -> None:
             deliverables=deliverables,
         ))
 
+    elif args.n8n_sync:
+        if not guardian.notion_sync:
+            print("  NOTION_ROOT_PAGE_ID not set. Add it to .env to enable Notion sync.")
+        else:
+            print("\n  Syncing n8n workflow status to Notion...")
+            result = guardian.sync_n8n_to_notion()
+            if result:
+                status = "OK" if result.success else "FAILED"
+                print(f"  [{status}] {result.pages_created} pages created, "
+                      f"{result.pages_updated} updated, "
+                      f"{result.blocks_written} blocks written "
+                      f"({result.duration_ms:.0f}ms)")
+                if result.errors:
+                    for err in result.errors:
+                        print(f"    [ERROR] {err}")
+
+    elif args.n8n_status:
+        from guardian_one.integrations.n8n_sync import N8nWorkflow
+        print("\n  n8n Workflow Engine Status")
+        print("  " + "=" * 40)
+
+        connected = False
+        if guardian.n8n_provider.has_credentials:
+            connected = guardian.n8n_provider.authenticate()
+
+        print(f"  Connection: {'Connected' if connected else 'Disconnected'}")
+        print(f"  Gateway service: {'registered' if guardian.n8n_provider.has_credentials else 'not found'}")
+
+        if connected:
+            workflows = guardian.n8n_provider.list_workflows()
+            active = sum(1 for w in workflows if w.active)
+            print(f"  Workflows: {len(workflows)} total, {active} active")
+            for wf in workflows:
+                icon = "[ON] " if wf.active else "[OFF]"
+                print(f"    {icon} {wf.name} (id: {wf.id})")
+        else:
+            print("  Set N8N_BASE_URL and N8N_API_KEY in .env to connect.")
+
+        # Show local workflows from WebArchitect if available
+        wa = guardian.get_agent("web_architect")
+        if wa and hasattr(wa, "list_workflows"):
+            local_wfs = wa.list_workflows()
+            if local_wfs:
+                print(f"\n  Local workflows (WebArchitect): {len(local_wfs)}")
+                for wf_id, wf in local_wfs.items():
+                    print(f"    [{wf_id}] {wf.name}")
+
+        print(f"\n  Notion sync: {'available' if guardian.notion_sync else 'not configured'}")
+        if guardian.notion_sync:
+            print("  Run --n8n-sync to push workflow status to Notion.")
+        print()
+
     elif args.connector_audit:
         audit_report = guardian.registry.connector_audit()
         print()
@@ -1200,32 +2032,143 @@ def main() -> None:
             # --websites: show status
             print(mgr.summary())
 
-    elif args.heap_analyze:
-        from guardian_one.agents.heap_analyzer import (
-            HeapAnalyzer,
-            parse_diagnostics,
-            print_heap_report,
-        )
-        ha_cfg = AgentConfig(name="heap_analyzer")
-        analyzer = HeapAnalyzer(config=ha_cfg, audit=guardian.audit)
-        analyzer.initialize()
+    elif (args.fleet or args.fleet_health or args.fleet_ssh or args.fleet_start
+          or args.fleet_stop or args.fleet_services or args.fleet_displays
+          or args.fleet_resources or args.fleet_subs or args.fleet_backup
+          or args.fleet_kernels or args.fleet_status):
+        from guardian_one.fleet.commander import FleetCommander
 
-        snap_path = Path(args.heap_analyze)
-        diag_path = Path(args.heap_diag) if args.heap_diag else None
+        commander = FleetCommander(audit=guardian.audit)
+        commander.initialize()
 
-        # Auto-detect companion diagnostics if not specified
-        if diag_path is None:
-            candidate = snap_path.with_name(
-                snap_path.name.replace(".heapsnapshot", "-diagnostics.json")
-            )
-            if candidate.exists():
-                diag_path = candidate
-                print(f"  Auto-detected diagnostics: {diag_path}")
+        if args.fleet:
+            print(commander.cmd_fleet())
+        elif args.fleet_health:
+            print(commander.cmd_health())
+        elif args.fleet_ssh:
+            node_id, cmd = args.fleet_ssh
+            print(commander.cmd_ssh(node_id, cmd))
+        elif args.fleet_start:
+            node_id, service = args.fleet_start
+            print(commander.cmd_start_service(node_id, service))
+        elif args.fleet_stop:
+            node_id, service = args.fleet_stop
+            print(commander.cmd_stop_service(node_id, service))
+        elif args.fleet_services:
+            print(commander.cmd_list_services(args.fleet_services))
+        elif args.fleet_displays:
+            print(commander.cmd_displays())
+        elif args.fleet_resources:
+            print(commander.cmd_resources())
+        elif args.fleet_subs:
+            print(commander.cmd_subscriptions())
+        elif args.fleet_backup:
+            print(commander.cmd_backup())
+        elif args.fleet_kernels:
+            print(commander.cmd_kernels())
+        elif args.fleet_status:
+            print(commander.cmd_full_status())
 
-        summary = analyzer.analyze(snap_path, diagnostics_path=diag_path)
-        print_heap_report(summary)
-        guardian.shutdown()
-        return
+    elif (args.autofill_server or args.autofill_add or args.autofill_list
+          or args.autofill_remove or args.autofill_bookmarklet
+          or args.autofill_lan or args.autofill_pin):
+        af: AutofillAgent = guardian._agents.get("autofill")  # type: ignore[assignment]
+        if af is None:
+            print("Error: autofill agent not registered")
+            return
+
+        if args.autofill_pin:
+            import getpass
+            pin = getpass.getpass("  Set autofill LAN PIN: ")
+            if len(pin) < 4:
+                print("  PIN must be at least 4 characters.")
+                return
+            confirm = getpass.getpass("  Confirm PIN: ")
+            if pin != confirm:
+                print("  PINs don't match.")
+                return
+            af.set_lan_pin(pin)
+            print("  PIN set. You can now use --autofill-lan to start in LAN mode.")
+
+        elif args.autofill_list:
+            profiles = af.list_profiles()
+            if not profiles:
+                print("\n  No autofill profiles. Add one with --autofill-add card")
+            else:
+                print(f"\n  Autofill Profiles ({len(profiles)})")
+                print("  " + "-" * 50)
+                for p in profiles:
+                    extra = f" {p.get('masked_number', '')}" if p["type"] == "card" else ""
+                    print(f"  [{p['type'].upper():8s}] {p['label']}{extra}  (id: {p['profile_id']})")
+
+        elif args.autofill_remove:
+            parts = args.autofill_remove.split(":", 1)
+            if len(parts) != 2:
+                print("Usage: --autofill-remove TYPE:ID  (e.g. card:abc123)")
+                return
+            ptype, pid = parts
+            if af.remove_profile(ptype, pid):
+                print(f"  Removed {ptype} profile {pid}")
+            else:
+                print(f"  Profile not found: {ptype}:{pid}")
+
+        elif args.autofill_add:
+            _autofill_add_interactive(af, args.autofill_add)
+
+        elif args.autofill_bookmarklet:
+            from guardian_one.autofill.bridge import get_bookmarklet_js
+            js = get_bookmarklet_js(af._port)
+            print("\n  Copy this entire line as a bookmark URL:\n")
+            print(f"  javascript:{js}\n")
+            print("  Or start the server and visit:")
+            print(f"  http://127.0.0.1:{af._port}/api/autofill/bookmarklet\n")
+
+        elif args.autofill_lan:
+            import socket
+            # Get this machine's LAN IP
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                lan_ip = "0.0.0.0"
+
+            try:
+                af.enable_lan_mode(bind="0.0.0.0")
+            except ValueError as e:
+                print(f"\n  Error: {e}")
+                return
+
+            url = af.start_server(bind_override="0.0.0.0")
+            print(f"\n  Autofill Bridge — LAN MODE")
+            print(f"  " + "=" * 50)
+            print(f"  Server:      {url}")
+            print(f"  LAN address: http://{lan_ip}:{af._port}")
+            print(f"  Bookmarklet: http://{lan_ip}:{af._port}/api/autofill/bookmarklet")
+            print(f"  Health:      http://{lan_ip}:{af._port}/api/autofill/health")
+            print(f"\n  On your MacBook, open the bookmarklet URL above.")
+            print(f"  You'll be prompted for your PIN on first use.")
+            print(f"\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
+
+        elif args.autofill_server:
+            url = af.start_server()
+            print(f"\n  Autofill Bridge server running at {url}")
+            print(f"  Bookmarklet: {url}/api/autofill/bookmarklet")
+            print(f"  Health:      {url}/api/autofill/health")
+            print("\n  Press Ctrl+C to stop.\n")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                af.stop_server()
+                print("\n  Server stopped.")
 
     elif args.summary:
         print(guardian.daily_summary())

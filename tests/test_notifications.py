@@ -103,7 +103,9 @@ def test_add_custom_channel():
             self.sent.append(notification)
             return True
 
-    mgr = NotificationManager()
+    from datetime import time as dt_time
+    # Disable quiet hours so the test passes regardless of wall-clock time
+    mgr = NotificationManager(quiet_start=dt_time(0, 0), quiet_end=dt_time(0, 0))
     mock = MockChannel()
     mgr.add_channel(mock)
     mgr.notify("test", "T", "B")

@@ -134,15 +134,62 @@ agents:
 
   archivist:
     enabled: true
-    schedule_interval_minutes: 60
+    schedule_interval_minutes: 30
     allowed_resources:
+      # Core domain — Archivist's own data
       - file_index
       - data_sources
       - privacy_tools
       - master_profile
+      - power_tools
+      # Varys-level: read access across all agent domains
+      - audit_log
+      - agent_reports
+      - vault_metadata          # credential names/scopes, never plaintext values
+      - gateway_status
+      - config_readonly
+      # Cross-agent domain reads (intelligence gathering)
+      - calendar                # Chronos
+      - accounts                # CFO
+      - transactions            # CFO
+      - orders                  # DoorDash
+      - deployments             # WebArchitect
+      - security_scans          # WebArchitect
+      - devices                 # DeviceAgent
+      - network                 # DeviceAgent
+      # VM-level default read access
+      - filesystem_read         # Read access across all VM systems
+      - process_list            # Running processes visibility
+      - system_metrics          # CPU, memory, disk, network stats
     custom:
       auto_encrypt_sensitive: true
       retention_check_daily: true
+      varys_mode: true               # Cross-agent intelligence gathering
+      cross_agent_read_only: true    # Read, never write, other domains
+      secrecy_protocol: true         # Only guardian_one, jeremy, root can query
+      data_platforms:
+        databricks:
+          enabled: true
+          credential_key: DATABRICKS_TOKEN
+          sync_direction: push
+        zapier_tables:
+          enabled: true
+          credential_key: ZAPIER_TABLES_TOKEN
+          sync_direction: bidirectional
+        notion_db:
+          enabled: true
+          credential_key: NOTION_TOKEN
+          sync_direction: push       # Write-only per Guardian policy
+      password_management: true      # Cross-interface credential tracking via Vault
+      palantir:
+        enabled: true
+        refresh_minutes: 15          # Real-time intelligence cycle
+        max_items_per_source: 50
+        feed_categories:
+          - tech_news               # HN, TechCrunch, Ars, Verge, Wired
+          - ai_company              # Anthropic, OpenAI, DeepMind, Meta, Mistral
+          - github                  # Trending repos, release tracking
+          - financial               # Yahoo Finance, SEC EDGAR
 
   cfo:
     enabled: true
@@ -181,6 +228,7 @@ agents:
       - deployments
       - security_scans
       - uptime_records
+      - power_tools
     custom:
       domains:
         - drjeremytabernero.org
@@ -225,6 +273,29 @@ agents:
           hosting: cloud_vps
           notion_dashboard: true
 
+  input_cortex:
+    enabled: true
+    schedule_interval_minutes: 5
+    allowed_resources:
+      - keystroke_stream
+      - context_index
+      - behavioral_digest
+    custom:
+      # --- Currently consumed by the agent/processor ---
+      session_timeout_seconds: 300     # Flush session after 5 min idle
+      min_words_to_store: 3            # Skip very short input
+      daemon_mode: both                # listener + watcher
+      listener_port: 9473              # HTTP endpoint for phone payloads
+      listener_bind: "127.0.0.1"       # Loopback by default
+      # listener_auth_token: ""        # Override random token (optional)
+      # --- Forward-looking (not yet wired) ---
+      # phi_scrub_enabled and credential_redact are always ON at the code
+      # level; these keys are placeholders and do not currently toggle behavior.
+      phi_scrub_enabled: true
+      credential_redact: true
+      daily_digest_hour: 23            # Planned: scheduled digest generation
+      retention_days: 90               # Planned: retention sweep
+
   device_agent:
     enabled: true
     schedule_interval_minutes: 15
@@ -247,7 +318,7 @@ agents:
         philips_hue:
           enabled: true
           local_only: true              # Use bridge local API only
-          bridge_ip: ""                 # Set after discovery
+          bridge_ip: "192.168.1.147"    # Discovered on LAN
         govee:
           enabled: true
           prefer_lan: true              # Use LAN UDP API for newer models
@@ -266,3 +337,153 @@ agents:
         flipper_zero:
           enabled: true
           authorized_testing_only: true # Legal compliance reminder
+
+# ======================================================================
+# Fleet Management — Multi-device orchestration
+# ======================================================================
+# Three compute nodes managed as a unified fleet:
+#   A = ASUS ROG Flow Z13 (Windows, 64GB) — Primary controller
+#   B = MacBook Pro 2024 (macOS, M3 Pro)  — Secondary workstation
+#   C = Mac Mini (macOS, M2)              — Always-on daemon
+fleet:
+  enabled: true
+  health_check_interval_minutes: 5
+
+  nodes:
+    rog:
+      role: primary
+      os: windows
+      hostname: ROG-Z13
+      ram_gb: 64
+      services:
+        - guardian_one
+        - ollama
+        - docker_desktop
+        - claude_code
+        - visual_studio_code
+        - chatgpt_desktop
+        - codex
+      displays:
+        - ultrawide-left
+        - alienware-25
+
+    macbook-pro:
+      role: workstation
+      os: macos
+      hostname: Jeremys-MacBook-Pro
+      ram_gb: 18
+      ssh_user: jeremy
+      ssh_key: ~/.ssh/id_ed25519_macbook
+      stationary: true
+      services:
+        - claude_code
+        - visual_studio_code
+        - xcode
+        - docker_desktop
+        - notion_app
+      displays:
+        - ultrawide-right
+
+    mac-mini:
+      role: daemon
+      os: macos
+      hostname: Mac-Mini
+      ram_gb: 16
+      ssh_user: jeremy
+      ssh_key: ~/.ssh/id_ed25519_macmini
+      stationary: true
+      always_on: true
+      services:
+        - homelink_gateway       # H.O.M.E. L.I.N.K. API gateway (24/7)
+        - homelink_monitor       # Health monitoring (24/7)
+        - n8n                    # Workflow automation (Docker, 24/7)
+        - notion_sync            # Periodic Notion dashboard sync
+        - zapier_webhooks        # Zapier webhook listener
+        - docker_daemon          # Docker containers
+        - backup_agent           # Automated backup scheduler
+      displays:
+        - samsung-frame-65
+
+  # Display topology
+  displays:
+    ultrawide-49:
+      type: monitor
+      size: 49
+      resolution: 5120x1440
+      split: true                # PBP mode: left=ROG, right=MacBook
+      split_left: rog
+      split_right: macbook-pro
+      position: center
+
+    alienware-25:
+      type: monitor
+      size: 25
+      resolution: 2560x1440
+      refresh_hz: 240
+      connected_to: rog
+      position: right
+
+    lg-nanocell-65:
+      type: tv
+      size: 65
+      resolution: 3840x2160
+      connected_to: ""           # Flexible — any node
+      position: wall_left
+      cec: true
+
+    samsung-frame-65:
+      type: tv
+      size: 65
+      resolution: 3840x2160
+      connected_to: mac-mini
+      position: wall_right
+      cec: true
+      art_mode: true
+
+  # Subscription portfolio mapped to nodes
+  subscriptions:
+    docker_ai:
+      primary: rog
+      nodes: [rog, macbook-pro]
+    chatgpt:
+      primary: rog
+      nodes: [rog]
+    codex:
+      primary: rog
+      nodes: [rog]
+    claude_code:
+      primary: rog
+      nodes: [rog, macbook-pro]
+    zapier:
+      primary: mac-mini
+      nodes: [mac-mini, rog]
+      always_on: true
+    notion:
+      primary: mac-mini
+      nodes: [rog, macbook-pro, mac-mini]
+      always_on: true
+    n8n:
+      primary: mac-mini
+      nodes: [mac-mini]
+      always_on: true
+      docker: true
+    visual_studio_code:
+      primary: rog
+      nodes: [rog, macbook-pro]
+
+  # Backup strategy
+  backup:
+    guardian_data:
+      runner: mac-mini
+      schedule: "0 3 * * *"     # 3 AM daily
+      target: /Volumes/Backup/guardian-one/
+      retention_days: 90
+    docker_volumes:
+      runner: mac-mini
+      schedule: "0 4 * * *"     # 4 AM daily
+      target: /Volumes/Backup/docker/
+      retention_days: 30
+    git_sync:
+      runner: rog
+      schedule: "*/30 * * * *"  # Every 30 min
+      target: github:curiouscat777/jt

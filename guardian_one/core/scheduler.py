@@ -21,7 +21,6 @@ from __future__ import annotations
 import signal
 import sys
 import threading
-import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -59,9 +58,11 @@ class Scheduler:
             schedule.every(interval).minutes.do(self._run_agent_job, name)
 
         # Daily CFO financial sync — pulls latest from Plaid/Empower
-        schedule.every().day.at("06:00").do(self._run_cfo_sync)
+        # Times use the configured timezone (tz= requires schedule>=1.2)
+        tz = self.guardian.config.timezone
+        schedule.every().day.at("06:00", tz).do(self._run_cfo_sync)
         # Also run a mid-day check
-        schedule.every().day.at("18:00").do(self._run_cfo_sync)
+        schedule.every().day.at("18:00", tz).do(self._run_cfo_sync)
 
     def _run_agent_job(self, name: str) -> None:
         """Execute a single agent's run cycle (called by scheduler)."""
@@ -74,6 +75,12 @@ class Scheduler:
                 _print_report_brief(name, report)
             except Exception as exc:
                 print(f"\n  [{name}] Error: {exc}")
+                self.guardian.audit.record(
+                    agent=name,
+                    action="agent_run_failed",
+                    severity=Severity.ERROR,
+                    details={"error": str(exc)},
+                )
 
     def _run_cfo_sync(self) -> None:
         """Daily CFO financial sync — pulls latest from all connected providers."""
@@ -117,6 +124,12 @@ class Scheduler:
                 self._last_run["cfo-sync"] = datetime.now(timezone.utc).isoformat()
             except Exception as exc:
                 print(f"\n  [cfo-sync] Error: {exc}")
+                self.guardian.audit.record(
+                    agent="cfo",
+                    action="cfo_sync_failed",
+                    severity=Severity.ERROR,
+                    details={"error": str(exc)},
+                )
 
     # ------------------------------------------------------------------
     # Background thread
@@ -311,6 +324,7 @@ class Scheduler:
                 try:
                     cmd = input("guardian> ")
                 except EOFError:
+                    self._stop_event.set()
                     break
                 if not self._handle_command(cmd):
                     break

@@ -1,0 +1,67 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 2982 >>
+stream
+BT
+/F1 10.8 Tf
+46 800 Td
+(GUARDIAN ONE ? ONE-PAGE APP SUMMARY) Tj
+0 -16 Td () Tj
+0 -16 Td () Tj
+0 -16 Td (What it is) Tj
+0 -16 Td (Guardian One is a Python-based multi-agent personal operations platform that coordinates specialized agents \(e.g., Chronos, Archivist, CFO\) under a central orchestrator. It emphasizes local control/data sovereignty, access policies, auditability, and secure integration routing.) Tj
+0 -16 Td () Tj
+0 -16 Td (Who it's for) Tj
+0 -16 Td (Primary user/persona: an owner-operator who wants one command surface to coordinate personal scheduling, finance, automation, and security workflows \(the repo defaults to owner "Jeremy Paulo Salvino Tabernero"\).) Tj
+0 -16 Td () Tj
+0 -16 Td (What it does \(key features\)) Tj
+0 -16 Td (  ? Boots a central Guardian orchestrator that registers and supervises multiple agents.) Tj
+0 -16 Td (  ? Runs all agents or one targeted agent via CLI flags.) Tj
+0 -16 Td (  ? Enforces per-identity/per-agent access policies for allowed resources.) Tj
+0 -16 Td (  ? Logs system/agent actions and produces daily summaries with pending-review alerts.) Tj
+0 -16 Td (  ? Mediates cross-agent conflicts \(time overlap, budget, resource contention\).) Tj
+0 -16 Td (  ? Routes external service calls through a gateway with service registry + monitoring.) Tj
+0 -16 Td (  ? Secures secrets in an encrypted vault and auto-seeds selected credentials from environment variables.) Tj
+0 -16 Td () Tj
+0 -16 Td (How it works \(repo-evidenced architecture\)) Tj
+0 -16 Td (  ? **Entry/Control Plane:** `main.py` parses CLI options and builds core agents \(Chronos, Archivist, CFO, DoorDash, Gmail, WebArchitect, DevCoach\).) Tj
+0 -16 Td (  ? **Core Orchestrator:** `GuardianOne` initializes config, audit log, mediator, access controller, AI engine, gateway, vault, integration registry, and monitor.) Tj
+0 -16 Td (  ? **Security Layer:** Access policies and encrypted vault are initialized at startup; passphrase is required \(`GUARDIAN_MASTER_PASSPHRASE`\).) Tj
+0 -16 Td (  ? **Agent Lifecycle:** Agents are registered, initialized, and run individually or as a full run cycle; conflicts are checked and recorded.) Tj
+0 -16 Td (  ? **Service/Data Flow:** Config \(`config/guardian_config.yaml`\) + env vars -> Guardian boot -> agent execution -> conflict resolution + audit records -> summary/report outputs.) Tj
+0 -16 Td (  ? **Not found in repo:** End-user UI architecture diagram and production infrastructure topology.) Tj
+0 -16 Td () Tj
+0 -16 Td (How to run \(minimal getting started\)) Tj
+0 -16 Td (1. Install Python 3.10+ and dependencies: `pip install -r requirements.txt`.) Tj
+0 -16 Td (2. Create a passphrase env var for the vault \(required\): `GUARDIAN_MASTER_PASSPHRASE=<your-secret>`.) Tj
+0 -16 Td (3. \(Optional\) Add `.env` credentials for integrations used by your scenario.) Tj
+0 -16 Td (4. Run once: `python main.py`.) Tj
+0 -16 Td (5. Useful quick checks: `python main.py --summary` and `python main.py --agent cfo`.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3345
+%%EOF
