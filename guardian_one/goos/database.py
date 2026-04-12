@@ -135,7 +135,11 @@ class GOOSDatabase:
                 json.dumps(client.preferences),
             ),
         )
-        # Save varys nodes
+        # Replace persisted Varys nodes with the client's current node set
+        self._conn.execute(
+            "DELETE FROM goos_varys_nodes WHERE client_id = ?",
+            (client.client_id,),
+        )
         for node in client.varys_nodes:
             self._save_varys_node(client.client_id, node)
         self._conn.commit()
