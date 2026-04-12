@@ -820,6 +820,52 @@ class TestImport:
         assert len(stored_after) == 1
         assert stored_after[0].source == "rocket_money"
 
+    def test_import_cfo_ledger_deduplicates_repeated_provider_ids(
+        self, db: GuardianDatabase, tmp_path: Path
+    ) -> None:
+        """Regression: pending/posted duplicates in the same ledger
+        export often share the same provider ID. Without in-snapshot
+        dedup, the UNIQUE index on (source, reference_id) rejects
+        the second row inside ``replace_transactions_for_source``'s
+        ``executemany`` and aborts the entire import. Both rows
+        must land with disambiguated reference_ids."""
+        ledger_path = tmp_path / "cfo_ledger.json"
+        data = {
+            "accounts": [
+                {"name": "Checking", "institution": "Chase",
+                 "balance": 100.0, "account_type": "checking"},
+            ],
+            "transactions": [
+                # Same provider ID on two different rows (pending + posted).
+                {"date": "2026-03-01", "description": "Amazon (pending)",
+                 "amount": -45.99, "category": "other",
+                 "account": "Checking",
+                 "metadata": {"id": "plaid:txn:dup123"}},
+                {"date": "2026-03-01", "description": "Amazon (posted)",
+                 "amount": -45.99, "category": "other",
+                 "account": "Checking",
+                 "metadata": {"id": "plaid:txn:dup123"}},
+                # A unique one for good measure.
+                {"date": "2026-03-02", "description": "Starbucks",
+                 "amount": -4.99, "category": "food",
+                 "account": "Checking",
+                 "metadata": {"id": "plaid:txn:unique1"}},
+            ],
+        }
+        with open(ledger_path, "w") as f:
+            json.dump(data, f)
+        # Must not raise IntegrityError.
+        db.import_cfo_ledger(ledger_path)
+        stored = db.query_transactions()
+        assert len(stored) == 3
+        refs = sorted(t.reference_id for t in stored)
+        # First dup keeps bare ref, second gets #1 suffix.
+        assert refs == [
+            "plaid:txn:dup123",
+            "plaid:txn:dup123#1",
+            "plaid:txn:unique1",
+        ]
+
     def test_import_cfo_ledger_without_transactions_key_leaves_slice(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:

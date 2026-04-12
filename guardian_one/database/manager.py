@@ -1176,7 +1176,14 @@ class GuardianDatabase:
         if isinstance(data.get("transactions"), list):
             raw_txns = data["transactions"]
             parsed: list[FinancialTransaction] = []
-            occurrence: dict[tuple[str, str, float, str], int] = {}
+            # Track ALL reference_ids seen so far (both provider-
+            # supplied and synthesized) to disambiguate collisions.
+            # Pending/posted duplicates in the same ledger export
+            # often share the same provider ID, and the UNIQUE index
+            # on (source, reference_id) would reject the second one
+            # inside ``replace_transactions_for_source``'s
+            # ``executemany``, aborting the entire import batch.
+            seen_refs: dict[str, int] = {}
             for tx in raw_txns:
                 if not isinstance(tx, dict):
                     continue
@@ -1197,13 +1204,19 @@ class GuardianDatabase:
                 if provider_id:
                     ref = str(provider_id)
                 else:
-                    key = (account, date, amount, description)
-                    n = occurrence.get(key, 0)
-                    occurrence[key] = n + 1
                     ref = (
                         f"cfo_ledger:{account}|{date}|"
-                        f"{amount}|{description}#{n}"
+                        f"{amount}|{description}"
                     )
+                # Disambiguate collisions within this snapshot by
+                # appending an occurrence counter when a ref appears
+                # more than once. The first occurrence keeps the
+                # bare ref for clean human-readable output; the
+                # second becomes ``ref#1``, third ``ref#2``, etc.
+                n = seen_refs.get(ref, 0)
+                seen_refs[ref] = n + 1
+                if n > 0:
+                    ref = f"{ref}#{n}"
                 parsed.append(FinancialTransaction(
                     date=date,
                     description=description,

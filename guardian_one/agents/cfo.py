@@ -400,7 +400,12 @@ class CFO(BaseAgent):
              snapshot.
         """
         out: list[dict[str, Any]] = []
-        occurrence: dict[tuple, int] = {}
+        # Track ALL refs (provider-supplied and synthesized) to
+        # disambiguate collisions. Pending/posted duplicates in the
+        # same ledger export often share the same provider ID, and
+        # the UNIQUE index on (source, reference_id) would reject
+        # the second one inside ``replace_transactions_for_source``.
+        seen_refs: dict[str, int] = {}
         for tx in transactions:
             meta = tx.get("metadata") or {}
             provider_id = (
@@ -412,16 +417,16 @@ class CFO(BaseAgent):
             if provider_id:
                 ref = str(provider_id)
             else:
-                key = (
-                    tx["account"], tx["date"],
-                    tx["amount"], tx["description"],
-                )
-                n = occurrence.get(key, 0)
-                occurrence[key] = n + 1
                 ref = (
                     f"cfo_ledger:{tx['account']}|{tx['date']}|"
-                    f"{tx['amount']}|{tx['description']}#{n}"
+                    f"{tx['amount']}|{tx['description']}"
                 )
+            # Disambiguate: first occurrence keeps the bare ref;
+            # subsequent collisions append #1, #2, etc.
+            n = seen_refs.get(ref, 0)
+            seen_refs[ref] = n + 1
+            if n > 0:
+                ref = f"{ref}#{n}"
             out.append(
                 {
                     "date": tx["date"],
