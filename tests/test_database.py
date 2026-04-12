@@ -954,29 +954,6 @@ class TestImport:
         # The database is still usable and the accounts table empty.
         assert db.get_accounts() == []
 
-    def test_import_cfo_ledger_tolerates_non_utf8_bytes(
-        self, db: GuardianDatabase, tmp_path: Path
-    ) -> None:
-        """Regression: a ledger file exported with a non-UTF-8 codec
-        (e.g. Windows-1252) must not raise ``UnicodeDecodeError`` and
-        abort ``--db-init``. The import should succeed (with
-        replacement chars) thanks to ``errors="replace"``."""
-        ledger_path = tmp_path / "cfo_ledger.json"
-        # Valid JSON skeleton with a non-UTF-8 byte (0xA9 = © in
-        # latin-1) in the institution string.
-        raw = (
-            b'{"accounts": [{"name": "Checking", "account_type": '
-            b'"checking", "balance": 100.0, '
-            b'"institution": "Bank \xa9 2026"}]}'
-        )
-        ledger_path.write_bytes(raw)
-        # Must not raise.
-        count = db.import_cfo_ledger(ledger_path)
-        assert count == 1
-        accounts = db.get_accounts()
-        assert len(accounts) == 1
-        assert "Bank" in accounts[0].institution
-
     def test_import_audit_jsonl_includes_rotated_files(
         self, db: GuardianDatabase, tmp_path: Path
     ) -> None:

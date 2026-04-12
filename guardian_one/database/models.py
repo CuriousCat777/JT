@@ -27,7 +27,7 @@ def _format_canonical(dt: datetime) -> str:
     return f"{dt:%Y-%m-%dT%H:%M:%S}.{dt.microsecond // 1000:03d}Z"
 
 
-def normalize_iso_timestamp(value: str) -> str:
+def normalize_iso_timestamp(value: str | None) -> str:
     """Normalize any ISO-8601 timestamp to the canonical ms-``Z`` format.
 
     Accepts the shapes we actually see in the wild:

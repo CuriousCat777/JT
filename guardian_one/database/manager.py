@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -985,7 +986,7 @@ class GuardianDatabase:
                     except (json.JSONDecodeError, TypeError):
                         continue
         except OSError as exc:
-            print(f"  [WARN] Skipping {path}: unreadable ({exc})")
+            print(f"  [WARN] Skipping {path}: unreadable ({exc})", file=sys.stderr)
             return None
         return logs
 
@@ -1059,7 +1060,8 @@ class GuardianDatabase:
                 print(
                     f"  [WARN] Aborting audit import: one or more source "
                     f"files could not be read ({fp}). Existing history "
-                    f"left untouched."
+                    f"left untouched.",
+                    file=sys.stderr,
                 )
                 return 0
             all_logs.extend(parsed)
@@ -1134,7 +1136,8 @@ class GuardianDatabase:
                 data = json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
             print(
-                f"  [WARN] Skipping {path}: malformed or unreadable JSON ({exc})"
+                f"  [WARN] Skipping {path}: malformed or unreadable JSON ({exc})",
+                file=sys.stderr,
             )
             return 0
         if not isinstance(data, dict):
